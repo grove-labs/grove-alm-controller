@@ -19,7 +19,7 @@ import { ISUsds } from "sdai/src/ISUsds.sol";
 
 import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
-import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
+import { DomainHelpers } from "xchain-helpers/testing/Domain.sol";
 
 import { MainnetControllerDeploy } from "../../deploy/ControllerDeploy.sol";
 import { ControllerInstance }      from "../../deploy/ControllerInstance.sol";
@@ -124,13 +124,6 @@ contract ForkTestBase is DssTest {
     address vault;
 
     /**********************************************************************************************/
-    /*** Bridging setup                                                                         ***/
-    /**********************************************************************************************/
-
-    Domain source;
-    Domain destination;
-
-    /**********************************************************************************************/
     /*** Cached mainnet state variables                                                         ***/
     /**********************************************************************************************/
 
@@ -150,7 +143,7 @@ contract ForkTestBase is DssTest {
 
         /*** Step 1: Set up environment, cast addresses ***/
 
-        source = getChain("mainnet").createSelectFork(_getBlock());
+        getChain("mainnet").createSelectFork(_getBlock());
 
         dss = MCD.loadFromChainlog(LOG);
 

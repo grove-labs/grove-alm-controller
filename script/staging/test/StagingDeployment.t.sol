@@ -21,7 +21,7 @@ import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
 import { PSM3 } from "spark-psm/src/PSM3.sol";
 
-import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
+import { DomainHelpers } from "xchain-helpers/testing/Domain.sol";
 
 import { MainnetControllerDeploy } from "../../../deploy/ControllerDeploy.sol";
 import { MainnetControllerInit }   from "../../../deploy/MainnetControllerInit.sol";
@@ -56,9 +56,6 @@ contract StagingDeploymentTestBase is Test {
     string outputMainnet;
     string outputMainnetDeps;
 
-    // Bridging
-    Domain mainnet;
-
     // Mainnet contracts
 
     Usds   usds;
@@ -81,7 +78,7 @@ contract StagingDeploymentTestBase is Test {
     function setUp() public virtual {
         vm.setEnv("FOUNDRY_ROOT_CHAINID", "1");
 
-        mainnet = getChain("mainnet").createSelectFork(21600000);  // Jan 11, 2025
+        getChain("mainnet").createSelectFork(21600000);  // Jan 11, 2025
 
         // JSON data
         inputMainnet = ScriptTools.readInput("mainnet-staging");
