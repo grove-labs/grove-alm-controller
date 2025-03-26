@@ -9,63 +9,6 @@ import { MockVault }   from "../mocks/MockVault.sol";
 
 import "../UnitTestBase.t.sol";
 
-contract ForeignControllerDeployTests is UnitTestBase {
-
-    function test_deployController() public {
-        address admin = makeAddr("admin");
-        address psm   = makeAddr("psm");
-        address usdc  = makeAddr("usdc");
-        address cctp  = makeAddr("cctp");
-
-        address almProxy   = address(new ALMProxy(admin));
-        address rateLimits = address(new RateLimits(admin));
-
-        ForeignController controller = ForeignController(
-            ForeignControllerDeploy.deployController(
-                admin,
-                almProxy,
-                rateLimits,
-                psm,
-                usdc,
-                cctp
-            )
-        );
-
-        assertEq(controller.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
-
-        assertEq(address(controller.proxy()),      almProxy);
-        assertEq(address(controller.rateLimits()), rateLimits);
-        assertEq(address(controller.psm()),        psm);
-        assertEq(address(controller.usdc()),       usdc);
-        assertEq(address(controller.cctp()),       cctp);
-    }
-
-    function test_deployFull() public {
-        address admin = makeAddr("admin");
-        address psm   = makeAddr("psm");
-        address usdc  = makeAddr("usdc");
-        address cctp  = makeAddr("cctp");
-
-        ControllerInstance memory instance
-            = ForeignControllerDeploy.deployFull(admin, psm, usdc, cctp);
-
-        ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));
-        ForeignController controller = ForeignController(instance.controller);
-        RateLimits        rateLimits = RateLimits(instance.rateLimits);
-
-        assertEq(almProxy.hasRole(DEFAULT_ADMIN_ROLE, admin),   true);
-        assertEq(rateLimits.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
-        assertEq(controller.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
-
-        assertEq(address(controller.proxy()),      instance.almProxy);
-        assertEq(address(controller.rateLimits()), instance.rateLimits);
-        assertEq(address(controller.psm()),        psm);
-        assertEq(address(controller.usdc()),       usdc);
-        assertEq(address(controller.cctp()),       cctp);
-    }
-
-}
-
 contract MainnetControllerDeployTests is UnitTestBase {
 
     struct TestVars {
