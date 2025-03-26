@@ -19,7 +19,6 @@ import { ISUsds } from "sdai/src/ISUsds.sol";
 
 import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
-import { Bridge }                from "xchain-helpers/testing/Bridge.sol";
 import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
 
 import { MainnetControllerDeploy } from "../../deploy/ControllerDeploy.sol";
@@ -128,7 +127,6 @@ contract ForkTestBase is DssTest {
     /*** Bridging setup                                                                         ***/
     /**********************************************************************************************/
 
-    Bridge bridge;
     Domain source;
     Domain destination;
 

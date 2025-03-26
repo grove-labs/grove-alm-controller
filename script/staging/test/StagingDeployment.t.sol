@@ -21,7 +21,6 @@ import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
 import { PSM3 } from "spark-psm/src/PSM3.sol";
 
-import { Bridge }                from "xchain-helpers/testing/Bridge.sol";
 import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
 
 import { MainnetControllerDeploy } from "../../../deploy/ControllerDeploy.sol";
@@ -82,7 +81,6 @@ contract StagingDeploymentTestBase is Test {
     function setUp() public virtual {
         vm.setEnv("FOUNDRY_ROOT_CHAINID", "1");
 
-        // Domains and bridge
         mainnet = getChain("mainnet").createSelectFork(21600000);  // Jan 11, 2025
 
         // JSON data
