@@ -61,14 +61,14 @@ contract MainnetController is AccessControl {
     bytes32 public constant FREEZER = keccak256("FREEZER");
     bytes32 public constant RELAYER = keccak256("RELAYER");
 
-    bytes32 public constant LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public constant LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public constant LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public constant LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
-    bytes32 public constant LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
-    bytes32 public constant LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
-    bytes32 public constant LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
-    bytes32 public constant LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
+    bytes32 public constant LIMIT_4626_DEPOSIT   = keccak256("LIMIT_4626_DEPOSIT");
+    bytes32 public constant LIMIT_4626_WITHDRAW  = keccak256("LIMIT_4626_WITHDRAW");
+    bytes32 public constant LIMIT_ASSET_TRANSFER = keccak256("LIMIT_ASSET_TRANSFER");
+    bytes32 public constant LIMIT_SUSDE_COOLDOWN = keccak256("LIMIT_SUSDE_COOLDOWN");
+    bytes32 public constant LIMIT_USDE_BURN      = keccak256("LIMIT_USDE_BURN");
+    bytes32 public constant LIMIT_USDE_MINT      = keccak256("LIMIT_USDE_MINT");
+    bytes32 public constant LIMIT_USDS_MINT      = keccak256("LIMIT_USDS_MINT");
+    bytes32 public constant LIMIT_USDS_TO_USDC   = keccak256("LIMIT_USDS_TO_USDC");
 
     address public immutable buffer;
 
