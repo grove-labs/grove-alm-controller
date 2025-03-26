@@ -35,10 +35,10 @@ import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
 
 import { RateLimitHelpers, RateLimitData } from "../../src/RateLimitHelpers.sol";
 
-import { MockJug }          from "./mocks/MockJug.sol";
-import { MockUsdsJoin }     from "./mocks/MockUsdsJoin.sol";
-import { MockVat }          from "./mocks/MockVat.sol";
-import { PSMWrapper }       from "./mocks/PSMWrapper.sol";
+import { MockJug }      from "./mocks/MockJug.sol";
+import { MockUsdsJoin } from "./mocks/MockUsdsJoin.sol";
+import { MockVat }      from "./mocks/MockVat.sol";
+import { PSMWrapper }   from "./mocks/PSMWrapper.sol";
 
 struct Domain {
     string  name;
@@ -287,8 +287,8 @@ contract FullStagingDeploy is Script {
 
 
         // USDS mint/burn rate limits
-        RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_MINT(),    rateLimits, rateLimitData18,    "usdsMintData",         18);
-        RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_TO_USDC(), rateLimits, rateLimitData6,     "usdsToUsdcData",       6);
+        RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_MINT(),    rateLimits, rateLimitData18, "usdsMintData",   18);
+        RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_TO_USDC(), rateLimits, rateLimitData6,  "usdsToUsdcData", 6);
 
         // Ethena-specific rate limits
         RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_SUSDE_COOLDOWN(), rateLimits, rateLimitData18, "susdeCooldownData", 18);

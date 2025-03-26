@@ -41,9 +41,9 @@ interface IVatLike {
 
 contract StagingDeploymentTestBase is Test {
 
-    using stdJson           for *;
-    using DomainHelpers     for *;
-    using ScriptTools       for *;
+    using stdJson       for *;
+    using DomainHelpers for *;
+    using ScriptTools   for *;
 
     bytes32 constant DEFAULT_ADMIN_ROLE = 0x00;
 
