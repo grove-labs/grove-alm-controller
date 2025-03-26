@@ -16,7 +16,6 @@ contract MainnetControllerDeployTests is UnitTestBase {
         address psm;
         address admin;
         address vault;
-        address cctp;
     }
 
     function test_deployController() public {
@@ -27,7 +26,6 @@ contract MainnetControllerDeployTests is UnitTestBase {
         vars.vault   = address(new MockVault(makeAddr("buffer")));
 
         vars.admin = makeAddr("admin");
-        vars.cctp  = makeAddr("cctp");
 
         address almProxy   = address(new ALMProxy(admin));
         address rateLimits = address(new RateLimits(admin));
@@ -39,8 +37,7 @@ contract MainnetControllerDeployTests is UnitTestBase {
                 rateLimits,
                 vars.vault,
                 vars.psm,
-                vars.daiUsds,
-                vars.cctp
+                vars.daiUsds
             )
         );
 
@@ -52,7 +49,6 @@ contract MainnetControllerDeployTests is UnitTestBase {
         assertEq(address(controller.buffer()),     makeAddr("buffer"));  // Buffer param in MockVault
         assertEq(address(controller.psm()),        vars.psm);
         assertEq(address(controller.daiUsds()),    vars.daiUsds);
-        assertEq(address(controller.cctp()),       vars.cctp);
         assertEq(address(controller.dai()),        makeAddr("dai"));   // Dai param in MockDaiUsds
         assertEq(address(controller.usdc()),       makeAddr("usdc"));  // Gem param in MockPSM
 
@@ -67,14 +63,12 @@ contract MainnetControllerDeployTests is UnitTestBase {
         vars.vault   = address(new MockVault(makeAddr("buffer")));
 
         vars.admin  = makeAddr("admin");
-        vars.cctp   = makeAddr("cctp");
 
         ControllerInstance memory instance = MainnetControllerDeploy.deployFull(
             admin,
             vars.vault,
             vars.psm,
-            vars.daiUsds,
-            vars.cctp
+            vars.daiUsds
         );
 
         ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));
@@ -91,7 +85,6 @@ contract MainnetControllerDeployTests is UnitTestBase {
         assertEq(address(controller.buffer()),     makeAddr("buffer"));  // Buffer param in MockVault
         assertEq(address(controller.psm()),        vars.psm);
         assertEq(address(controller.daiUsds()),    vars.daiUsds);
-        assertEq(address(controller.cctp()),       vars.cctp);
         assertEq(address(controller.dai()),        makeAddr("dai"));   // Dai param in MockDaiUsds
         assertEq(address(controller.usdc()),       makeAddr("usdc"));  // Gem param in MockPSM
 

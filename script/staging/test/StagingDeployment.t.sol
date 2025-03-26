@@ -23,7 +23,6 @@ import { PSM3 } from "spark-psm/src/PSM3.sol";
 
 import { Bridge }                from "xchain-helpers/testing/Bridge.sol";
 import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
-import { CCTPForwarder }         from "xchain-helpers/forwarders/CCTPForwarder.sol";
 
 import { MainnetControllerDeploy } from "../../../deploy/ControllerDeploy.sol";
 import { MainnetControllerInit }   from "../../../deploy/MainnetControllerInit.sol";
@@ -45,10 +44,6 @@ contract StagingDeploymentTestBase is Test {
     using stdJson           for *;
     using DomainHelpers     for *;
     using ScriptTools       for *;
-
-    // AAVE aTokens for testing
-    address constant AUSDS = 0x32a6268f9Ba3642Dda7892aDd74f1D34469A4259;
-    address constant AUSDC = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
 
     bytes32 constant DEFAULT_ADMIN_ROLE = 0x00;
 
@@ -169,33 +164,6 @@ contract MainnetStagingDeploymentTests is StagingDeploymentTestBase {
         assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e18);  // Interest earned
 
         assertEq(IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)), 0);
-    }
-
-    function test_depositAndWithdrawUsdsFromAave() public {
-        uint256 startingBalance = usds.balanceOf(address(almProxy));
-
-        vm.startPrank(relayerSafe);
-        mainnetController.mintUSDS(10e18);
-        mainnetController.depositAave(AUSDS, 10e6);
-        skip(1 days);
-        mainnetController.withdrawAave(AUSDS, type(uint256).max);
-        vm.stopPrank();
-
-        assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
-    }
-
-    function test_depositAndWithdrawUsdcFromAave() public {
-        uint256 startingBalance = usdc.balanceOf(address(almProxy));
-
-        vm.startPrank(relayerSafe);
-        mainnetController.mintUSDS(10e18);
-        mainnetController.swapUSDSToUSDC(10e6);
-        mainnetController.depositAave(AUSDC, 10e6);
-        skip(1 days);
-        mainnetController.withdrawAave(AUSDC, type(uint256).max);
-        vm.stopPrank();
-
-        assertGe(usdc.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
     }
 
     function test_mintDepositCooldownAssetsBurnUsde() public {

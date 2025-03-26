@@ -15,8 +15,7 @@ library MainnetControllerDeploy {
         address rateLimits,
         address vault,
         address psm,
-        address daiUsds,
-        address cctp
+        address daiUsds
     )
         internal returns (address controller)
     {
@@ -26,8 +25,7 @@ library MainnetControllerDeploy {
             rateLimits_ : rateLimits,
             vault_      : vault,
             psm_        : psm,
-            daiUsds_    : daiUsds,
-            cctp_       : cctp
+            daiUsds_    : daiUsds
         }));
     }
 
@@ -35,8 +33,7 @@ library MainnetControllerDeploy {
         address admin,
         address vault,
         address psm,
-        address daiUsds,
-        address cctp
+        address daiUsds
     )
         internal returns (ControllerInstance memory instance)
     {
@@ -49,8 +46,7 @@ library MainnetControllerDeploy {
             rateLimits_ : instance.rateLimits,
             vault_      : vault,
             psm_        : psm,
-            daiUsds_    : daiUsds,
-            cctp_       : cctp
+            daiUsds_    : daiUsds
         }));
     }
 

@@ -5,8 +5,6 @@ import { ScriptTools } from "dss-test/ScriptTools.sol";
 
 import "forge-std/Script.sol";
 
-import { CCTPForwarder } from "xchain-helpers/forwarders/CCTPForwarder.sol";
-
 import { ControllerInstance }                   from "../deploy/ControllerInstance.sol";
 import { MainnetControllerInit as MainnetInit } from "../deploy/MainnetControllerInit.sol";
 
@@ -50,13 +48,10 @@ contract UpgradeMainnetController is Script {
             rateLimits : inputConfig.readAddress(".rateLimits"),
             vault      : inputConfig.readAddress(".allocatorVault"),
             psm        : inputConfig.readAddress(".psm"),
-            daiUsds    : inputConfig.readAddress(".daiUsds"),
-            cctp       : inputConfig.readAddress(".cctpTokenMessenger")
+            daiUsds    : inputConfig.readAddress(".daiUsds")
         });
 
-        MainnetInit.MintRecipient[] memory mintRecipients = new MainnetInit.MintRecipient[](0);
-
-        MainnetInit.upgradeController(controllerInst, configAddresses, checkAddresses, mintRecipients);
+        MainnetInit.upgradeController(controllerInst, configAddresses, checkAddresses);
 
         vm.stopBroadcast();
 

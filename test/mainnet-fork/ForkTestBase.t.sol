@@ -20,7 +20,6 @@ import { ISUsds } from "sdai/src/ISUsds.sol";
 import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
 import { Bridge }                from "xchain-helpers/testing/Bridge.sol";
-import { CCTPForwarder }         from "xchain-helpers/forwarders/CCTPForwarder.sol";
 import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
 
 import { MainnetControllerDeploy } from "../../deploy/ControllerDeploy.sol";
@@ -93,7 +92,6 @@ contract ForkTestBase is DssTest {
 
     address constant LOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
 
-    address constant CCTP_MESSENGER = Ethereum.CCTP_TOKEN_MESSENGER;
     address constant DAI_USDS       = Ethereum.DAI_USDS;
     address constant ETHENA_MINTER  = Ethereum.ETHENA_MINTER;
     address constant PAUSE_PROXY    = Ethereum.PAUSE_PROXY;
@@ -206,8 +204,7 @@ contract ForkTestBase is DssTest {
             admin   : Ethereum.SPARK_PROXY,
             vault   : ilkInst.vault,
             psm     : Ethereum.PSM,
-            daiUsds : Ethereum.DAI_USDS,
-            cctp    : Ethereum.CCTP_TOKEN_MESSENGER
+            daiUsds : Ethereum.DAI_USDS
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -232,16 +229,8 @@ contract ForkTestBase is DssTest {
                 rateLimits : address(rateLimits),
                 vault      : address(vault),
                 psm        : Ethereum.PSM,
-                daiUsds    : Ethereum.DAI_USDS,
-                cctp       : Ethereum.CCTP_TOKEN_MESSENGER
+                daiUsds    : Ethereum.DAI_USDS
             });
-
-        Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);
-
-        mintRecipients[0] = Init.MintRecipient({
-            domain        : CCTPForwarder.DOMAIN_ID_CIRCLE_BASE,
-            mintRecipient : bytes32(uint256(uint160(makeAddr("baseAlmProxy"))))
-        });
 
         // Step 4: Initialize through Sky governance (Sky spell payload)
 
@@ -257,8 +246,7 @@ contract ForkTestBase is DssTest {
             address(usds),
             controllerInst,
             configAddresses,
-            checkAddresses,
-            mintRecipients
+            checkAddresses
         );
 
         mainnetController.grantRole(mainnetController.RELAYER(), backstopRelayer);
@@ -273,16 +261,9 @@ contract ForkTestBase is DssTest {
             slope     : uint256(1_000_000e6) / 4 hours
         });
 
-        bytes32 domainKeyBase = RateLimitHelpers.makeDomainKey(
-            mainnetController.LIMIT_USDC_TO_DOMAIN(),
-            CCTPForwarder.DOMAIN_ID_CIRCLE_BASE
-        );
-
         // NOTE: Using minimal config for test base setup
         RateLimitHelpers.setRateLimitData(mainnetController.LIMIT_USDS_MINT(),    address(rateLimits), standardUsdsData, "usdsMintData",         18);
         RateLimitHelpers.setRateLimitData(mainnetController.LIMIT_USDS_TO_USDC(), address(rateLimits), standardUsdcData, "usdsToUsdcData",       6);
-        RateLimitHelpers.setRateLimitData(mainnetController.LIMIT_USDC_TO_CCTP(), address(rateLimits), standardUsdcData, "usdcToCctpData",       6);
-        RateLimitHelpers.setRateLimitData(domainKeyBase,                          address(rateLimits), standardUsdcData, "cctpToBaseDomainData", 6);
 
         vm.stopPrank();
 

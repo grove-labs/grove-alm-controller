@@ -22,8 +22,7 @@ contract MainnetControllerConstructorTests is UnitTestBase {
             makeAddr("rateLimits"),
             address(vault),
             address(psm),
-            address(daiUsds),
-            makeAddr("cctp")
+            address(daiUsds)
         );
 
         assertEq(mainnetController.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
@@ -34,7 +33,6 @@ contract MainnetControllerConstructorTests is UnitTestBase {
         assertEq(address(mainnetController.buffer()),     makeAddr("buffer"));  // Buffer param in MockVault
         assertEq(address(mainnetController.psm()),        address(psm));
         assertEq(address(mainnetController.daiUsds()),    address(daiUsds));
-        assertEq(address(mainnetController.cctp()),       makeAddr("cctp"));
         assertEq(address(mainnetController.dai()),        makeAddr("dai"));   // Dai param in MockDaiUsds
         assertEq(address(mainnetController.usdc()),       makeAddr("usdc"));  // Gem param in MockPSM
 

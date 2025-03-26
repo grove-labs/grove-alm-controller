@@ -23,8 +23,6 @@ import { IERC20 }  from "forge-std/interfaces/IERC20.sol";
 import { Script }  from "forge-std/Script.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 
-import { CCTPForwarder } from "xchain-helpers/forwarders/CCTPForwarder.sol";
-
 import {
     ControllerInstance,
     MainnetController,
@@ -54,13 +52,6 @@ contract FullStagingDeploy is Script {
 
     using stdJson     for string;
     using ScriptTools for string;
-
-    /**********************************************************************************************/
-    /*** Deployed contracts                                                                     ***/
-    /**********************************************************************************************/
-
-    address constant AUSDS = 0x32a6268f9Ba3642Dda7892aDd74f1D34469A4259;
-    address constant AUSDC = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
 
     /**********************************************************************************************/
     /*** Mainnet existing/mock deployments                                                      ***/
@@ -222,8 +213,7 @@ contract FullStagingDeploy is Script {
             admin   : mainnet.admin,
             vault   : vault,
             psm     : psm,  // Wrapper
-            daiUsds : daiUsds,
-            cctp    : mainnet.config.readAddress(".cctpTokenMessenger")
+            daiUsds : daiUsds
         });
 
         mainnetAlmProxy   = controllerInst.almProxy;
@@ -245,19 +235,15 @@ contract FullStagingDeploy is Script {
                 rateLimits : controllerInst.rateLimits,
                 vault      : vault,
                 psm        : psm,
-                daiUsds    : mainnet.config.readAddress(".daiUsds"),
-                cctp       : mainnet.config.readAddress(".cctpTokenMessenger")
+                daiUsds    : mainnet.config.readAddress(".daiUsds")
             });
-
-        MainnetControllerInit.MintRecipient[] memory mintRecipients = new MainnetControllerInit.MintRecipient[](0);
 
         MainnetControllerInit.initAlmSystem(
             vault,
             address(usds),
             controllerInst,
             configAddresses,
-            checkAddresses,
-            mintRecipients
+            checkAddresses
         );
 
         // Step 3: Set all rate limits for the controller
@@ -295,17 +281,12 @@ contract FullStagingDeploy is Script {
 
         MainnetController mainnetController_ = MainnetController(mainnetController);
 
-        bytes32 ausdcDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_AAVE_DEPOSIT(),   AUSDC);
-        bytes32 ausdcWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_AAVE_WITHDRAW(),  AUSDC);
-        bytes32 ausdsDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_AAVE_DEPOSIT(),   AUSDS);
-        bytes32 ausdsWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_AAVE_WITHDRAW(),  AUSDS);
         bytes32 susdeDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_4626_DEPOSIT(),   address(mainnetController_.susde()));
         bytes32 susdsDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_4626_DEPOSIT(),   susds);
         bytes32 susdsWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController_.LIMIT_4626_WITHDRAW(),  susds);
 
 
         // USDS mint/burn rate limits
-        RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDC_TO_CCTP(), rateLimits, unlimitedRateLimit, "usdsToCctpData",       6);
         RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_MINT(),    rateLimits, rateLimitData18,    "usdsMintData",         18);
         RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDS_TO_USDC(), rateLimits, rateLimitData6,     "usdsToUsdcData",       6);
 
@@ -314,11 +295,7 @@ contract FullStagingDeploy is Script {
         RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDE_BURN(),      rateLimits, rateLimitData18, "usdeBurnData",      18);
         RateLimitHelpers.setRateLimitData(mainnetController_.LIMIT_USDE_MINT(),      rateLimits, rateLimitData6,  "usdeMintData",      6);
 
-        // 4626 and AAVE deposit/withdraw rate limits
-        RateLimitHelpers.setRateLimitData(ausdcDepositKey,  rateLimits, rateLimitData6,     "ausdcDepositData",  6);
-        RateLimitHelpers.setRateLimitData(ausdcWithdrawKey, rateLimits, unlimitedRateLimit, "ausdcWithdrawData", 6);
-        RateLimitHelpers.setRateLimitData(ausdsDepositKey,  rateLimits, rateLimitData18,    "ausdsDepositData",  18);
-        RateLimitHelpers.setRateLimitData(ausdsWithdrawKey, rateLimits, unlimitedRateLimit, "ausdcWithdrawData", 18);
+        // 4626 deposit/withdraw rate limits
         RateLimitHelpers.setRateLimitData(susdeDepositKey,  rateLimits, rateLimitData18,    "susdeDepositData",  18);
         RateLimitHelpers.setRateLimitData(susdsDepositKey,  rateLimits, unlimitedRateLimit, "susdsDepositData",  18);
         RateLimitHelpers.setRateLimitData(susdsWithdrawKey, rateLimits, unlimitedRateLimit, "susdsWithdrawData", 18);

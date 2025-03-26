@@ -29,8 +29,7 @@ contract MainnetControllerRemoveRelayerTests is UnitTestBase {
             makeAddr("rateLimits"),
             address(vault),
             address(psm),
-            address(daiUsds),
-            makeAddr("cctp")
+            address(daiUsds)
         );
 
         vm.startPrank(admin);
