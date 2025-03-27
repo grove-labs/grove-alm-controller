@@ -3,6 +3,7 @@
 ![Foundry CI](https://github.com/bloom-foundation/bloom-alm-controller/actions/workflows/ci.yml/badge.svg)
 [![Foundry][foundry-badge]][foundry]
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://github.com/bloom-foundation/bloom-alm-controller/blob/master/LICENSE)
+![Networks](https://img.shields.io/badge/Networks-Ethereum%20)
 
 [foundry]: https://getfoundry.sh/
 [foundry-badge]: https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg
