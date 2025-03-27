@@ -21,8 +21,6 @@ import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
 import { PSM3 } from "spark-psm/src/PSM3.sol";
 
-import { DomainHelpers } from "xchain-helpers/testing/Domain.sol";
-
 import { MainnetControllerDeploy } from "../../../deploy/ControllerDeploy.sol";
 import { MainnetControllerInit }   from "../../../deploy/MainnetControllerInit.sol";
 
@@ -41,7 +39,6 @@ interface IVatLike {
 contract StagingDeploymentTestBase is Test {
 
     using stdJson       for *;
-    using DomainHelpers for *;
     using ScriptTools   for *;
 
     bytes32 constant DEFAULT_ADMIN_ROLE = 0x00;
@@ -78,7 +75,7 @@ contract StagingDeploymentTestBase is Test {
     function setUp() public virtual {
         vm.setEnv("FOUNDRY_ROOT_CHAINID", "1");
 
-        getChain("mainnet").createSelectFork(21600000);  // Jan 11, 2025
+        vm.createSelectFork(getChain("mainnet").rpcUrl, 21600000);  // Jan 11, 2025
 
         // JSON data
         inputMainnet = ScriptTools.readInput("mainnet-staging");
