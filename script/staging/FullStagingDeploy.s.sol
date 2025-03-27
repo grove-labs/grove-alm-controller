@@ -324,6 +324,8 @@ contract FullStagingDeploy is Script {
 
         _setUpDependencies();
         _setUpAllocationSystem();
+        _setUpMainnetController();
+
         ScriptTools.exportContract(mainnet.nameDeps, "admin", deployer);
     }
 
