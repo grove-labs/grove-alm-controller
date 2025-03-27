@@ -17,7 +17,7 @@ import { Usds } from "usds/src/Usds.sol";
 
 import { SUsds } from "sdai/src/SUsds.sol";
 
-import { Ethereum } from "spark-address-registry/Ethereum.sol";
+import { Ethereum } from "bloom-address-registry/Ethereum.sol";
 
 import { PSM3 } from "spark-psm/src/PSM3.sol";
 

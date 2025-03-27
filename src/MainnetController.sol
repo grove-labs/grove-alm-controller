@@ -8,7 +8,7 @@ import { IMetaMorpho, Id, MarketAllocation } from "metamorpho/interfaces/IMetaMo
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
-import { Ethereum } from "spark-address-registry/Ethereum.sol";
+import { Ethereum } from "bloom-address-registry/Ethereum.sol";
 
 import { IALMProxy }   from "./interfaces/IALMProxy.sol";
 import { IRateLimits } from "./interfaces/IRateLimits.sol";

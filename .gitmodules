@@ -22,6 +22,6 @@
 [submodule "lib/metamorpho"]
 	path = lib/metamorpho
 	url = https://github.com/morpho-org/metamorpho
-[submodule "lib/spark-address-registry"]
-	path = lib/spark-address-registry
-	url = https://github.com/sparkdotfi/spark-address-registry
+[submodule "lib/bloom-address-registry"]
+	path = lib/bloom-address-registry
+	url = https://github.com/bloom-foundation/bloom-address-registry
