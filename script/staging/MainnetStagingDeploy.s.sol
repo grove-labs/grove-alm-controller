@@ -40,10 +40,10 @@ import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
 
 import { RateLimitHelpers, RateLimitData } from "../../src/RateLimitHelpers.sol";
 
-import { MockJug }          from "./mocks/MockJug.sol";
-import { MockUsdsJoin }     from "./mocks/MockUsdsJoin.sol";
-import { MockVat }          from "./mocks/MockVat.sol";
-import { PSMWrapper }       from "./mocks/PSMWrapper.sol";
+import { MockJug }      from "./mocks/MockJug.sol";
+import { MockUsdsJoin } from "./mocks/MockUsdsJoin.sol";
+import { MockVat }      from "./mocks/MockVat.sol";
+import { PSMWrapper }   from "./mocks/PSMWrapper.sol";
 
 struct Domain {
     string  name;
@@ -330,6 +330,7 @@ contract MainnetStagingDeploy is Script {
 
         _setUpDependencies();
         _setUpAllocationSystem();
+        _setUpMainnetController();
 
         ScriptTools.exportContract(mainnet.nameDeps, "admin", deployer);
     }
