@@ -213,7 +213,7 @@ contract StagingDeploymentTestBase is Test {
     }
 }
 
-contract FullMainnetStagingDeploymentTests is FullStagingDeploymentTestBase {
+contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
 
     // Remove this to unskip the test base setup
     function setUp() public override {}
@@ -426,7 +426,7 @@ contract FullMainnetStagingDeploymentTests is FullStagingDeploymentTestBase {
 
 }
 
-contract FullBaseStagingDeploymentTests is FullStagingDeploymentTestBase {
+contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
 
     using DomainHelpers     for *;
     using CCTPBridgeTesting for *;
