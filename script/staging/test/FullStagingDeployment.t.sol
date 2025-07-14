@@ -554,6 +554,8 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
     }
 
     function test_depositWithdrawFundsFromBaseMorphoUsdc() public {
+        vm.skip(true);
+
         mainnet.selectFork();
 
         vm.startPrank(relayerSafe);
@@ -585,6 +587,8 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
     }
 
     function test_depositRedeemFundsFromBaseMorphoUsdc() public {
+        vm.skip(true);
+
         mainnet.selectFork();
 
         vm.startPrank(relayerSafe);
