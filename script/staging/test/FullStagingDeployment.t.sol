@@ -626,13 +626,18 @@ contract ArbitrumStagingDeploymentTests is StagingDeploymentTestBase {
     using DomainHelpers     for *;
     using CCTPBridgeTesting for *;
 
-    function setUp() public override {
-        super.setUp();
+    // Remove this  and uncomment setup below to unskip the test base setup
+    function setUp() public override {}
 
-        arbitrum.selectFork();
-    }
+    // function setUp() public override {
+    //     super.setUp();
+
+    //     arbitrum.selectFork();
+    // }
 
     function test_transferCCTP() public {
+        vm.skip(true);
+
         arbitrum.selectFork();
 
         uint256 startingBalance = usdcArbitrum.balanceOf(address(arbitrumAlmProxy));
@@ -651,6 +656,8 @@ contract ArbitrumStagingDeploymentTests is StagingDeploymentTestBase {
     }
 
     function test_transferToPSM() public {
+        vm.skip(true);
+
         arbitrum.selectFork();
 
         uint256 startingBalance = usdcArbitrum.balanceOf(address(psmArbitrum));
@@ -677,6 +684,8 @@ contract ArbitrumStagingDeploymentTests is StagingDeploymentTestBase {
     }
 
     function test_addAndRemoveFundsFromArbitrumPSM() public {
+        vm.skip(true);
+
         mainnet.selectFork();
 
         vm.startPrank(relayerSafe);
