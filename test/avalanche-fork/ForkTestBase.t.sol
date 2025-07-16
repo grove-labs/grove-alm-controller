@@ -89,8 +89,8 @@ contract ForkTestBase is Test {
         // TODO: Change to Avalanche
         vm.createSelectFork(getChain('mainnet').rpcUrl, _getBlock());
 
-        usdsAvalanche  = IERC20(address(new ERC20Mock())); // TODO: Change into real value if USDS deployed
-        susdsAvalanche = IERC20(address(new ERC20Mock())); // TODO: Change into real value if sUSDS deployed
+        usdsAvalanche  = IERC20(address(new ERC20Mock()));
+        susdsAvalanche = IERC20(address(new ERC20Mock()));
         usdcAvalanche  = IERC20(USDC_AVALANCHE);
 
         ssrOracle = new MockSSROracle();

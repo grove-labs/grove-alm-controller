@@ -61,7 +61,6 @@ interface ICentrifugeToken is IERC7540 {
 
 contract CentrifugeTestBase is ForkTestBase {
 
-
     // TODO: Change to Avalanche addresses after switching to Avalanche fork
     address constant ESCROW                         = 0x0000000005F458Fd6ba9EEb5f365D83b7dA913dD;
     address constant INVESTMENT_MANAGER             = 0x427A1ce127b1775e4Cbd4F58ad468B9F832eA7e9;
