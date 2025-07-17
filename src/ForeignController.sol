@@ -299,23 +299,6 @@ contract ForeignController is AccessControl {
     }
 
     /**********************************************************************************************/
-    /*** Relayer ERC20 functions                                                                ***/
-    /**********************************************************************************************/
-
-    function transferAsset(address asset, address destination, uint256 amount) external {
-        _checkRole(RELAYER);
-        _rateLimited(
-            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
-            amount
-        );
-
-        proxy.doCall(
-            asset,
-            abi.encodeCall(IERC20(asset).transfer, (destination, amount))
-        );
-    }
-
-    /**********************************************************************************************/
     /*** Relayer ERC4626 functions                                                              ***/
     /**********************************************************************************************/
 
