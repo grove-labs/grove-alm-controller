@@ -51,6 +51,18 @@ interface IMapleTokenLike is IERC4626 {
     function removeShares(uint256 shares, address receiver) external;
 }
 
+interface ISpokeLike {
+    function crosschainTransferShares(
+        uint16 centrifugeId,
+        uint64 poolId,
+        bytes16 scId,
+        bytes32 receiver,
+        uint128 amount,
+        uint128 remoteExtraGasLimit
+    ) external payable;
+    function shareToken(uint64 poolId, bytes16 scId) external view returns (address);
+}
+
 interface ISSRedemptionLike is IERC20 {
     function calculateUsdcOut(uint256 ustbAmount)
         external view returns (uint256 usdcOutAmount, uint256 usdPerUstbChainlinkRaw);
@@ -81,6 +93,7 @@ contract MainnetController is AccessControl {
     /*** Events                                                                                 ***/
     /**********************************************************************************************/
 
+    event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -100,6 +113,7 @@ contract MainnetController is AccessControl {
     bytes32 public constant LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public constant LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public constant LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
+    bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER  = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
     bytes32 public constant LIMIT_CURVE_DEPOSIT        = keccak256("LIMIT_CURVE_DEPOSIT");
     bytes32 public constant LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public constant LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
@@ -141,6 +155,7 @@ contract MainnetController is AccessControl {
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
+    mapping(uint16 centrifugeId          => bytes32 recipient)          public centrifugeRecipients;
 
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
@@ -203,6 +218,17 @@ contract MainnetController is AccessControl {
         _checkRole(DEFAULT_ADMIN_ROLE);
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+        function setCentrifugeRecipient(
+        uint16 centrifugeId,
+        bytes32 recipient
+    )
+        external
+    {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        centrifugeRecipients[centrifugeId] = recipient;
+        emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
 
     /**********************************************************************************************/
@@ -448,6 +474,49 @@ contract MainnetController is AccessControl {
                 ICentrifugeToken(token).claimCancelRedeemRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
             )
+        );
+    }
+    
+    function transferSharesCentrifuge(
+        address spokeAddress,
+        uint64 poolId,
+        bytes16 scId,
+        uint128 amount,
+        uint16 destinationCentrifugeId,
+        uint128 remoteExtraGasLimit
+    )
+        external payable
+    {
+        _checkRole(RELAYER);
+        _rateLimited(
+            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, spokeAddress, poolId, scId, destinationCentrifugeId)),
+            amount
+        );
+
+        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
+        require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
+
+        // Get the share token address using ISpokeLike interface
+        address shareToken = ISpokeLike(spokeAddress).shareToken(poolId, scId);
+        
+        // Approve the specific spoke address to spend shares from the proxy
+        _approve(shareToken, spokeAddress, amount);
+
+        // Initiate cross-chain transfer via the specific spoke address
+        proxy.doCallWithValue{value: msg.value}(
+            spokeAddress,
+            abi.encodeCall(
+                ISpokeLike(spokeAddress).crosschainTransferShares,
+                (
+                    destinationCentrifugeId,
+                    poolId,
+                    scId,
+                    recipient,
+                    amount,
+                    remoteExtraGasLimit
+                )
+            ),
+            msg.value
         );
     }
 
@@ -899,4 +968,3 @@ contract MainnetController is AccessControl {
     }
 
 }
-

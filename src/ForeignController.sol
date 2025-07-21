@@ -39,6 +39,18 @@ interface ICentrifugeToken is IERC7540 {
         external returns (uint256 shares);
 }
 
+interface ISpokeLike {
+    function crosschainTransferShares(
+        uint16 centrifugeId,
+        uint64 poolId,
+        bytes16 scId,
+        bytes32 receiver,
+        uint128 amount,
+        uint128 remoteExtraGasLimit
+    ) external payable;
+    function shareToken(uint64 poolId, bytes16 scId) external view returns (address);
+}
+
 contract ForeignController is AccessControl {
 
     using OptionsBuilder for bytes;
@@ -55,6 +67,8 @@ contract ForeignController is AccessControl {
         uint256 usdcAmount
     );
 
+    event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
+
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
 
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -68,18 +82,19 @@ contract ForeignController is AccessControl {
     bytes32 public constant FREEZER = keccak256("FREEZER");
     bytes32 public constant RELAYER = keccak256("RELAYER");
 
-    bytes32 public constant LIMIT_4626_DEPOSIT       = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public constant LIMIT_4626_WITHDRAW      = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public constant LIMIT_7540_DEPOSIT       = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public constant LIMIT_7540_REDEEM        = keccak256("LIMIT_7540_REDEEM");
-    bytes32 public constant LIMIT_AAVE_DEPOSIT       = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public constant LIMIT_AAVE_WITHDRAW      = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public constant LIMIT_ASSET_TRANSFER     = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public constant LIMIT_LAYERZERO_TRANSFER = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public constant LIMIT_PSM_DEPOSIT        = keccak256("LIMIT_PSM_DEPOSIT");
-    bytes32 public constant LIMIT_PSM_WITHDRAW       = keccak256("LIMIT_PSM_WITHDRAW");
-    bytes32 public constant LIMIT_USDC_TO_CCTP       = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public constant LIMIT_USDC_TO_DOMAIN     = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public constant LIMIT_4626_DEPOSIT           = keccak256("LIMIT_4626_DEPOSIT");
+    bytes32 public constant LIMIT_4626_WITHDRAW          = keccak256("LIMIT_4626_WITHDRAW");
+    bytes32 public constant LIMIT_7540_DEPOSIT           = keccak256("LIMIT_7540_DEPOSIT");
+    bytes32 public constant LIMIT_7540_REDEEM            = keccak256("LIMIT_7540_REDEEM");
+    bytes32 public constant LIMIT_AAVE_DEPOSIT           = keccak256("LIMIT_AAVE_DEPOSIT");
+    bytes32 public constant LIMIT_AAVE_WITHDRAW          = keccak256("LIMIT_AAVE_WITHDRAW");
+    bytes32 public constant LIMIT_ASSET_TRANSFER         = keccak256("LIMIT_ASSET_TRANSFER");
+    bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER    = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
+    bytes32 public constant LIMIT_LAYERZERO_TRANSFER     = keccak256("LIMIT_LAYERZERO_TRANSFER");
+    bytes32 public constant LIMIT_PSM_DEPOSIT            = keccak256("LIMIT_PSM_DEPOSIT");
+    bytes32 public constant LIMIT_PSM_WITHDRAW           = keccak256("LIMIT_PSM_WITHDRAW");
+    bytes32 public constant LIMIT_USDC_TO_CCTP           = keccak256("LIMIT_USDC_TO_CCTP");
+    bytes32 public constant LIMIT_USDC_TO_DOMAIN         = keccak256("LIMIT_USDC_TO_DOMAIN");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
@@ -92,6 +107,7 @@ contract ForeignController is AccessControl {
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
+    mapping(uint16 centrifugeId          => bytes32 recipient)          public centrifugeRecipients;
 
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
@@ -154,6 +170,14 @@ contract ForeignController is AccessControl {
     {
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
+    }
+
+    function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        centrifugeRecipients[centrifugeId] = recipient;
+        emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
 
     /**********************************************************************************************/
@@ -490,6 +514,48 @@ contract ForeignController is AccessControl {
                 ICentrifugeToken(token).claimCancelRedeemRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
             )
+        );
+    }
+
+    function transferSharesCentrifuge(
+        address spokeAddress,
+        uint64 poolId,
+        bytes16 scId,
+        uint128 amount,
+        uint16 destinationCentrifugeId,
+        uint128 remoteExtraGasLimit
+    )
+        external payable onlyRole(RELAYER)
+    {
+        _rateLimited(
+            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, spokeAddress, poolId, scId, destinationCentrifugeId)),
+            amount
+        );
+
+        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
+        require(recipient != 0, "ForeignController/centrifuge-id-not-configured");
+
+        // Get the share token address using ISpokeLike interface
+        address shareToken = ISpokeLike(spokeAddress).shareToken(poolId, scId);
+        
+        // Approve the specific spoke address to spend shares from the proxy
+        _approve(shareToken, spokeAddress, amount);
+
+        // Initiate cross-chain transfer via the specific spoke address
+        proxy.doCallWithValue{value: msg.value}(
+            spokeAddress,
+            abi.encodeCall(
+                ISpokeLike(spokeAddress).crosschainTransferShares,
+                (
+                    destinationCentrifugeId,
+                    poolId,
+                    scId,
+                    recipient,
+                    amount,
+                    remoteExtraGasLimit
+                )
+            ),
+            msg.value
         );
     }
 
