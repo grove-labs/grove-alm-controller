@@ -33,6 +33,25 @@ interface IFreelyTransferableHookLike {
 }
 
 interface IAsyncRedeemManagerLike {
+    function issuedShares(
+        uint64  poolId,
+        bytes16 scId,
+        uint128 shareAmount,
+        uint128 pricePoolPerShare) external;
+    function revokedShares(
+        uint64  poolId,
+        bytes16 scId,
+        uint128 assetId,
+        uint128 assetAmount,
+        uint128 shareAmount,
+        uint128 pricePoolPerShare) external;
+    function approvedDeposits(
+        uint64  poolId,
+        bytes16 scId,
+        uint128 assetId,
+        uint128 assetAmount,
+        uint128 pricePoolPerAsset
+    ) external;
     function fulfillDepositRequest(
         uint64  poolId,
         bytes16 scId,
@@ -174,10 +193,10 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
 
         assertEq(usdcAvalanche.allowance(address(almProxy), address(jaaaVault)), 0);
 
-        uint256 initialEscrowBal = usdcAvalanche.balanceOf(poolEscrow);
+        uint256 initialEscrowBal = usdcAvalanche.balanceOf(globalEscrow);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(usdcAvalanche.balanceOf(globalEscrow),            initialEscrowBal);
 
         assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
@@ -189,7 +208,7 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
         assertEq(usdcAvalanche.allowance(address(almProxy), address(jaaaVault)), 0);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
-        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal + 1_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(globalEscrow),      initialEscrowBal + 1_000_000e6);
 
         assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
     }
@@ -253,6 +272,15 @@ contract ForeignControllerClaimDepositERC7540SuccessTests is CentrifugeTestBase 
 
         assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
         assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+
+        // Issue shares at price 2.0
+        vm.prank(root);
+        manager.issuedShares(
+            jaaaPoolId,
+            jaaaScId,
+            500_000e6,
+            2e18
+        );
 
         // Fulfill request at price 2.0
         vm.prank(root);
@@ -654,6 +682,17 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
 
         assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
         assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+
+        // Revoke shares at price 2.0
+        vm.prank(root);
+        manager.revokedShares(
+            jaaaPoolId,
+            jaaaScId,
+            usdcAssetId,
+            2_000_000e6,
+            1_000_000e18,
+            2e18
+        );
 
         // Fulfill request at price 2.0
         deal(address(usdcAvalanche), poolEscrow, 2_000_000e6);
