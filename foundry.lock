@@ -43,5 +43,8 @@
   },
   "lib/openzeppelin-contracts": {
     "rev": "dbb6104ce834628e473d2173bbc9d47f81a9eec3"
+  },
+  "lib/centrifuge-protocol-v3": {
+    "rev": "9cf245e098ec01ec697bfff9b1e46f0630425b33"
   }
 }
