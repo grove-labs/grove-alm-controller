@@ -168,7 +168,7 @@ contract ForkTestBase is Test {
     // TODO: Change to a proper Avalanche block after switching to Avalanche fork
     // Default configuration for the fork, can be overridden in inheriting tests
     function _getBlock() internal virtual pure returns (uint256) {
-        return 4074609;  // July 21, 2025
+        return 65896755;  // July 22, 2025
     }
 
 }
