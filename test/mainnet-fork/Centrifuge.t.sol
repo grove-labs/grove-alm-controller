@@ -59,21 +59,42 @@ interface ICentrifugeToken is IERC7540 {
         external view returns (bool isPending);
 }
 
+interface ISpokeLike {
+    function crosschainTransferShares(
+        uint16 centrifugeId,
+        uint64 poolId,
+        bytes16 scId,
+        bytes32 receiver,
+        uint128 amount,
+        uint128 remoteExtraGasLimit
+    ) external payable;
+    function shareToken(uint256 poolId, bytes32 shareClassId) external view returns (address);
+}
+
 contract CentrifugeTestBase is ForkTestBase {
 
     address constant ESCROW                         = 0x0000000005F458Fd6ba9EEb5f365D83b7dA913dD;
+    address constant DEJAAA_TOKEN                   = 0xAAA0008C8CF3A7Dca931adaF04336A5D808C82Cc;
+    address constant DEJAAA_VAULT_USDC              = 0x1121F4e21eD8B9BC1BB9A2952cDD8639aC897784;
     address constant INVESTMENT_MANAGER             = 0x427A1ce127b1775e4Cbd4F58ad468B9F832eA7e9;
     address constant JTREASURY_RESTRICTION_MANAGER  = 0x4737C3f62Cc265e786b280153fC666cEA2fBc0c0;
     address constant JTREASURY_TOKEN                = 0x8c213ee79581Ff4984583C6a801e5263418C4b86;
     address constant JTREASURY_VAULT_USDC           = 0x36036fFd9B1C6966ab23209E073c68Eb9A992f50;
     address constant ROOT                           = 0x0C1fDfd6a1331a875EA013F3897fc8a76ada5DfC;
+    address constant SPOKE                          = 0xd30Da1d7F964E5f6C2D9fE2AAA97517F6B23FA2B;
 
     bytes16 constant JTREASURY_TRANCHE_ID = 0x97aa65f23e7be09fcd62d0554d2e9273;
     uint128 constant USDC_ASSET_ID        = 242333941209166991950178742833476896417;
     uint64  constant JTREASURY_POOL_ID    = 4139607887;
 
+    bytes16 constant DEJAAA_TRANCHE_ID    = 0x00010000000000030000000000000001;
+    uint64  constant DEJAAA_POOL_ID       = 281474976710659;
+
+
     // Requests for Centrifuge pools are non-fungible and all have ID = 0
     uint256 constant REQUEST_ID = 0;
+
+    uint16  constant DESTINATION_CENTRIFUGE_ID = 5; // Avalanche Centrifuge ID
 
     IInvestmentManager  investmentManager  = IInvestmentManager(INVESTMENT_MANAGER);
     IRestrictionManager restrictionManager = IRestrictionManager(JTREASURY_RESTRICTION_MANAGER);
@@ -81,8 +102,13 @@ contract CentrifugeTestBase is ForkTestBase {
     ICentrifugeToken jTreasuryVault = ICentrifugeToken(JTREASURY_VAULT_USDC);
     IERC20Mintable   jTreasuryToken = IERC20Mintable(JTREASURY_TOKEN);
 
+    ICentrifugeToken dejaaaVault = ICentrifugeToken(DEJAAA_VAULT_USDC);
+    IERC20Mintable   dejaaaToken = IERC20Mintable(DEJAAA_TOKEN);
+
+    ISpokeLike spoke = ISpokeLike(SPOKE);
+
     function _getBlock() internal pure override returns (uint256) {
-        return 21988625;  // Mar 6, 2025
+        return 22968402;  // Jul 21, 2025
     }
 
 }
@@ -95,13 +121,13 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
             address(this),
             RELAYER
         ));
-        mainnetController.requestDepositERC7540(address(jTreasuryVault), 1_000_000e6);
+        mainnetController.requestDepositERC7540(address(dejaaaVault), 1_000_000e6);
     }
 
     function test_requestDepositERC7540_zeroMaxAmount() external {
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.requestDepositERC7540(address(jTreasuryVault), 1_000_000e6);
+        mainnetController.requestDepositERC7540(address(dejaaaVault), 1_000_000e6);
     }
 
     function test_requestDepositERC7540_rateLimitBoundary() external {
@@ -109,7 +135,7 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
                 mainnetController.LIMIT_7540_DEPOSIT(),
-                address(jTreasuryVault)
+                address(dejaaaVault)
             ),
             1_000_000e6,
             uint256(1_000_000e6) / 1 days
@@ -119,13 +145,13 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         deal(address(usdc), address(almProxy), 1_000_000e6);
 
         vm.prank(ROOT);
-        restrictionManager.updateMember(address(jTreasuryToken), address(almProxy), type(uint64).max);
+        restrictionManager.updateMember(address(dejaaaVault), address(almProxy), type(uint64).max);
 
         vm.startPrank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.requestDepositERC7540(address(jTreasuryVault), 1_000_000e6 + 1);
+        mainnetController.requestDepositERC7540(address(dejaaaVault), 1_000_000e6 + 1);
 
-        mainnetController.requestDepositERC7540(address(jTreasuryVault), 1_000_000e6);
+        mainnetController.requestDepositERC7540(address(dejaaaVault), 1_000_000e6);
     }
 }
 
@@ -884,6 +910,106 @@ contract MainnetControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
 
         assertEq(jTreasuryToken.balanceOf(address(almProxy)), shares);
         assertEq(jTreasuryToken.balanceOf(ESCROW),            initialEscrowBal);
+    }
+
+}
+
+contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTestBase {
+
+    function test_transferSharesCentrifuge_notRelayer() external {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            RELAYER
+        )); 
+        mainnetController.transferSharesCentrifuge(address(spoke), DEJAAA_POOL_ID, DEJAAA_TRANCHE_ID, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+    }
+
+    function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        mainnetController.transferSharesCentrifuge(address(spoke), DEJAAA_POOL_ID, DEJAAA_TRANCHE_ID, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+    }
+
+    function test_transferSharesCentrifuge_rateLimitedBoundary() external {
+        vm.startPrank(SPARK_PROXY);
+
+        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                address(spoke),
+                DEJAAA_POOL_ID,
+                DEJAAA_TRANCHE_ID,
+                DESTINATION_CENTRIFUGE_ID
+            )),
+            10_000_000e6,
+            0
+        );
+
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
+
+        vm.stopPrank();
+
+        // Setup token balances
+        deal(address(dejaaaToken), address(almProxy), 10_000_000e6);
+        deal(relayer, 1 ether);  // Gas cost for Centrifuge
+
+        vm.startPrank(relayer);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
+            address(spoke),
+            DEJAAA_POOL_ID,
+            DEJAAA_TRANCHE_ID,
+            10_000_000e6 + 1,
+            DESTINATION_CENTRIFUGE_ID,
+            200_000
+        );
+
+        mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
+            address(spoke),
+            DEJAAA_POOL_ID,
+            DEJAAA_TRANCHE_ID,
+            10_000_000e6,
+            DESTINATION_CENTRIFUGE_ID,
+            200_000
+        );
+    }
+
+        function test_transferSharesCentrifuge_invalidCentrifugeId() external {
+        vm.startPrank(SPARK_PROXY);
+
+        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                address(spoke),
+                DEJAAA_POOL_ID,
+                DEJAAA_TRANCHE_ID,
+                DESTINATION_CENTRIFUGE_ID
+            )),
+            10_000_000e6,
+            0
+        );
+
+        vm.stopPrank();
+
+        // Setup token balances
+        deal(address(dejaaaToken), address(almProxy), 10_000_000e6);
+        deal(relayer, 1 ether);  // Gas cost for Centrifuge
+
+        vm.startPrank(relayer);
+        vm.expectRevert("MainnetController/centrifuge-id-not-configured");
+        mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
+            address(spoke),
+            DEJAAA_POOL_ID,
+            DEJAAA_TRANCHE_ID,
+            10_000_000e6,
+            DESTINATION_CENTRIFUGE_ID,
+            200_000
+        );
     }
 
 }
