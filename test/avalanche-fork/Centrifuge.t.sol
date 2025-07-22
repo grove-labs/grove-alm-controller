@@ -3,64 +3,17 @@ pragma solidity >=0.8.0;
 
 import "./ForkTestBase.t.sol";
 
-import {IERC7540} from "forge-std/interfaces/IERC7540.sol";
+import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
-interface IRestrictionManager {
-    function updateMember(address token, address user, uint64 validUntil) external;
-}
-
-interface IInvestmentManager {
-    function fulfillCancelDepositRequest(
-        uint64 poolId,
-        bytes16 trancheId,
-        address user,
-        uint128 assetId,
-        uint128 assets,
-        uint128 fulfillment
-    ) external;
-    function fulfillCancelRedeemRequest(
-        uint64 poolId,
-        bytes16 trancheId,
-        address user,
-        uint128 assetId,
-        uint128 shares
-    ) external;
-    function fulfillDepositRequest(
-        uint64 poolId,
-        bytes16 trancheId,
-        address user,
-        uint128 assetId,
-        uint128 assets,
-        uint128 shares
-    ) external;
-    function fulfillRedeemRequest(
-        uint64 poolId,
-        bytes16 trancheId,
-        address user,
-        uint128 assetId,
-        uint128 assets,
-        uint128 shares
-    ) external;
-    function poolManager() external view returns (address);
-
-}
-
-interface IPoolManager {
-    function assetToId(address asset) external view returns (uint128);
-}
-
-interface IERC20Mintable is IERC20 {
-    function mint(address to, uint256 amount) external;
-}
-
-interface ICentrifugeVault is IERC7540 {
-    function asset()              external view returns (address);
-    function manager()            external view returns (address);
-    // function restrictionManager() external view returns (address);
-    function root()               external view returns (address);
-    function share()              external view returns (address);
-    function trancheId()          external view returns (bytes16);
-    function poolId()             external view returns (uint64);
+interface ICentrifugeV3Vault is IERC7540 {
+    function asset()        external view returns (address);
+    function share()        external view returns (address);
+    function manager()      external view returns (address);
+    function poolEscrow()   external view returns (address);
+    function globalEscrow() external view returns (address);
+    function poolId()       external view returns (uint64);
+    function scId()         external view returns (bytes16);
+    function root()         external view returns (address);
 
     function claimableCancelDepositRequest(uint256 requestId, address controller)
         external view returns (uint256 claimableAssets);
@@ -72,26 +25,62 @@ interface ICentrifugeVault is IERC7540 {
         external view returns (bool isPending);
 }
 
+interface ICentrifugeV3ShareLike is IERC20 {
+    function mint(address to, uint256 value) external;
+    function hook() external view returns (address);
+}
+
+interface IFreelyTransferableHookLike {
+    function updateMember(address token, address user, uint64 validUntil) external;
+}
+
+interface IAsyncRedeemManagerLike {
+    function fulfillDepositRequest(
+        uint64  poolId,
+        bytes16 scId,
+        address user,
+        uint128 assetId,
+        uint128 fulfilledAssets,
+        uint128 fulfilledShares,
+        uint128 cancelledAssets
+    ) external;
+    function fulfillRedeemRequest(
+        uint64  poolId,
+        bytes16 scId,
+        address user,
+        uint128 assetId,
+        uint128 fulfilledAssets,
+        uint128 fulfilledShares,
+        uint128 cancelledShares
+    ) external;
+    function spoke() external view returns (address);
+}
+
+interface ISpokeLike {
+    function assetToId(address asset) external view returns (uint128);
+}
+
 contract CentrifugeTestBase is ForkTestBase {
 
-    // TODO: Change to Avalanche addresses after switching to Avalanche fork
-    address constant JTREASURY_VAULT_USDC = 0x04157759a9fe406d82a16BdEB20F9BeB9bBEb958;
+    address constant JAAA_VAULT = 0xCF4C60066aAB54b3f750F94c2a06046d5466Ccf9;
 
     // Requests for Centrifuge pools are non-fungible and all have ID = 0
     uint256 constant REQUEST_ID = 0;
 
-    ICentrifugeVault jtrsyVault = ICentrifugeVault(JTREASURY_VAULT_USDC);
+    ICentrifugeV3Vault jaaaVault = ICentrifugeV3Vault(JAAA_VAULT);
 
-    // IInvestmentManager  investmentManager;
-    // IRestrictionManager restrictionManager;
-    // IERC20Mintable      jtrsyToken;
+    ICentrifugeV3ShareLike      jaaaToken;
+    IFreelyTransferableHookLike jaaaTokenHook;
+    IAsyncRedeemManagerLike     manager;
+    ISpokeLike                  spoke;
 
-    // address escrow;
-    // address root;
+    address globalEscrow;
+    address poolEscrow;
+    address root;
 
-    // uint64  jtrsyPoolId;
-    // bytes16 jtrsyTrancheId;
-    // uint128 usdcAssetId;
+    uint64  jaaaPoolId;
+    bytes16 jaaaScId;
+    uint128 usdcAssetId;
 
 
     function _getBlock() internal pure override returns (uint256) {
@@ -101,15 +90,18 @@ contract CentrifugeTestBase is ForkTestBase {
     function setUp() public virtual override {
         super.setUp();
 
-        // investmentManager  = IInvestmentManager(jtrsyVault.manager());
-        // restrictionManager = IRestrictionManager(jtrsyVault.restrictionManager());
-        // restrictionManager = IRestrictionManager(0x04157759a9fe406d82a16BdEB20F9BeB9bBEb958); // TODO: Change to Avalanche addresses after switching to Avalanche fork
-        // jtrsyToken         = IERC20Mintable(jtrsyVault.share());
-        // escrow             = investmentManager.poolEscrow();
-        // root               = jtrsyVault.root();
-        // jtrsyPoolId        = jtrsyVault.poolId();
-        // jtrsyTrancheId     = jtrsyVault.trancheId();
-        // usdcAssetId        = IPoolManager(investmentManager.poolManager()).assetToId(jtrsyVault.asset());
+        jaaaToken     = ICentrifugeV3ShareLike(jaaaVault.share());
+        jaaaTokenHook = IFreelyTransferableHookLike(jaaaToken.hook());
+        manager       = IAsyncRedeemManagerLike(jaaaVault.manager());
+        spoke         = ISpokeLike(manager.spoke());
+
+        globalEscrow = jaaaVault.globalEscrow();
+        poolEscrow   = jaaaVault.poolEscrow();
+        root         = jaaaVault.root();
+
+        jaaaPoolId  = jaaaVault.poolId();
+        jaaaScId    = jaaaVault.scId();
+        usdcAssetId = spoke.assetToId(jaaaVault.asset());
     }
 }
 
@@ -121,13 +113,13 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
             address(this),
             RELAYER
         ));
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
     }
 
     function test_requestDepositERC7540_zeroMaxAmount() external {
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
     }
 
     function test_requestDepositERC7540_rateLimitBoundary() external {
@@ -135,7 +127,7 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
                 foreignController.LIMIT_7540_DEPOSIT(),
-                address(jtrsyVault)
+                address(jaaaVault)
             ),
             1_000_000e6,
             uint256(1_000_000e6) / 1 days
@@ -145,13 +137,13 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
         vm.prank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6 + 1);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6 + 1);
 
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
     }
 }
 
@@ -163,11 +155,11 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
         super.setUp();
 
         vm.prank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_DEPOSIT(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -179,26 +171,26 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
 
         assertEq(rateLimits.getCurrentRateLimit(key), 1_000_000e6);
 
-        assertEq(usdcAvalanche.allowance(address(almProxy), address(jtrsyVault)), 0);
+        assertEq(usdcAvalanche.allowance(address(almProxy), address(jaaaVault)), 0);
 
-        uint256 initialEscrowBal = usdcAvalanche.balanceOf(escrow);
+        uint256 initialEscrowBal = usdcAvalanche.balanceOf(poolEscrow);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(usdcAvalanche.balanceOf(escrow),            initialEscrowBal);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         vm.prank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
 
         assertEq(rateLimits.getCurrentRateLimit(key), 0);
 
-        assertEq(usdcAvalanche.allowance(address(almProxy), address(jtrsyVault)), 0);
+        assertEq(usdcAvalanche.allowance(address(almProxy), address(jaaaVault)), 0);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
-        assertEq(usdcAvalanche.balanceOf(escrow),            initialEscrowBal + 1_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal + 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
     }
 
 }
@@ -211,7 +203,7 @@ contract ForeignControllerClaimDepositERC7540FailureTests is CentrifugeTestBase 
             address(this),
             RELAYER
         ));
-        foreignController.claimDepositERC7540(address(jtrsyVault));
+        foreignController.claimDepositERC7540(address(jaaaVault));
     }
 
     function test_claimDepositERC7540_invalidVault() external {
@@ -230,11 +222,11 @@ contract ForeignControllerClaimDepositERC7540SuccessTests is CentrifugeTestBase 
         super.setUp();
 
         vm.prank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_DEPOSIT(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -244,110 +236,112 @@ contract ForeignControllerClaimDepositERC7540SuccessTests is CentrifugeTestBase 
     function test_claimDepositERC7540_singleRequest() external {
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request deposit into JTRSY by supplying USDC
         vm.prank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
 
-        uint256 totalSupply = jtrsyToken.totalSupply();
+        uint256 totalSupply = jaaaToken.totalSupply();
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill request at price 2.0
         vm.prank(root);
-        investmentManager.fulfillDepositRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillDepositRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
             1_000_000e6,
-            500_000e6
+            500_000e6,
+            0
         );
 
-        assertEq(jtrsyToken.totalSupply(),                totalSupply + 500_000e6);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + 500_000e6);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.totalSupply(),                totalSupply + 500_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + 500_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
 
         // Claim shares
         vm.prank(ALM_RELAYER);
-        foreignController.claimDepositERC7540(address(jtrsyVault));
+        foreignController.claimDepositERC7540(address(jaaaVault));
 
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 500_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 500_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
 
     function test_claimDepositERC7540_multipleRequests() external {
         deal(address(usdcAvalanche), address(almProxy), 1_500_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request deposit into JTRSY by supplying USDC
         vm.prank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
 
-        uint256 totalSupply = jtrsyToken.totalSupply();
+        uint256 totalSupply = jaaaToken.totalSupply();
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request another deposit into JTRSY by supplying more USDC
         vm.prank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 500_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 500_000e6);
 
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_500_000e6);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   1_500_000e6);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill both requests at price 2.0
         vm.prank(root);
-        investmentManager.fulfillDepositRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillDepositRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
             1_500_000e6,
-            750_000e6
+            750_000e6,
+            0
         );
 
-        assertEq(jtrsyToken.totalSupply(),                totalSupply + 750_000e6);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + 750_000e6);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.totalSupply(),                totalSupply + 750_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + 750_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
 
         // Claim shares
         vm.prank(ALM_RELAYER);
-        foreignController.claimDepositERC7540(address(jtrsyVault));
+        foreignController.claimDepositERC7540(address(jaaaVault));
 
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 750_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 750_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableDepositRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
 }
@@ -360,7 +354,7 @@ contract ForeignControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
             address(this),
             RELAYER
         ));
-        foreignController.cancelCentrifugeDepositRequest(address(jtrsyVault));
+        foreignController.cancelCentrifugeDepositRequest(address(jaaaVault));
     }
 
     function test_cancelCentrifugeDepositRequest_invalidVault() external {
@@ -379,11 +373,11 @@ contract ForeignControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestB
         super.setUp();
 
         vm.prank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_DEPOSIT(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -394,16 +388,16 @@ contract ForeignControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestB
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
         vm.prank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),       1_000_000e6);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)), false);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),       1_000_000e6);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)), false);
 
         vm.prank(ALM_RELAYER);
-        foreignController.cancelCentrifugeDepositRequest(address(jtrsyVault));
+        foreignController.cancelCentrifugeDepositRequest(address(jaaaVault));
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),       1_000_000e6);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)), true);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),       1_000_000e6);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)), true);
     }
 
 }
@@ -416,7 +410,7 @@ contract ForeignControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
             address(this),
             RELAYER
         ));
-        foreignController.claimCentrifugeCancelDepositRequest(address(jtrsyVault));
+        foreignController.claimCentrifugeCancelDepositRequest(address(jaaaVault));
     }
 
     function test_claimCentrifugeCancelDepositRequest_invalidVault() external {
@@ -435,11 +429,11 @@ contract ForeignControllerClaimCentrifugeCancelDepositSuccessTests is Centrifuge
         super.setUp();
 
         vm.prank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_DEPOSIT(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -449,51 +443,52 @@ contract ForeignControllerClaimCentrifugeCancelDepositSuccessTests is Centrifuge
     function test_claimCentrifugeCancelDepositRequest() external {
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
-        uint256 initialEscrowBal = usdcAvalanche.balanceOf(escrow);
+        uint256 initialEscrowBal = usdcAvalanche.balanceOf(poolEscrow);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(usdcAvalanche.balanceOf(escrow),            initialEscrowBal);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         vm.startPrank(ALM_RELAYER);
-        foreignController.requestDepositERC7540(address(jtrsyVault), 1_000_000e6);
-        foreignController.cancelCentrifugeDepositRequest(address(jtrsyVault));
+        foreignController.requestDepositERC7540(address(jaaaVault), 1_000_000e6);
+        foreignController.cancelCentrifugeDepositRequest(address(jaaaVault));
         vm.stopPrank();
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
-        assertEq(usdcAvalanche.balanceOf(escrow),            initialEscrowBal + 1_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal + 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         1_000_000e6);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   true);
-        assertEq(jtrsyVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         1_000_000e6);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   true);
+        assertEq(jaaaVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill cancelation request
         vm.prank(root);
-        investmentManager.fulfillCancelDepositRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillDepositRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
             1_000_000e6,
+            0,
             1_000_000e6
         );
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
 
         vm.prank(ALM_RELAYER);
-        foreignController.claimCentrifugeCancelDepositRequest(address(jtrsyVault));
+        foreignController.claimCentrifugeCancelDepositRequest(address(jaaaVault));
 
-        assertEq(jtrsyVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingDepositRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelDepositRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelDepositRequest(REQUEST_ID, address(almProxy)), 0);
 
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(usdcAvalanche.balanceOf(escrow),            initialEscrowBal);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            initialEscrowBal);
     }
 
 }
@@ -506,13 +501,13 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
             address(this),
             RELAYER
         ));
-        foreignController.requestRedeemERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestRedeemERC7540(address(jaaaVault), 1_000_000e6);
     }
 
     function test_requestRedeemERC7540_zeroMaxAmount() external {
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.requestRedeemERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestRedeemERC7540(address(jaaaVault), 1_000_000e6);
     }
 
     function test_requestRedeemERC7540_rateLimitsBoundary() external {
@@ -520,7 +515,7 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
                 foreignController.LIMIT_7540_REDEEM(),
-                address(jtrsyVault)
+                address(jaaaVault)
             ),
             1_000_000e6,
             uint256(1_000_000e6) / 1 days
@@ -528,21 +523,21 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
         vm.stopPrank();
 
         vm.startPrank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
-        jtrsyToken.mint(address(almProxy), 1_000_000e6);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
+        jaaaToken.mint(address(almProxy), 1_000_000e6);
         vm.stopPrank();
 
-        uint256 overBoundaryShares = jtrsyVault.convertToShares(1_000_000e6 + 3);
-        uint256 atBoundaryShares   = jtrsyVault.convertToShares(1_000_000e6 + 1);
+        uint256 overBoundaryShares = jaaaVault.convertToShares(1_000_000e6 + 3);
+        uint256 atBoundaryShares   = jaaaVault.convertToShares(1_000_000e6 + 1);
 
-        assertEq(jtrsyVault.convertToAssets(overBoundaryShares), 1_000_000e6 + 2);
-        assertEq(jtrsyVault.convertToAssets(atBoundaryShares),   1_000_000e6);
+        assertEq(jaaaVault.convertToAssets(overBoundaryShares), 1_000_000e6 + 2);
+        assertEq(jaaaVault.convertToAssets(atBoundaryShares),   1_000_000e6);
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.requestRedeemERC7540(address(jtrsyVault), overBoundaryShares);
+        foreignController.requestRedeemERC7540(address(jaaaVault), overBoundaryShares);
 
-        foreignController.requestRedeemERC7540(address(jtrsyVault), atBoundaryShares);
+        foreignController.requestRedeemERC7540(address(jaaaVault), atBoundaryShares);
     }
 }
 
@@ -554,12 +549,12 @@ contract ForeignControllerRequestRedeemERC7540SuccessTests is CentrifugeTestBase
         super.setUp();
 
         vm.startPrank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_REDEEM(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -567,31 +562,31 @@ contract ForeignControllerRequestRedeemERC7540SuccessTests is CentrifugeTestBase
     }
 
     function test_requestRedeemERC7540() external {
-        uint256 shares = jtrsyVault.convertToShares(1_000_000e6);
+        uint256 shares = jaaaVault.convertToShares(1_000_000e6);
 
         assertEq(shares, 948_558.832635e6);
 
         vm.prank(root);
-        jtrsyToken.mint(address(almProxy), shares);
+        jaaaToken.mint(address(almProxy), shares);
 
         assertEq(rateLimits.getCurrentRateLimit(key), 1_000_000e6);
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), shares);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), shares);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         vm.prank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), shares);
+        foreignController.requestRedeemERC7540(address(jaaaVault), shares);
 
         assertEq(rateLimits.getCurrentRateLimit(key), 1);  // Rounding
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + shares);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + shares);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)), shares);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)), shares);
     }
 
 }
@@ -604,7 +599,7 @@ contract ForeignControllerClaimRedeemERC7540FailureTests is CentrifugeTestBase {
             address(this),
             RELAYER
         ));
-        foreignController.claimRedeemERC7540(address(jtrsyVault));
+        foreignController.claimRedeemERC7540(address(jaaaVault));
     }
 
     function test_claimRedeemERC7540_invalidVault() external {
@@ -623,12 +618,12 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         super.setUp();
 
         vm.startPrank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_REDEEM(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -637,126 +632,128 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
 
     function test_claimRedeemERC7540_singleRequest() external {
         vm.prank(root);
-        jtrsyToken.mint(address(almProxy), 1_000_000e6);
+        jaaaToken.mint(address(almProxy), 1_000_000e6);
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 1_000_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request JTRSY redemption
         vm.prank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestRedeemERC7540(address(jaaaVault), 1_000_000e6);
 
-        uint256 totalSupply = jtrsyToken.totalSupply();
+        uint256 totalSupply = jaaaToken.totalSupply();
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + 1_000_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill request at price 2.0
-        deal(address(usdcAvalanche), escrow, 2_000_000e6);
+        deal(address(usdcAvalanche), poolEscrow, 2_000_000e6);
         vm.prank(root);
-        investmentManager.fulfillRedeemRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillRedeemRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
             2_000_000e6,
-            1_000_000e6
+            1_000_000e6,
+            0
         );
 
-        assertEq(jtrsyToken.totalSupply(),                totalSupply - 1_000_000e6);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.totalSupply(),                totalSupply - 1_000_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(usdcAvalanche.balanceOf(escrow),            2_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            2_000_000e6);
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
 
         // Claim assets
         vm.prank(ALM_RELAYER);
-        foreignController.claimRedeemERC7540(address(jtrsyVault));
+        foreignController.claimRedeemERC7540(address(jaaaVault));
 
-        assertEq(usdcAvalanche.balanceOf(escrow),            0);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            0);
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 2_000_000e6);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
     function test_claimRedeemERC7540_multipleRequests() external {
         vm.prank(root);
-        jtrsyToken.mint(address(almProxy), 1_500_000e6);
+        jaaaToken.mint(address(almProxy), 1_500_000e6);
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 1_500_000e6);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 1_500_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request JTRSY redemption
         vm.prank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), 1_000_000e6);
+        foreignController.requestRedeemERC7540(address(jaaaVault), 1_000_000e6);
 
-        uint256 totalSupply = jtrsyToken.totalSupply();
+        uint256 totalSupply = jaaaToken.totalSupply();
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 500_000e6);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + 1_000_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 500_000e6);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + 1_000_000e6);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Request another JTRSY redemption
         vm.prank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), 500_000e6);
+        foreignController.requestRedeemERC7540(address(jaaaVault), 500_000e6);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + 1_500_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + 1_500_000e6);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_500_000e6);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_500_000e6);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill both requests at price 2.0
-        deal(address(usdcAvalanche), escrow, 3_000_000e6);
+        deal(address(usdcAvalanche), poolEscrow, 3_000_000e6);
         vm.prank(root);
-        investmentManager.fulfillRedeemRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillRedeemRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
             3_000_000e6,
-            1_500_000e6
+            1_500_000e6,
+            0
         );
 
-        assertEq(jtrsyToken.totalSupply(),                totalSupply - 1_500_000e6);
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.totalSupply(),                totalSupply - 1_500_000e6);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(usdcAvalanche.balanceOf(escrow),            3_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            3_000_000e6);
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
 
         // Claim assets
         vm.prank(ALM_RELAYER);
-        foreignController.claimRedeemERC7540(address(jtrsyVault));
+        foreignController.claimRedeemERC7540(address(jaaaVault));
 
-        assertEq(usdcAvalanche.balanceOf(escrow),            0);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            0);
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 3_000_000e6);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        assertEq(jtrsyVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(jaaaVault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
 }
@@ -769,7 +766,7 @@ contract ForeignControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
             address(this),
             RELAYER
         ));
-        foreignController.cancelCentrifugeRedeemRequest(address(jtrsyVault));
+        foreignController.cancelCentrifugeRedeemRequest(address(jaaaVault));
     }
 
     function test_cancelCentrifugeRedeemRequest_invalidVault() external {
@@ -788,12 +785,12 @@ contract ForeignControllerCancelCentrifugeRedeemRequestSuccessTests is Centrifug
         super.setUp();
 
         vm.startPrank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_REDEEM(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -801,22 +798,22 @@ contract ForeignControllerCancelCentrifugeRedeemRequestSuccessTests is Centrifug
     }
 
     function test_cancelCentrifugeRedeemRequest() external {
-        uint256 shares = jtrsyVault.convertToShares(1_000_000e6);
+        uint256 shares = jaaaVault.convertToShares(1_000_000e6);
 
         vm.prank(root);
-        jtrsyToken.mint(address(almProxy), shares);
+        jaaaToken.mint(address(almProxy), shares);
 
         vm.prank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), shares);
+        foreignController.requestRedeemERC7540(address(jaaaVault), shares);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),       shares);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)), false);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),       shares);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)), false);
 
         vm.prank(ALM_RELAYER);
-        foreignController.cancelCentrifugeRedeemRequest(address(jtrsyVault));
+        foreignController.cancelCentrifugeRedeemRequest(address(jaaaVault));
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),       shares);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)), true);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),       shares);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)), true);
     }
 
 }
@@ -829,7 +826,7 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
             address(this),
             RELAYER
         ));
-        foreignController.claimCentrifugeCancelRedeemRequest(address(jtrsyVault));
+        foreignController.claimCentrifugeCancelRedeemRequest(address(jaaaVault));
     }
 
     function test_claimCentrifugeCancelRedeemRequest_invalidVault() external {
@@ -848,12 +845,12 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
         super.setUp();
 
         vm.startPrank(root);
-        restrictionManager.updateMember(address(jtrsyToken), address(almProxy), type(uint64).max);
+        jaaaTokenHook.updateMember(address(jaaaToken), address(almProxy), type(uint64).max);
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
             foreignController.LIMIT_7540_REDEEM(),
-            address(jtrsyVault)
+            address(jaaaVault)
         );
 
         vm.prank(GROVE_EXECUTOR);
@@ -861,55 +858,57 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
     }
 
     function test_claimCentrifugeCancelRedeemRequest() external {
-        uint256 shares = jtrsyVault.convertToShares(1_000_000e6);
+        uint256 shares = jaaaVault.convertToShares(1_000_000e6);
 
         vm.prank(root);
-        jtrsyToken.mint(address(almProxy), shares);
+        jaaaToken.mint(address(almProxy), shares);
 
-        uint256 initialEscrowBal = jtrsyToken.balanceOf(escrow);
+        uint256 initialEscrowBal = jaaaToken.balanceOf(poolEscrow);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), shares);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), shares);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         vm.startPrank(ALM_RELAYER);
-        foreignController.requestRedeemERC7540(address(jtrsyVault), shares);
-        foreignController.cancelCentrifugeRedeemRequest(address(jtrsyVault));
+        foreignController.requestRedeemERC7540(address(jaaaVault), shares);
+        foreignController.cancelCentrifugeRedeemRequest(address(jaaaVault));
         vm.stopPrank();
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), 0);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal + shares);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), 0);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal + shares);
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         shares);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   true);
-        assertEq(jtrsyVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         shares);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   true);
+        assertEq(jaaaVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
         // Fulfill cancelation request
         vm.prank(root);
-        investmentManager.fulfillCancelRedeemRequest(
-            jtrsyPoolId,
-            jtrsyTrancheId,
+        manager.fulfillRedeemRequest(
+            jaaaPoolId,
+            jaaaScId,
             address(almProxy),
             usdcAssetId,
+            0,
+            0,
             uint128(shares)
         );
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), shares);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), shares);
 
         vm.prank(ALM_RELAYER);
-        foreignController.claimCentrifugeCancelRedeemRequest(address(jtrsyVault));
+        foreignController.claimCentrifugeCancelRedeemRequest(address(jaaaVault));
 
-        assertEq(jtrsyVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
-        assertEq(jtrsyVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
-        assertEq(jtrsyVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(jaaaVault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),         0);
+        assertEq(jaaaVault.pendingCancelRedeemRequest(REQUEST_ID, address(almProxy)),   false);
+        assertEq(jaaaVault.claimableCancelRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
-        assertEq(jtrsyToken.balanceOf(address(almProxy)), shares);
-        assertEq(jtrsyToken.balanceOf(escrow),            initialEscrowBal);
+        assertEq(jaaaToken.balanceOf(address(almProxy)), shares);
+        assertEq(jaaaToken.balanceOf(poolEscrow),            initialEscrowBal);
     }
 
 }

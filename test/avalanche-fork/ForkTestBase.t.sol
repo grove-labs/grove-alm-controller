@@ -27,7 +27,7 @@ import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 contract MockSSROracle {
 
-    function getConversionRate() external view returns (uint256) {
+    function getConversionRate() external pure returns (uint256) {
         return 1e18;
     }
 
