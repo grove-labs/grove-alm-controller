@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
+import { IERC20 }   from "forge-std/interfaces/IERC20.sol";
 import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
 import "./ForkTestBase.t.sol";
@@ -186,6 +187,79 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
             DESTINATION_CENTRIFUGE_ID,
             200_000
         );
+    }
+
+}
+
+contract MainnetControllerTransferSharesCentrifugeSuccessTests is CentrifugeTestBase {
+
+    event InitiateTransferShares(
+        uint16 centrifugeId,
+        uint64 indexed poolId,
+        bytes16 indexed scId,
+        address indexed sender,
+        bytes32 destinationAddress,
+        uint128 amount
+    );
+
+    function test_transferSharesCentrifuge() external {
+        vm.startPrank(SPARK_PROXY);
+
+        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                CENTRIFUGE_VAULT,
+                DESTINATION_CENTRIFUGE_ID
+            )),
+            10_000_000e6,
+            0
+        );
+
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
+
+        vm.stopPrank();
+
+        // Setup token balances
+        deal(address(vaultToken), address(almProxy), 10_000_000e6);
+        deal(relayer, 1 ether);  // Gas cost for Centrifuge
+
+        // Issue shares at price 1.0
+        vm.prank(root);
+        manager.issuedShares(
+            poolId,
+            scId,
+            10_000_000e6,
+            1e18
+        );
+
+        uint256 proxyBalanceBefore     = IERC20(vaultToken).balanceOf(address(almProxy));
+        uint256 shareTotalSupplyBefore = IERC20(vaultToken).totalSupply();
+
+        vm.expectEmit(address(spoke));
+        emit InitiateTransferShares(
+            DESTINATION_CENTRIFUGE_ID,
+            poolId,
+            scId,
+            address(almProxy),
+            target,
+            10_000_000e6
+        );
+
+        vm.startPrank(relayer);
+        mainnetController.transferSharesCentrifuge{value: 0.5 ether}(
+            CENTRIFUGE_VAULT,
+            10_000_000e6,
+            DESTINATION_CENTRIFUGE_ID,
+            1_000_000
+        );
+
+        uint256 proxyBalanceAfter     = IERC20(vaultToken).balanceOf(address(almProxy));
+        uint256 shareTotalSupplyAfter = IERC20(vaultToken).totalSupply();
+
+        assertEq(proxyBalanceAfter,     proxyBalanceBefore     - 10_000_000e6);
+        assertEq(shareTotalSupplyAfter, shareTotalSupplyBefore - 10_000_000e6);
     }
 
 }
