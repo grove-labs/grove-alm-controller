@@ -1,72 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
-import { IERC20 }   from "forge-std/interfaces/IERC20.sol";
-import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
+import { IERC20 } from "forge-std/interfaces/IERC20.sol";
+
+import "../../src/interfaces/CentrifugeInterfaces.sol";
 
 import "./ForkTestBase.t.sol";
-
-interface ICentrifugeV3Vault is IERC7540 {
-    function asset()        external view returns (address);
-    function share()        external view returns (address);
-    function manager()      external view returns (address);
-    function poolId()       external view returns (uint64);
-    function scId()         external view returns (bytes16);
-    function root()         external view returns (address);
-
-    function claimableCancelDepositRequest(uint256 requestId, address controller)
-        external view returns (uint256 claimableAssets);
-    function claimableCancelRedeemRequest(uint256 requestId, address controller)
-        external view returns (uint256 claimableShares);
-    function pendingCancelDepositRequest(uint256 requestId, address controller)
-        external view returns (bool isPending);
-    function pendingCancelRedeemRequest(uint256 requestId, address controller)
-        external view returns (bool isPending);
-}
-
-interface IAsyncRedeemManagerLike {
-    function issuedShares(
-        uint64  poolId,
-        bytes16 scId,
-        uint128 shareAmount,
-        uint128 pricePoolPerShare) external;
-    function revokedShares(
-        uint64  poolId,
-        bytes16 scId,
-        uint128 assetId,
-        uint128 assetAmount,
-        uint128 shareAmount,
-        uint128 pricePoolPerShare) external;
-    function approvedDeposits(
-        uint64  poolId,
-        bytes16 scId,
-        uint128 assetId,
-        uint128 assetAmount,
-        uint128 pricePoolPerAsset
-    ) external;
-    function fulfillDepositRequest(
-        uint64  poolId,
-        bytes16 scId,
-        address user,
-        uint128 assetId,
-        uint128 fulfilledAssets,
-        uint128 fulfilledShares,
-        uint128 cancelledAssets
-    ) external;
-    function fulfillRedeemRequest(
-        uint64  poolId,
-        bytes16 scId,
-        address user,
-        uint128 assetId,
-        uint128 fulfilledAssets,
-        uint128 fulfilledShares,
-        uint128 cancelledShares
-    ) external;
-    function balanceSheet()            external view returns (address);
-    function spoke()                   external view returns (address);
-    function poolEscrow(uint64 poolId) external view returns (address);
-    function globalEscrow()            external view returns (address);
-}
 
 contract CentrifugeTestBase is ForkTestBase {
 
@@ -74,7 +13,7 @@ contract CentrifugeTestBase is ForkTestBase {
 
     uint16  constant DESTINATION_CENTRIFUGE_ID = 5; // Avalanche Centrifuge ID
 
-    ICentrifugeV3Vault centrifugeVault = ICentrifugeV3Vault(CENTRIFUGE_VAULT);
+    ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(CENTRIFUGE_VAULT);
 
     IAsyncRedeemManagerLike manager;
 

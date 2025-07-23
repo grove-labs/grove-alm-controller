@@ -465,7 +465,7 @@ contract MainnetController is AccessControl {
         bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
         require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
 
-        ICentrifugeV3Vault centrifugeVault = ICentrifugeV3Vault(token);
+        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
 
         address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
 
