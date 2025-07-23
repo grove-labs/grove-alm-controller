@@ -389,9 +389,9 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(mainnetInst.rateLimits);
 
-        _onboardAAVEToken(mainnet, mainnetInst, AUSDC,  maxAmount6,  slope6);
-        _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18);
-        _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6);
+        // _onboardAAVEToken(mainnet, mainnetInst, AUSDC,  maxAmount6,  slope6);
+        // _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18);
+        // _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6);
 
         _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18);
         _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18);
@@ -454,7 +454,7 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usdc),  maxAmount6,  slope6);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  usds),  maxAmount18, slope18);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  susds), maxAmount18, slope18);
-        
+
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usds));
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, susds));
 
@@ -472,7 +472,7 @@ contract FullStagingDeploy is Script {
     function _setBaseRateLimits() internal {
         _setForeignControllerRateLimits(base, baseInst);
 
-        _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
+        // _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
         _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
         _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
@@ -482,29 +482,29 @@ contract FullStagingDeploy is Script {
     /*** Rate limit utility functions                                                           ***/
     /**********************************************************************************************/
 
-    function _onboardAAVEToken(
-        Domain memory             domain,
-        ControllerInstance memory controllerInst,
-        address                   aToken,
-        uint256                   maxAmount,
-        uint256                   slope
-    )
-        internal
-    {
-        vm.selectFork(domain.forkId);
-        vm.startBroadcast();
+    // function _onboardAAVEToken(
+    //     Domain memory             domain,
+    //     ControllerInstance memory controllerInst,
+    //     address                   aToken,
+    //     uint256                   maxAmount,
+    //     uint256                   slope
+    // )
+    //     internal
+    // {
+    //     vm.selectFork(domain.forkId);
+    //     vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
-        bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_AAVE_DEPOSIT();
-        bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_AAVE_WITHDRAW();
+    //     // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
+    //     bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_AAVE_DEPOSIT();
+    //     bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_AAVE_WITHDRAW();
 
-        IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
+    //     IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  aToken), maxAmount,         slope);
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, aToken), type(uint256).max, 0);
+    //     rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  aToken), maxAmount,         slope);
+    //     rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, aToken), type(uint256).max, 0);
 
-        vm.stopBroadcast();
-    }
+    //     vm.stopBroadcast();
+    // }
 
     function _onboardERC4626Token(
         Domain memory             domain,
