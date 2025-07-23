@@ -46,6 +46,17 @@ interface ICentrifugeToken is IERC7540 {
         external returns (uint256 shares);
 }
 
+interface ICentrifugeV3Vault {
+    function manager()      external view returns (address);
+    function share()        external view returns (address);
+    function poolId()       external view returns (uint64);
+    function scId()         external view returns (bytes16);
+}
+
+interface IAsyncRedeemManagerLike {
+    function spoke() external view returns (address);
+}
+
 interface IMapleTokenLike is IERC4626 {
     function requestRedeem(uint256 shares, address receiver) external;
     function removeShares(uint256 shares, address receiver) external;
@@ -60,7 +71,6 @@ interface ISpokeLike {
         uint128 amount,
         uint128 remoteExtraGasLimit
     ) external payable;
-    function shareToken(uint64 poolId, bytes16 scId) external view returns (address);
 }
 
 interface ISSRedemptionLike is IERC20 {
@@ -478,39 +488,38 @@ contract MainnetController is AccessControl {
     }
 
     function transferSharesCentrifuge(
-        address spokeAddress,
-        uint64 poolId,
-        bytes16 scId,
+        address token,
         uint128 amount,
-        uint16 destinationCentrifugeId,
+        uint16  destinationCentrifugeId,
         uint128 remoteExtraGasLimit
     )
         external payable
     {
         _checkRole(RELAYER);
         _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, spokeAddress, poolId, scId, destinationCentrifugeId)),
+            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
             amount
         );
 
         bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
         require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
 
-        // Get the share token address using ISpokeLike interface
-        address shareToken = ISpokeLike(spokeAddress).shareToken(poolId, scId);
+        ICentrifugeV3Vault centrifugeVault = ICentrifugeV3Vault(token);
+
+        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
 
         // Approve the specific spoke address to spend shares from the proxy
-        _approve(shareToken, spokeAddress, amount);
+        _approve(centrifugeVault.share(), spoke, amount);
 
         // Initiate cross-chain transfer via the specific spoke address
         proxy.doCallWithValue{value: msg.value}(
-            spokeAddress,
+            spoke,
             abi.encodeCall(
-                ISpokeLike(spokeAddress).crosschainTransferShares,
+                ISpokeLike(spoke).crosschainTransferShares,
                 (
                     destinationCentrifugeId,
-                    poolId,
-                    scId,
+                    centrifugeVault.poolId(),
+                    centrifugeVault.scId(),
                     recipient,
                     amount,
                     remoteExtraGasLimit

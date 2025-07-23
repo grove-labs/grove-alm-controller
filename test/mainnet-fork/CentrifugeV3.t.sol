@@ -109,13 +109,13 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
             address(this),
             RELAYER
         ));
-        mainnetController.transferSharesCentrifuge(spoke, poolId, scId, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+        mainnetController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
     }
 
     function test_transferSharesCentrifuge_zeroMaxAmount() external {
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.transferSharesCentrifuge(spoke, poolId, scId, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+        mainnetController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
     }
 
     function test_transferSharesCentrifuge_rateLimitedBoundary() external {
@@ -126,9 +126,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
                 mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
-                spoke,
-                poolId,
-                scId,
+                CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
             10_000_000e6,
@@ -146,18 +144,14 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
-            spoke,
-            poolId,
-            scId,
+            CENTRIFUGE_VAULT,
             10_000_000e6 + 1,
             DESTINATION_CENTRIFUGE_ID,
             200_000
         );
 
         mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
-            spoke,
-            poolId,
-            scId,
+            CENTRIFUGE_VAULT,
             10_000_000e6,
             DESTINATION_CENTRIFUGE_ID,
             200_000
@@ -170,9 +164,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
                 mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
-                spoke,
-                poolId,
-                scId,
+                CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
             10_000_000e6,
@@ -188,9 +180,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(relayer);
         vm.expectRevert("MainnetController/centrifuge-id-not-configured");
         mainnetController.transferSharesCentrifuge{value: 0.1 ether}(
-            spoke,
-            poolId,
-            scId,
+            CENTRIFUGE_VAULT,
             10_000_000e6,
             DESTINATION_CENTRIFUGE_ID,
             200_000
