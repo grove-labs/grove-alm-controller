@@ -43,6 +43,6 @@
 [submodule "lib/solidity-bytes-utils"]
 	path = lib/solidity-bytes-utils
 	url = https://github.com/GNSPS/solidity-bytes-utils
-[submodule "lib/centrifuge-protocol-v3"]
-	path = lib/centrifuge-protocol-v3
-	url = https://github.com/centrifuge/protocol-v3
+[submodule "lib/grove-address-registry"]
+	path = lib/grove-address-registry
+	url = https://github.com/grove-labs/grove-address-registry
