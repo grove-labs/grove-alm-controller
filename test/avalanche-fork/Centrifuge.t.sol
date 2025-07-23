@@ -58,10 +58,10 @@ contract CentrifugeTestBase is ForkTestBase {
         balanceSheet   = IBalanceSheetLike(manager.balanceSheet());
         spoke          = ISpokeLike(manager.spoke());
 
-
-        root        = centrifugeV3Vault.root();
+        root   = centrifugeV3Vault.root();
         poolId = centrifugeV3Vault.poolId();
         scId   = centrifugeV3Vault.scId();
+
         usdcAssetId = spoke.assetToId(centrifugeV3Vault.asset(), 0);
 
         globalEscrow = manager.globalEscrow();
