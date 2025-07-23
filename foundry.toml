@@ -2,7 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib"]
-solc_version = '0.8.28'
+solc_version = '0.8.25'
 optimizer = true
 optimizer_runs = 1
 fs_permissions = [
@@ -17,7 +17,6 @@ remappings = [
     '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
     '@layerzerolabs/lz-evm-messagelib-v2/=lib/layerzero-v2/packages/layerzero-v2/evm/messagelib/',
     'solidity-bytes-utils/=lib/solidity-bytes-utils/',
-    'centrifuge-v3/=lib/centrifuge-protocol-v3/src/',
 ]
 
 [fuzz]
