@@ -15,7 +15,8 @@ import { IALMProxy }   from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits } from "./interfaces/IRateLimits.sol";
 
-import  "./interfaces/ILayerZero.sol";
+import "./interfaces/CentrifugeInterfaces.sol";
+import "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
@@ -30,40 +31,9 @@ interface IEthenaMinterLike {
     function removeDelegatedSigner(address delegateSigner) external;
 }
 
-interface ICentrifugeToken is IERC7540 {
-    function cancelDepositRequest(uint256 requestId, address controller) external;
-    function cancelRedeemRequest(uint256 requestId, address controller) external;
-    function claimCancelDepositRequest(uint256 requestId, address receiver, address controller)
-        external returns (uint256 assets);
-    function claimCancelRedeemRequest(uint256 requestId, address receiver, address controller)
-        external returns (uint256 shares);
-}
-
-interface ICentrifugeV3Vault {
-    function manager() external view returns (address);
-    function share() external view returns (address);
-    function poolId() external view returns (uint64);
-    function scId() external view returns (bytes16);
-}
-
-interface IAsyncRedeemManagerLike {
-    function spoke() external view returns (address);
-}
-
 interface IMapleTokenLike is IERC4626 {
     function requestRedeem(uint256 shares, address receiver) external;
     function removeShares(uint256 shares, address receiver) external;
-}
-
-interface ISpokeLike {
-    function crosschainTransferShares(
-        uint16 centrifugeId,
-        uint64 poolId,
-        bytes16 scId,
-        bytes32 receiver,
-        uint128 amount,
-        uint128 remoteExtraGasLimit
-    ) external payable;
 }
 
 interface ISSRedemptionLike is IERC20 {
