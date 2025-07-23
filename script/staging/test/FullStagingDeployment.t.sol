@@ -276,36 +276,36 @@ contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
         assertEq(IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)), 0);
     }
 
-    // function test_depositAndWithdrawUsdsFromAave() public {
-    //     vm.skip(true);
+    function test_depositAndWithdrawUsdsFromAave() public {
+        vm.skip(true);
 
-    //     uint256 startingBalance = usds.balanceOf(address(almProxy));
+        uint256 startingBalance = usds.balanceOf(address(almProxy));
 
-    //     vm.startPrank(relayerSafe);
-    //     mainnetController.mintUSDS(10e18);
-    //     mainnetController.depositAave(AUSDS, 10e6);
-    //     skip(1 days);
-    //     mainnetController.withdrawAave(AUSDS, type(uint256).max);
-    //     vm.stopPrank();
+        vm.startPrank(relayerSafe);
+        mainnetController.mintUSDS(10e18);
+        mainnetController.depositAave(AUSDS, 10e6);
+        skip(1 days);
+        mainnetController.withdrawAave(AUSDS, type(uint256).max);
+        vm.stopPrank();
 
-    //     assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
-    // }
+        assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
+    }
 
-    // function test_depositAndWithdrawUsdcFromAave() public {
-    //     vm.skip(true);
+    function test_depositAndWithdrawUsdcFromAave() public {
+        vm.skip(true);
 
-    //     uint256 startingBalance = usdc.balanceOf(address(almProxy));
+        uint256 startingBalance = usdc.balanceOf(address(almProxy));
 
-    //     vm.startPrank(relayerSafe);
-    //     mainnetController.mintUSDS(10e18);
-    //     mainnetController.swapUSDSToUSDC(10e6);
-    //     mainnetController.depositAave(AUSDC, 10e6);
-    //     skip(1 days);
-    //     mainnetController.withdrawAave(AUSDC, type(uint256).max);
-    //     vm.stopPrank();
+        vm.startPrank(relayerSafe);
+        mainnetController.mintUSDS(10e18);
+        mainnetController.swapUSDSToUSDC(10e6);
+        mainnetController.depositAave(AUSDC, 10e6);
+        skip(1 days);
+        mainnetController.withdrawAave(AUSDC, type(uint256).max);
+        vm.stopPrank();
 
-    //     assertGe(usdc.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
-    // }
+        assertGe(usdc.balanceOf(address(almProxy)), startingBalance + 10e6);  // Interest earned
+    }
 
     function test_mintDepositCooldownAssetsBurnUsde() public {
         vm.skip(true);
@@ -520,38 +520,38 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
         vm.stopPrank();
     }
 
-    // function test_addAndRemoveFundsFromBaseAAVE() public {
-    //     vm.skip(true);
+    function test_addAndRemoveFundsFromBaseAAVE() public {
+        vm.skip(true);
 
-    //     mainnet.selectFork();
+        mainnet.selectFork();
 
-    //     vm.startPrank(relayerSafe);
-    //     mainnetController.mintUSDS(10e18);
-    //     mainnetController.swapUSDSToUSDC(10e6);
-    //     mainnetController.transferUSDCToCCTP(10e6, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
-    //     vm.stopPrank();
+        vm.startPrank(relayerSafe);
+        mainnetController.mintUSDS(10e18);
+        mainnetController.swapUSDSToUSDC(10e6);
+        mainnetController.transferUSDCToCCTP(10e6, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
+        vm.stopPrank();
 
-    //     cctpBridgeBase.relayMessagesToDestination(true);
+        cctpBridgeBase.relayMessagesToDestination(true);
 
-    //     vm.startPrank(relayerSafeBase);
-    //     baseController.depositAave(AUSDC_BASE, 10e6);
-    //     skip(1 days);
-    //     baseController.withdrawAave(AUSDC_BASE, 10e6);
+        vm.startPrank(relayerSafeBase);
+        baseController.depositAave(AUSDC_BASE, 10e6);
+        skip(1 days);
+        baseController.withdrawAave(AUSDC_BASE, 10e6);
 
-    //     assertEq(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);
+        assertEq(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);
 
-    //     assertGe(IERC20(AUSDC_BASE).balanceOf(address(baseAlmProxy)), 0);  // Interest earned
+        assertGe(IERC20(AUSDC_BASE).balanceOf(address(baseAlmProxy)), 0);  // Interest earned
 
-    //     baseController.transferUSDCToCCTP(10e6 - 1, CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM);  // Account for potential rounding
-    //     vm.stopPrank();
+        baseController.transferUSDCToCCTP(10e6 - 1, CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM);  // Account for potential rounding
+        vm.stopPrank();
 
-    //     cctpBridgeBase.relayMessagesToSource(true);
+        cctpBridgeBase.relayMessagesToSource(true);
 
-    //     vm.startPrank(relayerSafe);
-    //     mainnetController.swapUSDCToUSDS(10e6 - 1);
-    //     mainnetController.burnUSDS((10e6 - 1) * 1e12);
-    //     vm.stopPrank();
-    // }
+        vm.startPrank(relayerSafe);
+        mainnetController.swapUSDCToUSDS(10e6 - 1);
+        mainnetController.burnUSDS((10e6 - 1) * 1e12);
+        vm.stopPrank();
+    }
 
     function test_depositWithdrawFundsFromBaseMorphoUsdc() public {
         vm.skip(true);
