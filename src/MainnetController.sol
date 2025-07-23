@@ -476,7 +476,7 @@ contract MainnetController is AccessControl {
             )
         );
     }
-    
+
     function transferSharesCentrifuge(
         address spokeAddress,
         uint64 poolId,
@@ -498,7 +498,7 @@ contract MainnetController is AccessControl {
 
         // Get the share token address using ISpokeLike interface
         address shareToken = ISpokeLike(spokeAddress).shareToken(poolId, scId);
-        
+
         // Approve the specific spoke address to spend shares from the proxy
         _approve(shareToken, spokeAddress, amount);
 
