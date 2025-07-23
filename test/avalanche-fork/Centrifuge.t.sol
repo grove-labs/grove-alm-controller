@@ -70,9 +70,15 @@ interface IAsyncRedeemManagerLike {
         uint128 fulfilledShares,
         uint128 cancelledShares
     ) external;
+    function balanceSheet()            external view returns (address);
     function spoke()                   external view returns (address);
     function poolEscrow(uint64 poolId) external view returns (address);
     function globalEscrow()            external view returns (address);
+}
+
+interface IBalanceSheetLike {
+    function deposit(uint64 poolId, bytes16 scId, address asset, uint256 tokenId, uint128 amount)
+        external;
 }
 
 interface ISpokeLike {
@@ -93,6 +99,7 @@ contract CentrifugeTestBase is ForkTestBase {
     ICentrifugeV3ShareLike      vaultToken;
     IFreelyTransferableHookLike vaultTokenHook;
     IAsyncRedeemManagerLike     manager;
+    IBalanceSheetLike           balanceSheet;
     ISpokeLike                  spoke;
 
     address globalEscrow;
@@ -114,6 +121,7 @@ contract CentrifugeTestBase is ForkTestBase {
         vaultToken       = ICentrifugeV3ShareLike(centrifugeV3Vault.share());
         vaultTokenHook   = IFreelyTransferableHookLike(vaultToken.hook());
         manager          = IAsyncRedeemManagerLike(centrifugeV3Vault.manager());
+        balanceSheet     = IBalanceSheetLike(manager.balanceSheet());
         spoke            = ISpokeLike(manager.spoke());
 
 
@@ -698,8 +706,14 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_000_000e6);
         assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
+        // Deposit 2M USDC
+        deal(address(usdcAvalanche), root, 2_000_000e6);
+        vm.startPrank(root);
+        usdcAvalanche.approve(address(balanceSheet), 2_000_000e6);
+        balanceSheet.deposit(vaultPoolId, vaultScId, address(usdcAvalanche), 0, 2_000_000e6);
+        vm.stopPrank();
+
         // Revoke shares at price 2.0
-        deal(address(usdcAvalanche), poolEscrow, 2_000_000e6);
         vm.prank(root);
         manager.revokedShares(
             vaultPoolId,
@@ -736,11 +750,11 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         vm.prank(ALM_RELAYER);
         foreignController.claimRedeemERC7540(address(centrifugeV3Vault));
 
-        // assertEq(usdcAvalanche.balanceOf(globalEscrow),            0);
-        // assertEq(usdcAvalanche.balanceOf(address(almProxy)), 2_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            0);
+        assertEq(usdcAvalanche.balanceOf(address(almProxy)), 2_000_000e6);
 
-        // assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        // assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
     function test_claimRedeemERC7540_multipleRequests() external {
@@ -777,6 +791,13 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   1_500_000e6);
         assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
 
+        // Deposit 2M USDC
+        deal(address(usdcAvalanche), root, 3_000_000e6);
+        vm.startPrank(root);
+        usdcAvalanche.approve(address(balanceSheet), 3_000_000e6);
+        balanceSheet.deposit(vaultPoolId, vaultScId, address(usdcAvalanche), 0, 3_000_000e6);
+        vm.stopPrank();
+
         // Revoke shares at price 2.0
         vm.prank(root);
         manager.revokedShares(
@@ -789,7 +810,6 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         );
         
         // Fulfill both requests at price 2.0
-        deal(address(usdcAvalanche), poolEscrow, 3_000_000e6);
         vm.prank(root);
         manager.fulfillRedeemRequest(
              vaultPoolId,
@@ -808,18 +828,18 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         assertEq(usdcAvalanche.balanceOf(poolEscrow),            3_000_000e6);
         assertEq(usdcAvalanche.balanceOf(address(almProxy)), 0);
 
-        // assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        // assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
+        assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 1_500_000e6);
 
-        // // Claim assets
-        // vm.prank(ALM_RELAYER);
-        // foreignController.claimRedeemERC7540(address(centrifugeV3Vault));
+        // Claim assets
+        vm.prank(ALM_RELAYER);
+        foreignController.claimRedeemERC7540(address(centrifugeV3Vault));
 
-        // assertEq(usdcAvalanche.balanceOf(globalEscrow),            0);
-        // assertEq(usdcAvalanche.balanceOf(address(almProxy)), 3_000_000e6);
+        assertEq(usdcAvalanche.balanceOf(poolEscrow),            0);
+        assertEq(usdcAvalanche.balanceOf(address(almProxy)), 3_000_000e6);
 
-        // assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
-        // assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
+        assertEq(centrifugeV3Vault.pendingRedeemRequest(REQUEST_ID, address(almProxy)),   0);
+        assertEq(centrifugeV3Vault.claimableRedeemRequest(REQUEST_ID, address(almProxy)), 0);
     }
 
 }
