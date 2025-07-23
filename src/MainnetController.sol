@@ -93,8 +93,6 @@ contract MainnetController is AccessControl {
     bytes32 public constant LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public constant LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public constant LIMIT_SUPERSTATE_REDEEM    = keccak256("LIMIT_SUPERSTATE_REDEEM");
-    bytes32 public constant LIMIT_SUPERSTATE_SUBSCRIBE = keccak256("LIMIT_SUPERSTATE_SUBSCRIBE");
     bytes32 public constant LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
     bytes32 public constant LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
@@ -113,7 +111,6 @@ contract MainnetController is AccessControl {
     IEthenaMinterLike public immutable ethenaMinter;
     IPSMLike          public immutable psm;
     IRateLimits       public immutable rateLimits;
-    ISSRedemptionLike public immutable superstateRedemption;
     IVaultLike        public immutable vault;
 
     IERC20     public immutable dai;
@@ -155,7 +152,6 @@ contract MainnetController is AccessControl {
         cctp       = ICCTPLike(cctp_);
 
         ethenaMinter         = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
-        superstateRedemption = ISSRedemptionLike(Ethereum.SUPERSTATE_REDEMPTION);
 
         susde = ISUSDELike(Ethereum.SUSDE);
         ustb  = IUSTBLike(Ethereum.USTB);
@@ -680,38 +676,6 @@ contract MainnetController is AccessControl {
         proxy.doCall(
             address(susde),
             abi.encodeCall(susde.unstake, (address(proxy)))
-        );
-    }
-
-    /**********************************************************************************************/
-    /*** Relayer Superstate functions                                                           ***/
-    /**********************************************************************************************/
-
-    function subscribeSuperstate(uint256 usdcAmount) external {
-        _checkRole(RELAYER);
-        _rateLimited(LIMIT_SUPERSTATE_SUBSCRIBE, usdcAmount);
-
-        _approve(address(usdc), address(ustb), usdcAmount);
-
-        proxy.doCall(
-            address(ustb),
-            abi.encodeCall(ustb.subscribe, (usdcAmount, address(usdc)))
-        );
-    }
-
-    // NOTE: Rate limited outside of modifier because of tuple return
-    function redeemSuperstate(uint256 ustbAmount) external {
-        _checkRole(RELAYER);
-
-        ( uint256 usdcAmount, ) = superstateRedemption.calculateUsdcOut(ustbAmount);
-
-        rateLimits.triggerRateLimitDecrease(LIMIT_SUPERSTATE_REDEEM, usdcAmount);
-
-        _approve(address(ustb), address(superstateRedemption), ustbAmount);
-
-        proxy.doCall(
-            address(superstateRedemption),
-            abi.encodeCall(superstateRedemption.redeem, (ustbAmount))
         );
     }
 
