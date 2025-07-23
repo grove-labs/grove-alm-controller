@@ -40,10 +40,10 @@ interface ICentrifugeToken is IERC7540 {
 }
 
 interface ICentrifugeV3Vault {
-    function manager()      external view returns (address);
-    function share()        external view returns (address);
-    function poolId()       external view returns (uint64);
-    function scId()         external view returns (bytes16);
+    function manager() external view returns (address);
+    function share() external view returns (address);
+    function poolId() external view returns (uint64);
+    function scId() external view returns (bytes16);
 }
 
 interface IAsyncRedeemManagerLike {
