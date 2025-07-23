@@ -70,6 +70,7 @@ interface IAsyncRedeemManagerLike {
 contract CentrifugeTestBase is ForkTestBase {
 
     address constant CENTRIFUGE_VAULT = 0x1121F4e21eD8B9BC1BB9A2952cDD8639aC897784; // DEJAAA_VAULT_USDC
+
     uint16  constant DESTINATION_CENTRIFUGE_ID = 5; // Avalanche Centrifuge ID
 
     ICentrifugeV3Vault centrifugeVault = ICentrifugeV3Vault(CENTRIFUGE_VAULT);

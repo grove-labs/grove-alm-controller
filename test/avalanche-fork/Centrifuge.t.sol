@@ -91,6 +91,8 @@ contract CentrifugeTestBase is ForkTestBase {
 
     address constant CENTRIFUGE_VAULT = 0xCF4C60066aAB54b3f750F94c2a06046d5466Ccf9; // deJAAA USDC Vault
 
+    uint16  constant DESTINATION_CENTRIFUGE_ID = 1; // Mainnet Centrifuge ID
+
     // Requests for Centrifuge pools are non-fungible and all have ID = 0
     uint256 constant REQUEST_ID = 0;
 
@@ -999,6 +1001,94 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
 
         assertEq(vaultToken.balanceOf(address(almProxy)), shares);
         assertEq(vaultToken.balanceOf(globalEscrow),      initialEscrowBal);
+    }
+
+}
+
+contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTestBase {
+
+    function test_transferSharesCentrifuge_notRelayer() external {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            RELAYER
+        ));
+        foreignController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+    }
+
+    function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
+    }
+
+    function test_transferSharesCentrifuge_rateLimitedBoundary() external {
+        vm.startPrank(GROVE_EXECUTOR);
+
+        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+                CENTRIFUGE_VAULT,
+                DESTINATION_CENTRIFUGE_ID
+            )),
+            10_000_000e6,
+            0
+        );
+
+        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
+
+        vm.stopPrank();
+
+        // Setup token balances
+        deal(address(vaultToken), address(almProxy), 10_000_000e6);
+        deal(ALM_RELAYER, 1 ether);  // Gas cost for Centrifuge
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.transferSharesCentrifuge{value: 0.5 ether}(
+            CENTRIFUGE_VAULT,
+            10_000_000e6 + 1,
+            DESTINATION_CENTRIFUGE_ID,
+            1_000_000
+        );
+
+        foreignController.transferSharesCentrifuge{value: 0.5 ether}(
+            CENTRIFUGE_VAULT,
+            10_000_000e6,
+            DESTINATION_CENTRIFUGE_ID,
+            1_000_000
+        );
+    }
+
+        function test_transferSharesCentrifuge_invalidCentrifugeId() external {
+        vm.startPrank(GROVE_EXECUTOR);
+
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+                CENTRIFUGE_VAULT,
+                DESTINATION_CENTRIFUGE_ID
+            )),
+            10_000_000e6,
+            0
+        );
+
+        vm.stopPrank();
+
+        // Setup token balances
+        deal(address(vaultToken), address(almProxy), 10_000_000e6);
+        deal(ALM_RELAYER, 1 ether);  // Gas cost for Centrifuge
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("MainnetController/centrifuge-id-not-configured");
+        foreignController.transferSharesCentrifuge{value: 0.5 ether}(
+            CENTRIFUGE_VAULT,
+            10_000_000e6,
+            DESTINATION_CENTRIFUGE_ID,
+            1_000_000
+        );
     }
 
 }
