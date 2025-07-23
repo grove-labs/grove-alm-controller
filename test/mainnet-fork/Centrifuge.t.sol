@@ -41,7 +41,7 @@ interface IInvestmentManager {
         uint128 assets,
         uint128 shares
     ) external;
-        
+
 }
 
 interface IERC20Mintable is IERC20 {
@@ -921,7 +921,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
             "AccessControlUnauthorizedAccount(address,bytes32)",
             address(this),
             RELAYER
-        )); 
+        ));
         mainnetController.transferSharesCentrifuge(address(spoke), DEJAAA_POOL_ID, DEJAAA_TRANCHE_ID, 1_000_000e6, DESTINATION_CENTRIFUGE_ID, 200_000);
     }
 
@@ -979,8 +979,6 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
 
         function test_transferSharesCentrifuge_invalidCentrifugeId() external {
         vm.startPrank(SPARK_PROXY);
-
-        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
