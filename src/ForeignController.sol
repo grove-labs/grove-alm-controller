@@ -518,9 +518,6 @@ contract ForeignController is AccessControl {
 
         address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
 
-        // Approve the specific spoke address to spend shares from the proxy
-        _approve(centrifugeVault.share(), spoke, amount);
-
         // Initiate cross-chain transfer via the specific spoke address
         proxy.doCallWithValue{value: msg.value}(
             spoke,
