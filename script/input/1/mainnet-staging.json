@@ -3,6 +3,7 @@
     "usdcUnitSize": 10,
     "usdsUnitSize": 10,
     "cctpTokenMessenger": "0xBd3fa81B58Ba92a82136038B25aDec7066af3155",
+    "controller": "0x37961cb56405cF6600EFE33c029A4c5Dcd0F4330",
     "dai": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
     "daiUsds": "0x3225737a9Bbb6473CB4a45b7244ACa2BeFdB276A",
     "psm": "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
