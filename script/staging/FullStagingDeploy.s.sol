@@ -454,7 +454,7 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usdc),  maxAmount6,  slope6);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  usds),  maxAmount18, slope18);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  susds), maxAmount18, slope18);
-
+        
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usds));
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, susds));
 
