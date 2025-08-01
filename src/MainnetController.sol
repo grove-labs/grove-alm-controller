@@ -22,6 +22,7 @@ import "./interfaces/CentrifugeInterfaces.sol";
 import "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
+import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 
@@ -38,20 +39,15 @@ interface IEthenaMinterLike {
     function removeDelegatedSigner(address delegateSigner) external;
 }
 
-interface ISSRedemptionLike is IERC20 {
-    function calculateUsdcOut(uint256 ustbAmount)
-        external view returns (uint256 usdcOutAmount, uint256 usdPerUstbChainlinkRaw);
-    function redeem(uint256 ustbAmout) external;
+interface IMapleTokenLike is IERC4626 {
+    function requestRedeem(uint256 shares, address receiver) external;
+    function removeShares(uint256 shares, address receiver) external;
 }
 
 interface ISUSDELike is IERC4626 {
     function cooldownAssets(uint256 usdeAmount) external;
     function cooldownShares(uint256 susdeAmount) external;
     function unstake(address receiver) external;
-}
-
-interface IUSTBLike is IERC20 {
-    function subscribe(uint256 inAmount, address stablecoin) external;
 }
 
 interface IVaultLike {
@@ -81,25 +77,26 @@ contract MainnetController is AccessControl {
     bytes32 public constant FREEZER = keccak256("FREEZER");
     bytes32 public constant RELAYER = keccak256("RELAYER");
 
-    bytes32 public constant LIMIT_4626_DEPOSIT        = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public constant LIMIT_4626_WITHDRAW       = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public constant LIMIT_7540_DEPOSIT        = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public constant LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
-    bytes32 public constant LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public constant LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public constant LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
-    bytes32 public constant LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
-    bytes32 public constant LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
-    bytes32 public constant LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
-    bytes32 public constant LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public constant LIMIT_SUSDE_COOLDOWN      = keccak256("LIMIT_SUSDE_COOLDOWN");
-    bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public constant LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
-    bytes32 public constant LIMIT_USDE_BURN           = keccak256("LIMIT_USDE_BURN");
-    bytes32 public constant LIMIT_USDE_MINT           = keccak256("LIMIT_USDE_MINT");
-    bytes32 public constant LIMIT_USDS_MINT           = keccak256("LIMIT_USDS_MINT");
-    bytes32 public constant LIMIT_USDS_TO_USDC        = keccak256("LIMIT_USDS_TO_USDC");
+    bytes32 public constant LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
+    bytes32 public constant LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
+    bytes32 public constant LIMIT_7540_DEPOSIT         = keccak256("LIMIT_7540_DEPOSIT");
+    bytes32 public constant LIMIT_7540_REDEEM          = keccak256("LIMIT_7540_REDEEM");
+    bytes32 public constant LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
+    bytes32 public constant LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
+    bytes32 public constant LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
+    bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER  = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
+    bytes32 public constant LIMIT_CURVE_DEPOSIT        = keccak256("LIMIT_CURVE_DEPOSIT");
+    bytes32 public constant LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
+    bytes32 public constant LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
+    bytes32 public constant LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
+    bytes32 public constant LIMIT_MAPLE_REDEEM         = keccak256("LIMIT_MAPLE_REDEEM");
+    bytes32 public constant LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
+    bytes32 public constant LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
+    bytes32 public constant LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public constant LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
+    bytes32 public constant LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
+    bytes32 public constant LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
+    bytes32 public constant LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
@@ -117,7 +114,6 @@ contract MainnetController is AccessControl {
     IERC20     public immutable usds;
     IERC20     public immutable usde;
     IERC20     public immutable usdc;
-    IUSTBLike  public immutable ustb;
     ISUSDELike public immutable susde;
 
     uint256 public immutable psmTo18ConversionFactor;
@@ -151,10 +147,9 @@ contract MainnetController is AccessControl {
         daiUsds    = IDaiUsdsLike(daiUsds_);
         cctp       = ICCTPLike(cctp_);
 
-        ethenaMinter         = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
+        ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
 
         susde = ISUSDELike(Ethereum.SUSDE);
-        ustb  = IUSTBLike(Ethereum.USTB);
         dai   = IERC20(daiUsds.dai());
         usdc  = IERC20(psm.gem());
         usds  = IERC20(Ethereum.USDS);
@@ -390,56 +385,22 @@ contract MainnetController is AccessControl {
 
     function cancelCentrifugeDepositRequest(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token));
-
-        // NOTE: While the cancelation is pending, no new deposit request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeToken(token).cancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+        CentrifugeLib.cancelCentrifugeDepositRequest(centrifugeDepositRequestParams(token));
     }
 
     function claimCentrifugeCancelDepositRequest(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token));
-
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeToken(token).claimCancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(centrifugeDepositRequestParams(token));
     }
 
     function cancelCentrifugeRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token));
-
-        // NOTE: While the cancelation is pending, no new redeem request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeToken(token).cancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+        CentrifugeLib.cancelCentrifugeRedeemRequest(centrifugeRedeemRequestParams(token));
     }
 
     function claimCentrifugeCancelRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token));
-
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeToken(token).claimCancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(centrifugeRedeemRequestParams(token));
     }
 
     function transferSharesCentrifuge(
@@ -451,33 +412,17 @@ contract MainnetController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
-
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
-
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
-
-        // Initiate cross-chain transfer via the specific spoke address
-        proxy.doCallWithValue{value: msg.value}(
-            spoke,
-            abi.encodeCall(
-                ISpokeLike(spoke).crosschainTransferShares,
-                (
-                    destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
-                    amount,
-                    remoteExtraGasLimit
-                )
-            ),
-            msg.value
+        CentrifugeLib.transferSharesCentrifuge(
+            CentrifugeLib.CentrifugeTransferParams({
+                proxy                   : proxy,
+                rateLimits              : rateLimits,
+                token                   : token,
+                amount                  : amount,
+                recipient               : centrifugeRecipients[destinationCentrifugeId],
+                destinationCentrifugeId : destinationCentrifugeId,
+                remoteExtraGasLimit     : remoteExtraGasLimit,
+                rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+            })
         );
     }
 
@@ -668,6 +613,34 @@ contract MainnetController is AccessControl {
         proxy.doCall(
             address(susde),
             abi.encodeCall(susde.unstake, (address(proxy)))
+        );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Maple functions                                                                ***/
+    /**********************************************************************************************/
+
+    function requestMapleRedemption(address mapleToken, uint256 shares) external {
+        _checkRole(RELAYER);
+        _rateLimitedAsset(
+            LIMIT_MAPLE_REDEEM,
+            mapleToken,
+            IMapleTokenLike(mapleToken).convertToAssets(shares)
+        );
+
+        proxy.doCall(
+            mapleToken,
+            abi.encodeCall(IMapleTokenLike(mapleToken).requestRedeem, (shares, address(proxy)))
+        );
+    }
+
+    function cancelMapleRedemption(address mapleToken, uint256 shares) external {
+        _checkRole(RELAYER);
+        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_MAPLE_REDEEM, mapleToken));
+
+        proxy.doCall(
+            mapleToken,
+            abi.encodeCall(IMapleTokenLike(mapleToken).removeShares, (shares, address(proxy)))
         );
     }
 
@@ -866,6 +839,34 @@ contract MainnetController is AccessControl {
             rateLimits.getRateLimitData(key).maxAmount > 0,
             "MainnetController/invalid-action"
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Centrifuge Library helper functions                                                    ***/
+    /**********************************************************************************************/
+
+    function centrifugeDepositRequestParams(
+        address token
+    ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
+        return CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        });
+    }
+
+    function centrifugeRedeemRequestParams(
+        address token
+    ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
+        return CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        });
     }
 
 }
