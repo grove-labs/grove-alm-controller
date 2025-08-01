@@ -27,10 +27,10 @@ library CentrifugeLib {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         address     token;
-        uint128     amount;
-        bytes32     recipient;
         uint16      destinationCentrifugeId;
+        uint128     amount;
         uint128     remoteExtraGasLimit;
+        bytes32     recipient;
         bytes32     rateLimitId;
     }
 
