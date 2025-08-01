@@ -47,7 +47,7 @@ contract ForeignController is AccessControl {
         uint256 usdcAmount
     );
 
-    event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
+    event CentrifugeRecipientSet(uint16 indexed destinationCentrifugeId, bytes32 recipient);
 
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
 
@@ -68,7 +68,6 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
     bytes32 public constant LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public constant LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public constant LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
     bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public constant LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
@@ -85,9 +84,9 @@ contract ForeignController is AccessControl {
 
     IERC20 public immutable usdc;
 
-    mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
-    mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
-    mapping(uint16 centrifugeId          => bytes32 recipient)          public centrifugeRecipients;
+    mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
+    mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
+    mapping(uint16 destinationCentrifugeId => bytes32 recipient)          public centrifugeRecipients;
 
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
@@ -152,12 +151,12 @@ contract ForeignController is AccessControl {
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
     }
 
-    function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient)
+    function setCentrifugeRecipient(uint16 destinationCentrifugeId, bytes32 recipient)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        centrifugeRecipients[centrifugeId] = recipient;
-        emit CentrifugeRecipientSet(centrifugeId, recipient);
+        centrifugeRecipients[destinationCentrifugeId] = recipient;
+        emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
     }
 
     /**********************************************************************************************/

@@ -13,12 +13,12 @@ interface ICentrifugeToken {
 }
 
 interface ICentrifugeV3VaultLike is IERC7540 {
-    function asset()        external view returns (address);
-    function share()        external view returns (address);
-    function manager()      external view returns (address);
-    function poolId()       external view returns (uint64);
-    function scId()         external view returns (bytes16);
-    function root()         external view returns (address);
+    function asset()   external view returns (address);
+    function share()   external view returns (address);
+    function manager() external view returns (address);
+    function poolId()  external view returns (uint64);
+    function scId()    external view returns (bytes16);
+    function root()    external view returns (address);
 
     function claimableCancelDepositRequest(uint256 requestId, address controller)
         external view returns (uint256 claimableAssets);
