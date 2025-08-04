@@ -245,8 +245,8 @@ contract ForkTestBase is DssTest {
         Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);
 
         mintRecipients[0] = Init.MintRecipient({
-            domain        : CCTPForwarder.DOMAIN_ID_CIRCLE_BASE,
-            mintRecipient : bytes32(uint256(uint160(makeAddr("baseAlmProxy"))))
+            domain        : CCTPForwarder.DOMAIN_ID_CIRCLE_AVALANCHE,
+            mintRecipient : bytes32(uint256(uint160(makeAddr("avalancheAlmProxy"))))
         });
 
         // Step 4: Initialize through Sky governance (Sky spell payload)
@@ -275,16 +275,16 @@ contract ForkTestBase is DssTest {
         uint256 usdcMaxAmount = 5_000_000e6;
         uint256 usdcSlope     = uint256(1_000_000e6) / 4 hours;
 
-        bytes32 domainKeyBase = RateLimitHelpers.makeDomainKey(
+        bytes32 domainKeyAvalanche = RateLimitHelpers.makeDomainKey(
             mainnetController.LIMIT_USDC_TO_DOMAIN(),
-            CCTPForwarder.DOMAIN_ID_CIRCLE_BASE
+            CCTPForwarder.DOMAIN_ID_CIRCLE_AVALANCHE
         );
 
         // NOTE: Using minimal config for test base setup
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_MINT(),    usdsMaxAmount, usdsSlope);
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_TO_USDC(), usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDC_TO_CCTP(), usdcMaxAmount, usdcSlope);
-        rateLimits.setRateLimitData(domainKeyBase,                          usdcMaxAmount, usdcSlope);
+        rateLimits.setRateLimitData(domainKeyAvalanche,                     usdcMaxAmount, usdcSlope);
 
         vm.stopPrank();
 
