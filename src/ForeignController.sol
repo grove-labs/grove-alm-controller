@@ -504,7 +504,7 @@ contract ForeignController is AccessControl {
 
         address spoke = IAsyncRedeemManagerLike(ICentrifugeV3VaultLike(token).manager()).spoke();
 
-        // // Initiate cross-chain transfer via the specific spoke address
+        // Initiate cross-chain transfer via the specific spoke address
         proxy.doCallWithValue{value: msg.value}(
             spoke,
             abi.encodeCall(
