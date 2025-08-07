@@ -343,12 +343,15 @@ contract FullStagingDeploy is Script {
 
         ForeignControllerInit.LayerZeroRecipient[] memory layerZeroRecipients = new ForeignControllerInit.LayerZeroRecipient[](0);
 
+        ForeignControllerInit.CentrifugeRecipient[] memory centrifugeRecipients = new ForeignControllerInit.CentrifugeRecipient[](0);
+
         ForeignControllerInit.initAlmSystem(
             controllerInst,
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
 
         vm.stopBroadcast();
@@ -454,7 +457,7 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usdc),  maxAmount6,  slope6);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  usds),  maxAmount18, slope18);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(psmDepositKey,  susds), maxAmount18, slope18);
-        
+
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, usds));
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(psmWithdrawKey, susds));
 

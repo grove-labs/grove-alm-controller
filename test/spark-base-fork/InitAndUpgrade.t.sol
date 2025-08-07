@@ -14,27 +14,29 @@ import { ForeignControllerInit as Init } from "../../deploy/ForeignControllerIni
 contract LibraryWrapper {
 
     function initAlmSystem(
-        ControllerInstance        memory controllerInst,
-        Init.ConfigAddressParams  memory configAddresses,
-        Init.CheckAddressParams   memory checkAddresses,
-        Init.MintRecipient[]      memory mintRecipients,
-        Init.LayerZeroRecipient[] memory layerZeroRecipients
+        ControllerInstance         memory controllerInst,
+        Init.ConfigAddressParams   memory configAddresses,
+        Init.CheckAddressParams    memory checkAddresses,
+        Init.MintRecipient[]       memory mintRecipients,
+        Init.LayerZeroRecipient[]  memory layerZeroRecipients,
+        Init.CentrifugeRecipient[] memory centrifugeRecipients
     )
         external
     {
-        Init.initAlmSystem(controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients);
+        Init.initAlmSystem(controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients, centrifugeRecipients);
     }
 
     function upgradeController(
-        ControllerInstance        memory controllerInst,
-        Init.ConfigAddressParams  memory configAddresses,
-        Init.CheckAddressParams   memory checkAddresses,
-        Init.MintRecipient[]      memory mintRecipients,
-        Init.LayerZeroRecipient[] memory layerZeroRecipients
+        ControllerInstance         memory controllerInst,
+        Init.ConfigAddressParams   memory configAddresses,
+        Init.CheckAddressParams    memory checkAddresses,
+        Init.MintRecipient[]       memory mintRecipients,
+        Init.LayerZeroRecipient[]  memory layerZeroRecipients,
+        Init.CentrifugeRecipient[] memory centrifugeRecipients
     )
         external
     {
-        Init.upgradeController(controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients);
+        Init.upgradeController(controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients, centrifugeRecipients);
     }
 
 }
@@ -48,7 +50,8 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
             Init.ConfigAddressParams  memory configAddresses,
             Init.CheckAddressParams   memory checkAddresses,
             Init.MintRecipient[]      memory mintRecipients,
-            Init.LayerZeroRecipient[] memory layerZeroRecipients
+            Init.LayerZeroRecipient[] memory layerZeroRecipients,
+            Init.CentrifugeRecipient[] memory centrifugeRecipients
         )
     {
         address[] memory relayers = new address[](1);
@@ -82,6 +85,13 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
             destinationEndpointId : destinationEndpointId,
             recipient             : bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
         });
+
+        centrifugeRecipients = new Init.CentrifugeRecipient[](1);
+
+        centrifugeRecipients[0] = Init.CentrifugeRecipient({
+            destinationCentrifugeId : 1,  // Ethereum Mainnet Centrifuge ID
+            recipient               : bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
+        });
     }
 
 }
@@ -100,10 +110,11 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
 
     address public oldController;
 
-    Init.ConfigAddressParams  configAddresses;
-    Init.CheckAddressParams   checkAddresses;
-    Init.MintRecipient[]      mintRecipients;
-    Init.LayerZeroRecipient[] layerZeroRecipients;
+    Init.ConfigAddressParams   configAddresses;
+    Init.CheckAddressParams    checkAddresses;
+    Init.MintRecipient[]       mintRecipients;
+    Init.LayerZeroRecipient[]  layerZeroRecipients;
+    Init.CentrifugeRecipient[] centrifugeRecipients;
 
     function setUp() public override {
         super.setUp();
@@ -124,7 +135,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
 
         Init.MintRecipient[] memory mintRecipients_ = new Init.MintRecipient[](1);
 
-        ( configAddresses, checkAddresses, mintRecipients_, ) = _getDefaultParams();
+        ( configAddresses, checkAddresses, mintRecipients_,, ) = _getDefaultParams();
 
         // NOTE: This would need to be refactored to a for loop if more than one recipient
         mintRecipients.push(mintRecipients_[0]);
@@ -159,7 +170,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -173,7 +185,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -365,7 +378,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -384,7 +398,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -403,7 +418,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -418,7 +434,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
 
         vm.expectRevert(expectedError);
@@ -427,7 +444,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -439,7 +457,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
 
         vm.revertTo(id);
@@ -451,7 +470,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
     }
 
@@ -463,10 +483,11 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
 
     ControllerInstance public controllerInst;
 
-    Init.ConfigAddressParams  configAddresses;
-    Init.CheckAddressParams   checkAddresses;
-    Init.MintRecipient[]      mintRecipients;
-    Init.LayerZeroRecipient[] layerZeroRecipients;
+    Init.ConfigAddressParams   configAddresses;
+    Init.CheckAddressParams    checkAddresses;
+    Init.MintRecipient[]       mintRecipients;
+    Init.LayerZeroRecipient[]  layerZeroRecipients;
+    Init.CentrifugeRecipient[] centrifugeRecipients;
 
     function setUp() public override {
         super.setUp();
@@ -487,10 +508,13 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
 
         Init.LayerZeroRecipient[] memory layerZeroRecipients_ = new Init.LayerZeroRecipient[](1);
 
-        ( configAddresses, checkAddresses, mintRecipients_, layerZeroRecipients_ ) = _getDefaultParams();
+        Init.CentrifugeRecipient[] memory centrifugeRecipients_ = new Init.CentrifugeRecipient[](1);
+
+        ( configAddresses, checkAddresses, mintRecipients_, layerZeroRecipients_, centrifugeRecipients_ ) = _getDefaultParams();
 
         mintRecipients.push(mintRecipients_[0]);
         layerZeroRecipients.push(layerZeroRecipients_[0]);
+        centrifugeRecipients.push(centrifugeRecipients_[0]);
 
         // Admin will be calling the library from its own address
         vm.etch(Base.SPARK_EXECUTOR, address(new LibraryWrapper()).code);
@@ -518,7 +542,8 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
 
         assertEq(foreignController.hasRole(foreignController.FREEZER(), freezer), true);
@@ -556,10 +581,11 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
 
     ControllerInstance public controllerInst;
 
-    Init.ConfigAddressParams  configAddresses;
-    Init.CheckAddressParams   checkAddresses;
-    Init.MintRecipient[]      mintRecipients;
-    Init.LayerZeroRecipient[] layerZeroRecipients;
+    Init.ConfigAddressParams   configAddresses;
+    Init.CheckAddressParams    checkAddresses;
+    Init.MintRecipient[]       mintRecipients;
+    Init.LayerZeroRecipient[]  layerZeroRecipients;
+    Init.CentrifugeRecipient[] centrifugeRecipients;
 
     ForeignController newController;
 
@@ -570,10 +596,13 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
 
         Init.LayerZeroRecipient[] memory layerZeroRecipients_ = new Init.LayerZeroRecipient[](1);
 
-        ( configAddresses, checkAddresses, mintRecipients_, layerZeroRecipients_ ) = _getDefaultParams();
+        Init.CentrifugeRecipient[] memory centrifugeRecipients_ = new Init.CentrifugeRecipient[](1);
+
+        ( configAddresses, checkAddresses, mintRecipients_, layerZeroRecipients_, centrifugeRecipients_ ) = _getDefaultParams();
 
         mintRecipients.push(mintRecipients_[0]);
         layerZeroRecipients.push(layerZeroRecipients_[0]);
+        centrifugeRecipients.push(centrifugeRecipients_[0]);
 
         newController = ForeignController(ForeignControllerDeploy.deployController({
             admin      : Base.SPARK_EXECUTOR,
@@ -621,7 +650,8 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
             configAddresses,
             checkAddresses,
             mintRecipients,
-            layerZeroRecipients
+            layerZeroRecipients,
+            centrifugeRecipients
         );
 
         assertEq(newController.hasRole(newController.FREEZER(), freezer), true);
@@ -650,6 +680,16 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
 
         assertEq(
             newController.layerZeroRecipients(destinationEndpointId),
+            bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
+        );
+
+        assertEq(
+            newController.centrifugeRecipients(centrifugeRecipients[0].destinationCentrifugeId),
+            centrifugeRecipients[0].recipient
+        );
+
+        assertEq(
+            newController.centrifugeRecipients(1), // Ethereum Mainnet Centrifuge ID
             bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
         );
     }
