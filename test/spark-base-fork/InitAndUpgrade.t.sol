@@ -43,7 +43,8 @@ contract LibraryWrapper {
 
 contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
 
-    uint32 constant destinationEndpointId = 30101;  // Ethereum EID
+    uint32 constant destinationEndpointId   = 30101;  // Ethereum EID
+    uint16 constant destinationCentrifugeId = 1;  // Ethereum Mainnet Centrifuge ID
 
     function _getDefaultParams()
         internal returns (
@@ -89,7 +90,7 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
         centrifugeRecipients = new Init.CentrifugeRecipient[](1);
 
         centrifugeRecipients[0] = Init.CentrifugeRecipient({
-            destinationCentrifugeId : 1,  // Ethereum Mainnet Centrifuge ID
+            destinationCentrifugeId : destinationCentrifugeId,
             recipient               : bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
         });
     }
@@ -689,7 +690,7 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
         );
 
         assertEq(
-            newController.centrifugeRecipients(1), // Ethereum Mainnet Centrifuge ID
+            newController.centrifugeRecipients(destinationCentrifugeId),
             bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
         );
     }
