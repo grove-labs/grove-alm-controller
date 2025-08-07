@@ -506,7 +506,7 @@ contract ForeignController is AccessControl {
         );
 
         bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
+        require(recipient != 0, "ForeignController/centrifuge-id-not-configured");
 
         ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
 
