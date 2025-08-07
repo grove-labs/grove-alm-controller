@@ -442,7 +442,7 @@ contract ForeignController is AccessControl {
         proxy.doCall(
             token,
             abi.encodeCall(
-                ICentrifugeToken(token).cancelDepositRequest,
+                ICentrifugeV3VaultLike(token).cancelDepositRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy))
             )
         );
@@ -456,7 +456,7 @@ contract ForeignController is AccessControl {
         proxy.doCall(
             token,
             abi.encodeCall(
-                ICentrifugeToken(token).claimCancelDepositRequest,
+                ICentrifugeV3VaultLike(token).claimCancelDepositRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
             )
         );
@@ -471,7 +471,7 @@ contract ForeignController is AccessControl {
         proxy.doCall(
             token,
             abi.encodeCall(
-                ICentrifugeToken(token).cancelRedeemRequest,
+                ICentrifugeV3VaultLike(token).cancelRedeemRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy))
             )
         );
@@ -485,7 +485,7 @@ contract ForeignController is AccessControl {
         proxy.doCall(
             token,
             abi.encodeCall(
-                ICentrifugeToken(token).claimCancelRedeemRequest,
+                ICentrifugeV3VaultLike(token).claimCancelRedeemRequest,
                 (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
             )
         );
@@ -494,36 +494,28 @@ contract ForeignController is AccessControl {
     function transferSharesCentrifuge(
         address token,
         uint128 amount,
-        uint16  destinationCentrifugeId,
-        uint128 remoteExtraGasLimit
+        uint16  destinationCentrifugeId
     )
         external payable
+        onlyRole(RELAYER)
+        rateLimited(keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)), amount)
     {
-        _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
+        require(centrifugeRecipients[destinationCentrifugeId] != 0, "ForeignController/centrifuge-id-not-configured");
 
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "MainnetController/centrifuge-id-not-configured");
+        address spoke = IAsyncRedeemManagerLike(ICentrifugeV3VaultLike(token).manager()).spoke();
 
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
-
-        // Initiate cross-chain transfer via the specific spoke address
+        // // Initiate cross-chain transfer via the specific spoke address
         proxy.doCallWithValue{value: msg.value}(
             spoke,
             abi.encodeCall(
                 ISpokeLike(spoke).crosschainTransferShares,
                 (
                     destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
+                    ICentrifugeV3VaultLike(token).poolId(),
+                    ICentrifugeV3VaultLike(token).scId(),
+                    centrifugeRecipients[destinationCentrifugeId],
                     amount,
-                    remoteExtraGasLimit
+                    0
                 )
             ),
             msg.value

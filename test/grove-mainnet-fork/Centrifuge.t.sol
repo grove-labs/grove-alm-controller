@@ -5,6 +5,8 @@ import "./ForkTestBase.t.sol";
 
 import {IERC7540} from "forge-std/interfaces/IERC7540.sol";
 
+import { ICentrifugeV3VaultLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
+
 interface IRestrictionManager {
     function updateMember(address token, address user, uint64 validUntil) external;
 }
@@ -48,17 +50,6 @@ interface IERC20Mintable is IERC20 {
     function mint(address to, uint256 amount) external;
 }
 
-interface ICentrifugeToken is IERC7540 {
-    function claimableCancelDepositRequest(uint256 requestId, address controller)
-        external view returns (uint256 claimableAssets);
-    function claimableCancelRedeemRequest(uint256 requestId, address controller)
-        external view returns (uint256 claimableShares);
-    function pendingCancelDepositRequest(uint256 requestId, address controller)
-        external view returns (bool isPending);
-    function pendingCancelRedeemRequest(uint256 requestId, address controller)
-        external view returns (bool isPending);
-}
-
 contract CentrifugeTestBase is ForkTestBase {
 
     address constant ESCROW                         = 0x0000000005F458Fd6ba9EEb5f365D83b7dA913dD;
@@ -78,8 +69,8 @@ contract CentrifugeTestBase is ForkTestBase {
     IInvestmentManager  investmentManager  = IInvestmentManager(INVESTMENT_MANAGER);
     IRestrictionManager restrictionManager = IRestrictionManager(JTREASURY_RESTRICTION_MANAGER);
 
-    ICentrifugeToken jTreasuryVault = ICentrifugeToken(JTREASURY_VAULT_USDC);
-    IERC20Mintable   jTreasuryToken = IERC20Mintable(JTREASURY_TOKEN);
+    ICentrifugeV3VaultLike jTreasuryVault = ICentrifugeV3VaultLike(JTREASURY_VAULT_USDC);
+    IERC20Mintable         jTreasuryToken = IERC20Mintable(JTREASURY_TOKEN);
 
     function _getBlock() internal pure override returns (uint256) {
         return 21988625;  // Mar 6, 2025

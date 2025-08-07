@@ -5,7 +5,6 @@ import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 
 import {
-    ICentrifugeToken,
     ICentrifugeV3VaultLike,
     IAsyncRedeemManagerLike,
     ISpokeLike
@@ -29,7 +28,6 @@ library CentrifugeLib {
         address     token;
         uint16      destinationCentrifugeId;
         uint128     amount;
-        uint128     remoteExtraGasLimit;
         bytes32     recipient;
         bytes32     rateLimitId;
     }
@@ -41,7 +39,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).cancelDepositRequest,
+                ICentrifugeV3VaultLike(params.token).cancelDepositRequest,
                 (params.requestId, address(params.proxy))
             )
         );
@@ -53,7 +51,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).claimCancelDepositRequest,
+                ICentrifugeV3VaultLike(params.token).claimCancelDepositRequest,
                 (params.requestId, address(params.proxy), address(params.proxy))
             )
         );
@@ -66,7 +64,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).cancelRedeemRequest,
+                ICentrifugeV3VaultLike(params.token).cancelRedeemRequest,
                 (params.requestId, address(params.proxy))
             )
         );
@@ -78,7 +76,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).claimCancelRedeemRequest,
+                ICentrifugeV3VaultLike(params.token).claimCancelRedeemRequest,
                 (params.requestId, address(params.proxy), address(params.proxy))
             )
         );
@@ -108,7 +106,7 @@ library CentrifugeLib {
                     centrifugeVault.scId(),
                     params.recipient,
                     params.amount,
-                    params.remoteExtraGasLimit
+                    0
                 )
             ),
             msg.value

@@ -4,6 +4,8 @@ pragma solidity ^0.8.21;
 import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
 import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
 
+import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
+
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
 import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
@@ -15,7 +17,6 @@ import { IALMProxy }   from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits } from "./interfaces/IRateLimits.sol";
 
-import "./interfaces/CentrifugeInterfaces.sol";
 import "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
@@ -403,8 +404,7 @@ contract MainnetController is AccessControl {
     function transferSharesCentrifuge(
         address token,
         uint128 amount,
-        uint16  destinationCentrifugeId,
-        uint128 remoteExtraGasLimit
+        uint16  destinationCentrifugeId
     )
         external payable
     {
@@ -417,7 +417,6 @@ contract MainnetController is AccessControl {
                 amount                  : amount,
                 recipient               : centrifugeRecipients[destinationCentrifugeId],
                 destinationCentrifugeId : destinationCentrifugeId,
-                remoteExtraGasLimit     : remoteExtraGasLimit,
                 rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
             })
         );
