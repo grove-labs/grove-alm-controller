@@ -29,7 +29,6 @@ library CentrifugeLib {
         address     token;
         uint16      destinationCentrifugeId;
         uint128     amount;
-        uint128     remoteExtraGasLimit;
         bytes32     recipient;
         bytes32     rateLimitId;
     }
@@ -108,7 +107,7 @@ library CentrifugeLib {
                     centrifugeVault.scId(),
                     params.recipient,
                     params.amount,
-                    params.remoteExtraGasLimit
+                    0
                 )
             ),
             msg.value
