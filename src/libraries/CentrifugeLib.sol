@@ -5,7 +5,6 @@ import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 
 import {
-    ICentrifugeToken,
     ICentrifugeV3VaultLike,
     IAsyncRedeemManagerLike,
     ISpokeLike
@@ -40,7 +39,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).cancelDepositRequest,
+                ICentrifugeV3VaultLike(params.token).cancelDepositRequest,
                 (params.requestId, address(params.proxy))
             )
         );
@@ -52,7 +51,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).claimCancelDepositRequest,
+                ICentrifugeV3VaultLike(params.token).claimCancelDepositRequest,
                 (params.requestId, address(params.proxy), address(params.proxy))
             )
         );
@@ -65,7 +64,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).cancelRedeemRequest,
+                ICentrifugeV3VaultLike(params.token).cancelRedeemRequest,
                 (params.requestId, address(params.proxy))
             )
         );
@@ -77,7 +76,7 @@ library CentrifugeLib {
         params.proxy.doCall(
             params.token,
             abi.encodeCall(
-                ICentrifugeToken(params.token).claimCancelRedeemRequest,
+                ICentrifugeV3VaultLike(params.token).claimCancelRedeemRequest,
                 (params.requestId, address(params.proxy), address(params.proxy))
             )
         );
