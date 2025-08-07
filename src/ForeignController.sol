@@ -500,19 +500,12 @@ contract ForeignController is AccessControl {
         uint16  destinationCentrifugeId
     )
         external payable
+        onlyRole(RELAYER)
+        rateLimited(keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)), amount)
     {
-        _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
+        require(centrifugeRecipients[destinationCentrifugeId] != 0, "ForeignController/centrifuge-id-not-configured");
 
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "ForeignController/centrifuge-id-not-configured");
-
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
+        address spoke = IAsyncRedeemManagerLike(ICentrifugeV3VaultLike(token).manager()).spoke();
 
         // Initiate cross-chain transfer via the specific spoke address
         proxy.doCallWithValue{value: msg.value}(
@@ -521,9 +514,9 @@ contract ForeignController is AccessControl {
                 ISpokeLike(spoke).crosschainTransferShares,
                 (
                     destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
+                    ICentrifugeV3VaultLike(token).poolId(),
+                    ICentrifugeV3VaultLike(token).scId(),
+                    centrifugeRecipients[destinationCentrifugeId],
                     amount,
                     0
                 )
