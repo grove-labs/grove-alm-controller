@@ -13,9 +13,11 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
-import { IALMProxy }   from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
-import { IRateLimits } from "./interfaces/IRateLimits.sol";
+import { IALMProxy }     from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
+import { IPendleRouter } from "./interfaces/IPendleRouter.sol";
+import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+
 
 import "./interfaces/ILayerZero.sol";
 
@@ -23,6 +25,7 @@ import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
+import { PendleLib }                      from "./libraries/PendleLib.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
@@ -108,6 +111,8 @@ contract MainnetController is AccessControl {
     IRateLimits       public immutable rateLimits;
     IVaultLike        public immutable vault;
 
+    address public immutable pendleRouter;
+
     IERC20     public immutable dai;
     IERC20     public immutable usds;
     IERC20     public immutable usde;
@@ -134,6 +139,7 @@ contract MainnetController is AccessControl {
         address psm_,
         address daiUsds_,
         address cctp_
+        // address pendleRouter_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -146,6 +152,7 @@ contract MainnetController is AccessControl {
         cctp       = ICCTPLike(cctp_);
 
         ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
+        pendleRouter = 0x888888888889758F76e7103c6CbF23ABbF58F946; // TODO: take in from constructor args
 
         susde = ISUSDELike(Ethereum.SUSDE);
         dai   = IERC20(daiUsds.dai());
@@ -638,6 +645,57 @@ contract MainnetController is AccessControl {
             mapleToken,
             abi.encodeCall(IMapleTokenLike(mapleToken).removeShares, (shares, address(proxy)))
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Pendle functions                                                               ***/
+    /**********************************************************************************************/
+
+    function buyPendlePT(
+        address pendleMarket,
+        uint256 tokenAmountIn,
+        uint256 minPtOut
+    ) external {
+        _checkRole(RELAYER);
+        // TODO Add rate limit
+       PendleLib.buyPendlePT(PendleLib.BuyPendlePTParams({
+        proxy         : proxy,
+        pendleRouter  : pendleRouter,
+        pendleMarket  : pendleMarket,
+        tokenAmountIn : tokenAmountIn,
+        minPtOut      : minPtOut
+       }));
+    }
+
+    function sellPendlePT(
+        address pendleMarket,
+        uint256 ptAmountIn,
+        uint256 minTokenOut
+    ) external {
+        _checkRole(RELAYER);
+        // TODO Add rate limit
+        PendleLib.sellPendlePT(PendleLib.SellPendlePTParams({
+            proxy        : proxy,
+            pendleRouter : pendleRouter,
+            pendleMarket : pendleMarket,
+            ptAmountIn   : ptAmountIn,
+            minTokenOut  : minTokenOut
+        }));
+    }
+
+    function redeemPendlePT(
+        address pendleMarket, // pendle market - individual for every PT/YT pair - has to be in the rate limit
+        uint256 pyAmountIn, // PY stands for PT & YT together - the assumption is that there is no YT needed because we redeem after maturity
+        uint256 minTokenOut // minimum token out - should be equal to the amount of token out for non-rebasing tokens ???
+    ) external {
+        _checkRole(RELAYER);
+        PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
+            proxy        : proxy,
+            pendleRouter : pendleRouter,
+            pendleMarket : pendleMarket,
+            pyAmountIn   : pyAmountIn,
+            minTokenOut  : minTokenOut
+        }));
     }
 
     /**********************************************************************************************/
