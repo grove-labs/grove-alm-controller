@@ -15,9 +15,8 @@ import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
 import { IALMProxy }     from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
-import { IPendleRouter } from "./interfaces/IPendleRouter.sol";
+import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
-
 
 import "./interfaces/ILayerZero.sol";
 
@@ -91,6 +90,9 @@ contract MainnetController is AccessControl {
     bytes32 public constant LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public constant LIMIT_MAPLE_REDEEM         = keccak256("LIMIT_MAPLE_REDEEM");
+    bytes32 public constant LIMIT_PENDLE_PT_BUY        = keccak256("LIMIT_PENDLE_PT_BUY");
+    bytes32 public constant LIMIT_PENDLE_PT_REDEEM     = keccak256("LIMIT_PENDLE_PT_REDEEM");
+    bytes32 public constant LIMIT_PENDLE_PT_SELL       = keccak256("LIMIT_PENDLE_PT_SELL");
     bytes32 public constant LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
     bytes32 public constant LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
@@ -110,8 +112,6 @@ contract MainnetController is AccessControl {
     IPSMLike          public immutable psm;
     IRateLimits       public immutable rateLimits;
     IVaultLike        public immutable vault;
-
-    address public immutable pendleRouter;
 
     IERC20     public immutable dai;
     IERC20     public immutable usds;
@@ -139,7 +139,6 @@ contract MainnetController is AccessControl {
         address psm_,
         address daiUsds_,
         address cctp_
-        // address pendleRouter_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -152,8 +151,6 @@ contract MainnetController is AccessControl {
         cctp       = ICCTPLike(cctp_);
 
         ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
-        pendleRouter = 0x888888888889758F76e7103c6CbF23ABbF58F946; // TODO: take in from constructor args
-
         susde = ISUSDELike(Ethereum.SUSDE);
         dai   = IERC20(daiUsds.dai());
         usdc  = IERC20(psm.gem());
@@ -657,14 +654,14 @@ contract MainnetController is AccessControl {
         uint256 minPtOut
     ) external {
         _checkRole(RELAYER);
-        // TODO Add rate limit
-       PendleLib.buyPendlePT(PendleLib.BuyPendlePTParams({
-        proxy         : proxy,
-        pendleRouter  : pendleRouter,
-        pendleMarket  : pendleMarket,
-        tokenAmountIn : tokenAmountIn,
-        minPtOut      : minPtOut
-       }));
+        _rateLimitedAsset(LIMIT_PENDLE_PT_BUY, pendleMarket, tokenAmountIn);
+
+        PendleLib.buyPendlePT(PendleLib.BuyPendlePTParams({
+            proxy         : proxy,
+            pendleMarket  : IPendleMarket(pendleMarket),
+            tokenAmountIn : tokenAmountIn,
+            minPtOut      : minPtOut
+        }));
     }
 
     function sellPendlePT(
@@ -673,28 +670,27 @@ contract MainnetController is AccessControl {
         uint256 minTokenOut
     ) external {
         _checkRole(RELAYER);
-        // TODO Add rate limit
+        _rateLimitedAsset(LIMIT_PENDLE_PT_SELL, pendleMarket, ptAmountIn);
+
         PendleLib.sellPendlePT(PendleLib.SellPendlePTParams({
             proxy        : proxy,
-            pendleRouter : pendleRouter,
-            pendleMarket : pendleMarket,
+            pendleMarket : IPendleMarket(pendleMarket),
             ptAmountIn   : ptAmountIn,
             minTokenOut  : minTokenOut
         }));
     }
 
     function redeemPendlePT(
-        address pendleMarket, // pendle market - individual for every PT/YT pair - has to be in the rate limit
-        uint256 pyAmountIn, // PY stands for PT & YT together - the assumption is that there is no YT needed because we redeem after maturity
-        uint256 minTokenOut // minimum token out - should be equal to the amount of token out for non-rebasing tokens ???
+        address pendleMarket,
+        uint256 pyAmountIn
     ) external {
         _checkRole(RELAYER);
+        _rateLimitedAsset(LIMIT_PENDLE_PT_REDEEM, pendleMarket, pyAmountIn);
+
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
-            pendleRouter : pendleRouter,
-            pendleMarket : pendleMarket,
-            pyAmountIn   : pyAmountIn,
-            minTokenOut  : minTokenOut
+            pendleMarket : IPendleMarket(pendleMarket),
+            pyAmountIn   : pyAmountIn
         }));
     }
 

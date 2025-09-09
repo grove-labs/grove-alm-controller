@@ -14,32 +14,30 @@ import {
     SwapData,
     TokenInput,
     TokenOutput
-} from "../interfaces/IPendleRouter.sol";
+} from "../interfaces/PendleInterfaces.sol";
 
 library PendleLib {
 
+    address public constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+
     struct BuyPendlePTParams {
         IALMProxy proxy;
-        address pendleRouter;
-        address pendleMarket;
+        IPendleMarket pendleMarket;
         uint256 tokenAmountIn;
         uint256 minPtOut;
     }
 
     struct SellPendlePTParams {
         IALMProxy proxy;
-        address pendleRouter;
-        address pendleMarket;
+        IPendleMarket pendleMarket;
         uint256 ptAmountIn;
         uint256 minTokenOut;
     }
 
     struct RedeemPendlePTParams {
         IALMProxy proxy;
-        address pendleRouter;
-        address pendleMarket;
+        IPendleMarket pendleMarket;
         uint256 pyAmountIn;
-        uint256 minTokenOut;
     }
 
     function createEmptyLimitOrderData() internal pure returns (LimitOrderData memory emptyLimitOrderData) {}
@@ -85,9 +83,21 @@ library PendleLib {
         TokenInput memory tokenInput = createSimpleTokenInput(tokenIn, params.tokenAmountIn);
         LimitOrderData memory limitOrderData = createEmptyLimitOrderData();
 
-        _approve(params.proxy, tokenIn, params.pendleRouter, params.tokenAmountIn);
+        _approve(params.proxy, tokenIn, PENDLE_ROUTER, params.tokenAmountIn);
 
-        params.proxy.doCall(params.pendleMarket, abi.encodeCall(IPendleRouter.swapExactTokenForPt, (address(params.proxy), params.pendleMarket, params.minPtOut, approxParams, tokenInput, limitOrderData)));
+        params.proxy.doCall(
+            address(params.pendleMarket),
+            abi.encodeCall(
+                IPendleRouter.swapExactTokenForPt, (
+                    address(params.proxy),
+                    address(params.pendleMarket),
+                    params.minPtOut,
+                    approxParams,
+                    tokenInput,
+                    limitOrderData
+                )
+            )
+        );
     }
 
     function sellPendlePT(SellPendlePTParams memory params) internal {
@@ -96,28 +106,49 @@ library PendleLib {
         address pt = address(0);
         address tokenOut = address(0);
 
-        ApproxParams memory approxParams = createDefaultApproxParams();
         TokenOutput memory tokenOutput = createSimpleTokenOutput(tokenOut, params.minTokenOut);
         LimitOrderData memory limitOrderData = createEmptyLimitOrderData();
 
-        _approve(params.proxy, pt, params.pendleRouter, params.ptAmountIn);
+        _approve(params.proxy, pt, PENDLE_ROUTER, params.ptAmountIn);
 
-        params.proxy.doCall(params.pendleMarket, abi.encodeCall(IPendleRouter.swapExactPtForToken, (address(params.proxy), params.pendleMarket, params.ptAmountIn, tokenOutput, limitOrderData)));
+        params.proxy.doCall(
+            address(params.pendleMarket),
+            abi.encodeCall(
+                IPendleRouter.swapExactPtForToken, (
+                    address(params.proxy),
+                    address(params.pendleMarket),
+                    params.ptAmountIn,
+                    tokenOutput,
+                    limitOrderData
+                )
+            )
+        );
     }
 
     function redeemPendlePT(RedeemPendlePTParams memory params) internal {
         // TODO Add rate limit
 
-        (address sy, address pt, address yt) = IPendleMarket(params.pendleMarket).readTokens();
+        require(params.pendleMarket.isExpired(), "PendleLib/market-not-expired");
+
+        (address sy, address pt, address yt) = params.pendleMarket.readTokens();
         address tokenOut  = ISY(sy).yieldToken();
+        uint256 minTokenOut = ISY(sy).exchangeRate() * 1e18 / params.pyAmountIn - 10; // 10 is a buffer to avoid rounding errors
 
-        ApproxParams memory approxParams = createDefaultApproxParams();
-        TokenOutput memory tokenOutput = createSimpleTokenOutput(tokenOut, params.minTokenOut);
-        LimitOrderData memory limitOrderData = createEmptyLimitOrderData();
+        TokenOutput memory tokenOutput = createSimpleTokenOutput(tokenOut, minTokenOut);
 
-        _approve(params.proxy, pt, params.pendleRouter, params.pyAmountIn);
+        _approve(params.proxy, pt, PENDLE_ROUTER, params.pyAmountIn);
 
-        params.proxy.doCall(params.pendleRouter, abi.encodeCall(IPendleRouter.redeemPyToToken, (address(params.proxy), yt, params.pyAmountIn, tokenOutput)));
+        params.proxy.doCall(
+            PENDLE_ROUTER,
+            abi.encodeCall(
+                IPendleRouter.redeemPyToToken, (
+                    address(params.proxy),
+                    yt,
+                    params.pyAmountIn,
+                    tokenOutput
+                )
+            )
+        );
     }
 
     function _approve(
