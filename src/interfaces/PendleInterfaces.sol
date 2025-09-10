@@ -112,6 +112,7 @@ interface IPendleRouter {
 interface IPendleMarket {
     function readTokens() external view returns (address _SY, address _PT, address _YT);
     function isExpired() external view returns (bool);
+    function expiry() external view returns (uint256);
 }
 
 interface ISY {
