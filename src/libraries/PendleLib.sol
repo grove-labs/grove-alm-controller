@@ -3,7 +3,8 @@ pragma solidity ^0.8.21;
 
 import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
-import { IALMProxy } from "../interfaces/IALMProxy.sol";
+import { IALMProxy }   from "../interfaces/IALMProxy.sol";
+import { IRateLimits } from "../interfaces/IRateLimits.sol";
 
 import {
     ApproxParams,
@@ -16,28 +17,36 @@ import {
     TokenOutput
 } from "../interfaces/PendleInterfaces.sol";
 
+import { RateLimitHelpers } from "../RateLimitHelpers.sol";
+
 library PendleLib {
 
     address public constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
 
     struct BuyPendlePTParams {
-        IALMProxy proxy;
+        IALMProxy     proxy;
+        IRateLimits   rateLimits;
         IPendleMarket pendleMarket;
-        uint256 tokenAmountIn;
-        uint256 minPtOut;
+        bytes32       rateLimitId;
+        uint256       tokenAmountIn;
+        uint256       minPtOut;
     }
 
     struct SellPendlePTParams {
-        IALMProxy proxy;
+        IALMProxy     proxy;
+        IRateLimits   rateLimits;
         IPendleMarket pendleMarket;
-        uint256 ptAmountIn;
-        uint256 minTokenOut;
+        bytes32       rateLimitId;
+        uint256       ptAmountIn;
+        uint256       minTokenOut;
     }
 
     struct RedeemPendlePTParams {
-        IALMProxy proxy;
+        IALMProxy     proxy;
+        IRateLimits   rateLimits;
         IPendleMarket pendleMarket;
-        uint256 pyAmountIn;
+        bytes32       rateLimitId;
+        uint256       pyAmountIn;
     }
 
     function createEmptyLimitOrderData() internal pure returns (LimitOrderData memory emptyLimitOrderData) {}
@@ -75,7 +84,10 @@ library PendleLib {
     }
 
     function buyPendlePT(BuyPendlePTParams memory params) internal {
-        // TODO Add rate limit
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
+            params.tokenAmountIn
+        );
 
         address tokenIn = address(0);
 
@@ -101,7 +113,10 @@ library PendleLib {
     }
 
     function sellPendlePT(SellPendlePTParams memory params) internal {
-        // TODO Add rate limit
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
+            params.ptAmountIn
+        );
 
         address pt = address(0);
         address tokenOut = address(0);
@@ -126,15 +141,20 @@ library PendleLib {
     }
 
     function redeemPendlePT(RedeemPendlePTParams memory params) internal {
-        // TODO Add rate limit
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
+            params.pyAmountIn
+        );
 
         require(params.pendleMarket.isExpired(), "PendleLib/market-not-expired");
 
         (address sy, address pt, address yt) = params.pendleMarket.readTokens();
-        address tokenOut  = ISY(sy).yieldToken();
-        uint256 minTokenOut = ISY(sy).exchangeRate() * 1e18 / params.pyAmountIn - 10; // 10 is a buffer to avoid rounding errors
 
-        TokenOutput memory tokenOutput = createSimpleTokenOutput(tokenOut, minTokenOut);
+        address tokenOut = ISY(sy).yieldToken();
+
+        // expected to receive full amount, but the buffer is subtracted
+        // to avoid reverts due to potential rounding errors
+        uint256 minTokenOut = params.pyAmountIn * 1e18 / ISY(sy).exchangeRate() - 5;
 
         _approve(params.proxy, pt, PENDLE_ROUTER, params.pyAmountIn);
 
@@ -145,7 +165,7 @@ library PendleLib {
                     address(params.proxy),
                     yt,
                     params.pyAmountIn,
-                    tokenOutput
+                    createSimpleTokenOutput(tokenOut, minTokenOut)
                 )
             )
         );

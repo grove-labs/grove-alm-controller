@@ -90,6 +90,18 @@ contract MainnetControllerRedeemFailurePendleTests is PendleTestBase {
         mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18 + 1);
     }
 
+    function test_redeemPendlePT_amountTooSmall() public {
+        (, address pt,) = pendleMarket.readTokens();
+        vm.prank(PT_WHALE);
+        IERC20(pt).transfer((address(almProxy)), 1_000_000e18);
+
+        vm.warp(pendleMarket.expiry());
+
+        vm.prank(relayer);
+        vm.expectRevert("panic: arithmetic underflow or overflow (0x11)");
+        mainnetController.redeemPendlePT(address(pendleMarket), 5);
+    }
+
 }
 
 contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
@@ -106,14 +118,26 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
         IERC20(pt).transfer((address(almProxy)), 1_000_000e18);
         vm.stopPrank();
 
-       vm.warp(pendleMarket.expiry());
+        assertEq(IERC20(pt).balanceOf(address(almProxy)),         1_000_000e18);
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 0);
+
+        vm.warp(pendleMarket.expiry());
 
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18);
 
-        vm.warp(block.timestamp + 18 days);
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 500_000e18);
+        uint256 exchangeRate = ISY(sy).exchangeRate();
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 500_000e18 * 1e18 / exchangeRate);
+
+        vm.warp(block.timestamp + 14 days);
+
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18);
+
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 0);
+        exchangeRate = ISY(sy).exchangeRate();
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 1_000_000e18 * 1e18 / exchangeRate);
     }
 
     function test_redeemPendlePT_USDe() public {
@@ -135,14 +159,29 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
         IERC20(pt).transfer((address(almProxy)), 1_000_000e18);
         vm.stopPrank();
 
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 1_000_000e18);
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 0);
+
         vm.warp(pendleMarket.expiry());
 
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18);
 
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 500_000e18);
+        uint256 exchangeRate = ISY(sy).exchangeRate();
+        assertEq(exchangeRate, 1e18);
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 500_000e18);
+
         vm.warp(block.timestamp + 18 days);
+
+        exchangeRate = ISY(sy).exchangeRate();
+        assertEq(exchangeRate, 1e18);
+
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18);
+
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 0);
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 1_000_000e18);
     }
 
     function test_redeemPendlePT_stETH() public {
@@ -164,14 +203,26 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
         IERC20(pt).transfer((address(almProxy)), 10e18);
         vm.stopPrank();
 
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 10e18);
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 0);
+
         vm.warp(pendleMarket.expiry());
 
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 5e18);
 
-        vm.warp(block.timestamp + 18 days);
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 5e18);
+        uint256 exchangeRate = ISY(sy).exchangeRate();
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 5e18 * 1e18 / exchangeRate);
+
+        vm.warp(block.timestamp + 14 days);
+
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 5e18);
+
+        assertEq(IERC20(pt).balanceOf(address(almProxy)), 0);
+        exchangeRate = ISY(sy).exchangeRate();
+        assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 10e18 * 1e18 / exchangeRate);
     }
 
 }

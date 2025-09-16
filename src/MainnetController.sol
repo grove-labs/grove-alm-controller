@@ -654,10 +654,11 @@ contract MainnetController is AccessControl {
         uint256 minPtOut
     ) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_PENDLE_PT_BUY, pendleMarket, tokenAmountIn);
 
         PendleLib.buyPendlePT(PendleLib.BuyPendlePTParams({
             proxy         : proxy,
+            rateLimits    : rateLimits,
+            rateLimitId   : LIMIT_PENDLE_PT_BUY,
             pendleMarket  : IPendleMarket(pendleMarket),
             tokenAmountIn : tokenAmountIn,
             minPtOut      : minPtOut
@@ -670,10 +671,11 @@ contract MainnetController is AccessControl {
         uint256 minTokenOut
     ) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_PENDLE_PT_SELL, pendleMarket, ptAmountIn);
 
         PendleLib.sellPendlePT(PendleLib.SellPendlePTParams({
             proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_PENDLE_PT_SELL,
             pendleMarket : IPendleMarket(pendleMarket),
             ptAmountIn   : ptAmountIn,
             minTokenOut  : minTokenOut
@@ -685,10 +687,11 @@ contract MainnetController is AccessControl {
         uint256 pyAmountIn
     ) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_PENDLE_PT_REDEEM, pendleMarket, pyAmountIn);
 
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
             pendleMarket : IPendleMarket(pendleMarket),
             pyAmountIn   : pyAmountIn
         }));
