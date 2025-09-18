@@ -23,24 +23,6 @@ library PendleLib {
 
     address public constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
 
-    struct BuyPendlePTParams {
-        IALMProxy     proxy;
-        IRateLimits   rateLimits;
-        IPendleMarket pendleMarket;
-        bytes32       rateLimitId;
-        uint256       tokenAmountIn;
-        uint256       minPtOut;
-    }
-
-    struct SellPendlePTParams {
-        IALMProxy     proxy;
-        IRateLimits   rateLimits;
-        IPendleMarket pendleMarket;
-        bytes32       rateLimitId;
-        uint256       ptAmountIn;
-        uint256       minTokenOut;
-    }
-
     struct RedeemPendlePTParams {
         IALMProxy     proxy;
         IRateLimits   rateLimits;
@@ -49,19 +31,7 @@ library PendleLib {
         uint256       pyAmountIn;
     }
 
-    function createEmptyLimitOrderData() internal pure returns (LimitOrderData memory emptyLimitOrderData) {}
-
     function createEmptySwapData() internal pure returns (SwapData memory emptySwapData) {}
-
-    function createSimpleTokenInput(address tokenIn, uint256 netTokenIn) internal pure returns (TokenInput memory simpleTokenInput) {
-        simpleTokenInput = TokenInput({
-            tokenIn     : tokenIn,
-            netTokenIn  : netTokenIn,
-            tokenMintSy : tokenIn,
-            pendleSwap  : address(0),
-            swapData    : createEmptySwapData()
-        });
-    }
 
     function createSimpleTokenOutput(address tokenOut, uint256 minTokenOut) internal pure returns (TokenOutput memory simpleTokenOutput) {
         simpleTokenOutput = TokenOutput({
@@ -71,73 +41,6 @@ library PendleLib {
             pendleSwap    : address(0),
             swapData      : createEmptySwapData()
         });
-    }
-
-    function createDefaultApproxParams() internal pure returns (ApproxParams memory defaultApproxParams) {
-        defaultApproxParams = ApproxParams({
-            guessMin      : 0,
-            guessMax      : type(uint256).max,
-            guessOffchain : 0,
-            maxIteration  : 256,
-            eps           : 1e14
-        });
-    }
-
-    function buyPendlePT(BuyPendlePTParams memory params) internal {
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
-            params.tokenAmountIn
-        );
-
-        address tokenIn = address(0);
-
-        ApproxParams memory approxParams = createDefaultApproxParams();
-        TokenInput memory tokenInput = createSimpleTokenInput(tokenIn, params.tokenAmountIn);
-        LimitOrderData memory limitOrderData = createEmptyLimitOrderData();
-
-        _approve(params.proxy, tokenIn, PENDLE_ROUTER, params.tokenAmountIn);
-
-        params.proxy.doCall(
-            address(params.pendleMarket),
-            abi.encodeCall(
-                IPendleRouter.swapExactTokenForPt, (
-                    address(params.proxy),
-                    address(params.pendleMarket),
-                    params.minPtOut,
-                    approxParams,
-                    tokenInput,
-                    limitOrderData
-                )
-            )
-        );
-    }
-
-    function sellPendlePT(SellPendlePTParams memory params) internal {
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
-            params.ptAmountIn
-        );
-
-        address pt = address(0);
-        address tokenOut = address(0);
-
-        TokenOutput memory tokenOutput = createSimpleTokenOutput(tokenOut, params.minTokenOut);
-        LimitOrderData memory limitOrderData = createEmptyLimitOrderData();
-
-        _approve(params.proxy, pt, PENDLE_ROUTER, params.ptAmountIn);
-
-        params.proxy.doCall(
-            address(params.pendleMarket),
-            abi.encodeCall(
-                IPendleRouter.swapExactPtForToken, (
-                    address(params.proxy),
-                    address(params.pendleMarket),
-                    params.ptAmountIn,
-                    tokenOutput,
-                    limitOrderData
-                )
-            )
-        );
     }
 
     function redeemPendlePT(RedeemPendlePTParams memory params) internal {

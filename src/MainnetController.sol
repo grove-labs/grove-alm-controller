@@ -648,40 +648,6 @@ contract MainnetController is AccessControl {
     /*** Relayer Pendle functions                                                               ***/
     /**********************************************************************************************/
 
-    function buyPendlePT(
-        address pendleMarket,
-        uint256 tokenAmountIn,
-        uint256 minPtOut
-    ) external {
-        _checkRole(RELAYER);
-
-        PendleLib.buyPendlePT(PendleLib.BuyPendlePTParams({
-            proxy         : proxy,
-            rateLimits    : rateLimits,
-            rateLimitId   : LIMIT_PENDLE_PT_BUY,
-            pendleMarket  : IPendleMarket(pendleMarket),
-            tokenAmountIn : tokenAmountIn,
-            minPtOut      : minPtOut
-        }));
-    }
-
-    function sellPendlePT(
-        address pendleMarket,
-        uint256 ptAmountIn,
-        uint256 minTokenOut
-    ) external {
-        _checkRole(RELAYER);
-
-        PendleLib.sellPendlePT(PendleLib.SellPendlePTParams({
-            proxy        : proxy,
-            rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_SELL,
-            pendleMarket : IPendleMarket(pendleMarket),
-            ptAmountIn   : ptAmountIn,
-            minTokenOut  : minTokenOut
-        }));
-    }
-
     function redeemPendlePT(
         address pendleMarket,
         uint256 pyAmountIn
