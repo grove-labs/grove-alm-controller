@@ -43,10 +43,6 @@ interface IVatLike {
     function can(address, address) external view returns (uint256);
 }
 
-interface IMapleTokenExtended is IERC4626 {
-    function manager() external view returns (address);
-}
-
 interface IWithdrawalManagerLike {
     function processRedemptions(uint256 maxSharesToProcess) external;
 }
