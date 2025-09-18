@@ -7,13 +7,10 @@ import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 
 import {
-    ApproxParams,
     IPendleMarket,
     IPendleRouter,
     ISY,
-    LimitOrderData,
     SwapData,
-    TokenInput,
     TokenOutput
 } from "../interfaces/PendleInterfaces.sol";
 

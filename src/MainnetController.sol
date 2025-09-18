@@ -90,9 +90,7 @@ contract MainnetController is AccessControl {
     bytes32 public constant LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public constant LIMIT_MAPLE_REDEEM         = keccak256("LIMIT_MAPLE_REDEEM");
-    bytes32 public constant LIMIT_PENDLE_PT_BUY        = keccak256("LIMIT_PENDLE_PT_BUY");
     bytes32 public constant LIMIT_PENDLE_PT_REDEEM     = keccak256("LIMIT_PENDLE_PT_REDEEM");
-    bytes32 public constant LIMIT_PENDLE_PT_SELL       = keccak256("LIMIT_PENDLE_PT_SELL");
     bytes32 public constant LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
     bytes32 public constant LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
@@ -151,6 +149,7 @@ contract MainnetController is AccessControl {
         cctp       = ICCTPLike(cctp_);
 
         ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
+
         susde = ISUSDELike(Ethereum.SUSDE);
         dai   = IERC20(daiUsds.dai());
         usdc  = IERC20(psm.gem());
