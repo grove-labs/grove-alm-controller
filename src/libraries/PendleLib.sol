@@ -14,11 +14,11 @@ import {
     TokenOutput
 } from "../interfaces/PendleInterfaces.sol";
 
+import { Ethereum } from "grove-address-registry/Ethereum.sol";
+
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library PendleLib {
-
-    address public constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
 
     struct RedeemPendlePTParams {
         IALMProxy     proxy;
@@ -56,10 +56,10 @@ library PendleLib {
         // to avoid reverts due to potential rounding errors
         uint256 minTokenOut = params.pyAmountIn * 1e18 / ISY(sy).exchangeRate() - 5;
 
-        _approve(params.proxy, pt, PENDLE_ROUTER, params.pyAmountIn);
+        _approve(params.proxy, pt, Ethereum.PENDLE_ROUTER, params.pyAmountIn);
 
         params.proxy.doCall(
-            PENDLE_ROUTER,
+            Ethereum.PENDLE_ROUTER,
             abi.encodeCall(
                 IPendleRouter.redeemPyToToken, (
                     address(params.proxy),

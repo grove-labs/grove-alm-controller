@@ -422,8 +422,6 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(controller.LIMIT_USDE_MINT(),      maxAmount6,  slope6);
         rateLimits.setRateLimitData(susdeDepositKey,                   maxAmount18, slope18);
 
-        // Maple-specific deposit/withdraw rate limits
-
         vm.stopBroadcast();
     }
 
