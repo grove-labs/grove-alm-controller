@@ -23,6 +23,8 @@ import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./i
 
 import "./interfaces/ILayerZero.sol";
 
+import { CurveLib } from "./libraries/CurveLib.sol";
+
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
@@ -66,6 +68,9 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public constant LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
+    bytes32 public constant LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
+    bytes32 public constant LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
+    bytes32 public constant LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public constant LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -586,6 +591,75 @@ contract ForeignController is AccessControl {
             RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
             amountWithdrawn
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Curve StableSwap functions                                                     ***/
+    /**********************************************************************************************/
+
+    function swapCurve(
+        address pool,
+        uint256 inputIndex,
+        uint256 outputIndex,
+        uint256 amountIn,
+        uint256 minAmountOut
+    )
+        external returns (uint256 amountOut)
+    {
+        _checkRole(RELAYER);
+
+        amountOut = CurveLib.swap(CurveLib.SwapCurveParams({
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            pool         : pool,
+            rateLimitId  : LIMIT_CURVE_SWAP,
+            inputIndex   : inputIndex,
+            outputIndex  : outputIndex,
+            amountIn     : amountIn,
+            minAmountOut : minAmountOut,
+            maxSlippage  : maxSlippages[pool]
+        }));
+    }
+
+    function addLiquidityCurve(
+        address pool,
+        uint256[] memory depositAmounts,
+        uint256 minLpAmount
+    )
+        external returns (uint256 shares)
+    {
+        _checkRole(RELAYER);
+
+        shares = CurveLib.addLiquidity(CurveLib.AddLiquidityParams({
+            proxy                   : proxy,
+            rateLimits              : rateLimits,
+            pool                    : pool,
+            addLiquidityRateLimitId : LIMIT_CURVE_DEPOSIT,
+            swapRateLimitId         : LIMIT_CURVE_SWAP,
+            minLpAmount             : minLpAmount,
+            maxSlippage             : maxSlippages[pool],
+            depositAmounts          : depositAmounts
+        }));
+    }
+
+    function removeLiquidityCurve(
+        address pool,
+        uint256 lpBurnAmount,
+        uint256[] memory minWithdrawAmounts
+    )
+        external returns (uint256[] memory withdrawnTokens)
+    {
+        _checkRole(RELAYER);
+
+        withdrawnTokens = CurveLib.removeLiquidity(CurveLib.RemoveLiquidityParams({
+            proxy              : proxy,
+            rateLimits         : rateLimits,
+            pool               : pool,
+            rateLimitId        : LIMIT_CURVE_WITHDRAW,
+            lpBurnAmount       : lpBurnAmount,
+            minWithdrawAmounts : minWithdrawAmounts,
+            maxSlippage        : maxSlippages[pool]
+        }));
     }
 
     /**********************************************************************************************/
