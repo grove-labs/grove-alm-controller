@@ -46,13 +46,10 @@ contract ForeignController is AccessControl {
         bytes32 indexed mintRecipient,
         uint256 usdcAmount
     );
-
     event CentrifugeRecipientSet(uint16 indexed destinationCentrifugeId, bytes32 recipient);
-
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
-
+    event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
-
     event RelayerRemoved(address indexed relayer);
 
     /**********************************************************************************************/
@@ -83,6 +80,8 @@ contract ForeignController is AccessControl {
     IRateLimits public immutable rateLimits;
 
     IERC20 public immutable usdc;
+
+    mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -149,6 +148,14 @@ contract ForeignController is AccessControl {
     {
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
+    }
+
+    function setMaxSlippage(address pool, uint256 maxSlippage)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        maxSlippages[pool] = maxSlippage;
+        emit MaxSlippageSet(pool, maxSlippage);
     }
 
     function setCentrifugeRecipient(uint16 destinationCentrifugeId, bytes32 recipient)
