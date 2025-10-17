@@ -7,7 +7,6 @@ import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
-
 interface ICurvePoolLike is IERC20 {
     function add_liquidity(
         uint256[] memory amounts,
@@ -77,16 +76,16 @@ library CurveLib {
     /**********************************************************************************************/
 
     function swap(SwapCurveParams calldata params) external returns (uint256 amountOut) {
-        require(params.inputIndex != params.outputIndex, "MainnetController/invalid-indices");
+        require(params.inputIndex != params.outputIndex, "CurveLib/invalid-indices");
 
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
 
         ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
 
         uint256 numCoins = curvePool.N_COINS();
         require(
             params.inputIndex < numCoins && params.outputIndex < numCoins,
-            "MainnetController/index-too-high"
+            "CurveLib/index-too-high"
         );
 
         // Normalized to provide 36 decimal precision when multiplied by asset amount
@@ -105,7 +104,7 @@ library CurveLib {
 
         require(
             params.minAmountOut >= minimumMinAmountOut,
-            "MainnetController/min-amount-not-met"
+            "CurveLib/min-amount-not-met"
         );
 
         params.rateLimits.triggerRateLimitDecrease(
@@ -139,13 +138,13 @@ library CurveLib {
     }
 
     function addLiquidity(AddLiquidityParams calldata params) external returns (uint256 shares) {
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
 
         ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
 
         require(
             params.depositAmounts.length == curvePool.N_COINS(),
-            "MainnetController/invalid-deposit-amounts"
+            "CurveLib/invalid-deposit-amounts"
         );
 
         // Normalized to provide 36 decimal precision when multiplied by asset amount
@@ -169,7 +168,7 @@ library CurveLib {
             params.minLpAmount >= valueDeposited
                 * params.maxSlippage
                 / curvePool.get_virtual_price(),
-            "MainnetController/min-amount-not-met"
+            "CurveLib/min-amount-not-met"
         );
 
         // Reduce the rate limit by the aggregated underlying asset value of the deposit (e.g. USD)
@@ -212,13 +211,13 @@ library CurveLib {
         external
         returns (uint256[] memory withdrawnTokens)
     {
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
 
         ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
 
         require(
             params.minWithdrawAmounts.length == curvePool.N_COINS(),
-            "MainnetController/invalid-min-withdraw-amounts"
+            "CurveLib/invalid-min-withdraw-amounts"
         );
 
         // Normalized to provide 36 decimal precision when multiplied by asset amount
@@ -237,7 +236,7 @@ library CurveLib {
                 * curvePool.get_virtual_price()
                 * params.maxSlippage
                 / 1e36,
-            "MainnetController/min-amount-not-met"
+            "CurveLib/min-amount-not-met"
         );
 
         withdrawnTokens = abi.decode(
