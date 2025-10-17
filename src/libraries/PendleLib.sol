@@ -10,11 +10,10 @@ import {
     IPendleMarket,
     IPendleRouter,
     ISY,
+    IYT,
     SwapData,
     TokenOutput
 } from "../interfaces/PendleInterfaces.sol";
-
-import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
@@ -24,6 +23,7 @@ library PendleLib {
         IALMProxy     proxy;
         IRateLimits   rateLimits;
         IPendleMarket pendleMarket;
+        address       pendleRouter;
         bytes32       rateLimitId;
         uint256       pyAmountIn;
         uint256       minAmountOut;
@@ -41,12 +41,7 @@ library PendleLib {
         });
     }
 
-    function redeemPendlePT(RedeemPendlePTParams memory params) internal {
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
-            params.pyAmountIn
-        );
-
+    function redeemPendlePT(RedeemPendlePTParams memory params) external {
         require(params.pendleMarket.isExpired(), "PendleLib/market-not-expired");
         require(params.minAmountOut != 0,        "PendleLib/min-amount-out-not-set");
 
@@ -54,16 +49,21 @@ library PendleLib {
 
         address tokenOut = ISY(sy).yieldToken();
 
+        uint256 exchangeRate  = ISY(sy).exchangeRate();
+        uint256 pyIndexStored = IYT(yt).pyIndexStored();
+
+        uint256 pyIndexCurrent = exchangeRate > pyIndexStored ? exchangeRate : pyIndexStored;
+
         // expected to receive full amount, but the buffer is subtracted
         // to avoid reverts due to potential rounding errors
-        uint256 minTokenOut = params.pyAmountIn * 1e18 / ISY(sy).exchangeRate() - 5;
+        uint256 minTokenOut = params.pyAmountIn * 1e18 / pyIndexCurrent - 5;
 
-        _approve(params.proxy, pt, Ethereum.PENDLE_ROUTER, params.pyAmountIn);
+        _approve(params.proxy, pt, params.pendleRouter, params.pyAmountIn);
 
         uint256 tokenOutAmountBefore = IERC20(tokenOut).balanceOf(address(params.proxy));
 
         params.proxy.doCall(
-            Ethereum.PENDLE_ROUTER,
+            params.pendleRouter,
             abi.encodeCall(
                 IPendleRouter.redeemPyToToken, (
                     address(params.proxy),
@@ -74,9 +74,15 @@ library PendleLib {
             )
         );
 
-        uint256 tokenOutAmountAfter = IERC20(tokenOut).balanceOf(address(params.proxy));
+        uint256 totalTokenOutAmount = IERC20(tokenOut).balanceOf(address(params.proxy)) - tokenOutAmountBefore;
 
-        require(tokenOutAmountAfter >= tokenOutAmountBefore + params.minAmountOut, "PendleLib/min-amount-not-met");
+        require(totalTokenOutAmount >= params.minAmountOut, "PendleLib/min-amount-not-met");
+
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
+            totalTokenOutAmount
+        );
+
     }
 
     function _approve(
