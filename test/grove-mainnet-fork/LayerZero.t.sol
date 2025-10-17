@@ -43,14 +43,14 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     // Plasma OUpgradeable USDT OFT
     address constant USDT0_OFT_PLASMA_ADDRESS = 0x02ca37966753bDdDf11216B73B16C1dE756A7CF9;
     // Plasma USDT0
-    address constant USDT0_PLASMA_ADDRESS = 0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb;
+    address constant USDT0_PLASMA_ADDRESS     = 0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
     /**********************************************************************************************/
 
-    ALMProxy foreignAlmProxy;
-    RateLimits foreignRateLimits;
+    ALMProxy          foreignAlmProxy;
+    RateLimits        foreignRateLimits;
     ForeignController foreignController;
 
     /**********************************************************************************************/
@@ -71,7 +71,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     uint256 USDT0_PLASMA_SUPPLY; // Total supply of USDT0 on Plasma
     uint256 USDT0_MAINNET_BALANCE_BEFORE; // How much USDT is in the mainnet OFT contract before the test
 
-    uint32 constant sourceEndpointId = 30101; // Ethereum EID
+    uint32 constant sourceEndpointId      = 30101; // Ethereum EID
     uint32 constant destinationEndpointId = 30383; // Plasma EID
 
     bytes32 sourceRateLimitKey;
@@ -83,14 +83,21 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         /**
          * Step 1: Set up environment and deploy mocks **
          */
-        setChain("plasma", ChainData({name: "plasma", chainId: 9745, rpcUrl: vm.envString("PLASMA_RPC_URL")}));
+        setChain(
+            "plasma", 
+            ChainData({
+                name: "plasma", 
+                chainId: 9745, 
+                rpcUrl: vm.envString("PLASMA_RPC_URL")
+            })
+        );
 
         destination = getChain("plasma").createSelectFork(_getDestinationBlock());
 
-        usdsPlasma = IERC20(address(new ERC20Mock()));
-        susdsPlasma = IERC20(address(new ERC20Mock()));
-        usdt0Plasma = IERC20(USDT0_PLASMA_ADDRESS);
-        usdt0OftPlasma = IERC20(USDT0_OFT_PLASMA_ADDRESS);
+        usdsPlasma      = IERC20(address(new ERC20Mock()));
+        susdsPlasma     = IERC20(address(new ERC20Mock()));
+        usdt0Plasma     = IERC20(USDT0_PLASMA_ADDRESS);
+        usdt0OftPlasma  = IERC20(USDT0_OFT_PLASMA_ADDRESS);
 
         USDT0_PLASMA_SUPPLY = usdt0Plasma.totalSupply();
 
@@ -99,6 +106,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
          */
         MockRateProvider mockRateProvider = new MockRateProvider();
         mockRateProvider.__setConversionRate(1.25e27);
+
         IRateProviderLike rateProvider = IRateProviderLike(address(mockRateProvider));
 
         deal(address(usdsPlasma), address(this), 1e18); // For seeding PSM during deployment
@@ -123,13 +131,13 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
          * Step 3: Deploy and configure ALM system **
          */
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin: Ethereum.GROVE_PROXY,
-            psm: address(psmPlasma),
-            usdc: address(usdt0Plasma),
-            cctp: address(0xDeadBeef) // unused
+            admin:  Ethereum.GROVE_PROXY,
+            psm:    address(psmPlasma),
+            usdc:   address(usdt0Plasma),
+            cctp:   address(0xDeadBeef) // unused
         });
 
-        foreignAlmProxy = ALMProxy(payable(controllerInst.almProxy));
+        foreignAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
         foreignRateLimits = RateLimits(controllerInst.rateLimits);
         foreignController = ForeignController(controllerInst.controller);
 
@@ -143,15 +151,15 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
             admin: Ethereum.GROVE_PROXY,
-            psm: address(psmPlasma),
-            cctp: address(0xDeadBeef), // unused
-            usdc: address(usdt0Plasma)
+            psm:   address(psmPlasma),
+            cctp:  address(0xDeadBeef), // unused
+            usdc:  address(usdt0Plasma)
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);
 
         mintRecipients[0] = ForeignControllerInit.MintRecipient({
-            domain: CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM,
+            domain:        CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM,
             mintRecipient: bytes32(uint256(uint160(address(almProxy))))
         });
 
@@ -159,7 +167,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             new ForeignControllerInit.LayerZeroRecipient[](1);
         layerZeroRecipients[0] = ForeignControllerInit.LayerZeroRecipient({
             destinationEndpointId: LZForwarder.ENDPOINT_ID_ETHEREUM,
-            recipient: bytes32(uint256(uint160(address(almProxy))))
+            recipient:             bytes32(uint256(uint160(address(almProxy))))
         });
 
         ForeignControllerInit.CentrifugeRecipient[] memory centrifugeRecipients =
@@ -173,8 +181,9 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         destinationRateLimitKey =
             keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), usdt0OftPlasma, sourceEndpointId));
+
         uint256 usdt0PlasmaMaxAmount = 5_000_000e6;
-        uint256 usdt0PlasmaSlope = uint256(1_000_000e6) / 4 hours;
+        uint256 usdt0PlasmaSlope     = uint256(1_000_000e6) / 4 hours;
 
         foreignRateLimits.setRateLimitData(destinationRateLimitKey, usdt0PlasmaMaxAmount, usdt0PlasmaSlope);
         vm.stopPrank();
@@ -195,7 +204,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         sourceRateLimitKey =
             keccak256(abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), usdtOft, destinationEndpointId));
         uint256 usdtMaxAmount = 5_000_000e6;
-        uint256 usdtSlope = uint256(1_000_000e6) / 4 hours;
+        uint256 usdtSlope     = uint256(1_000_000e6) / 4 hours;
 
         rateLimits.setRateLimitData(sourceRateLimitKey, usdtMaxAmount, usdtSlope);
 
@@ -223,18 +232,18 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     }
 
     function _labelAddresses() internal {
-        vm.label(address(usdsPlasma), "usdsPlasma");
-        vm.label(address(susdsPlasma), "susdsPlasma");
-        vm.label(address(usdt0Plasma), "usdt0Plasma");
-        vm.label(address(usdt0OftPlasma), "usdt0OftPlasma");
-        vm.label(address(usdtOft), "usdtOft");
-        vm.label(address(usdt), "usdt");
+        vm.label(address(usdsPlasma),               "usdsPlasma");
+        vm.label(address(susdsPlasma),             "susdsPlasma");
+        vm.label(address(usdt0Plasma),             "usdt0Plasma");
+        vm.label(address(usdt0OftPlasma),       "usdt0OftPlasma");
+        vm.label(address(usdtOft),                     "usdtOft");
+        vm.label(address(usdt),                           "usdt");
         vm.label(address(mainnetController), "mainnetController");
-        vm.label(address(foreignAlmProxy), "foreignAlmProxy");
+        vm.label(address(foreignAlmProxy),     "foreignAlmProxy");
         vm.label(address(foreignRateLimits), "foreignRateLimits");
         vm.label(address(foreignController), "foreignController");
-        vm.label(address(rateLimits), "rateLimits");
-        vm.label(address(almProxy), "almProxy");
+        vm.label(address(rateLimits),               "rateLimits");
+        vm.label(address(almProxy),                   "almProxy");
     }
 }
 
