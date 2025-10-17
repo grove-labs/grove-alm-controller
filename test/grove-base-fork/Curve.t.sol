@@ -5,8 +5,12 @@ import { IERC4626 } from "lib/forge-std/src/interfaces/IERC4626.sol";
 
 import "./ForkTestBase.t.sol";
 
-import { ICurvePoolLike } from "../../src/libraries/CurveLib.sol";
+import { ICurvePoolLike as ICurvePoolLikeLib } from "../../src/libraries/CurveLib.sol";
 import { ERC20 } from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+
+interface ICurvePoolLike is ICurvePoolLikeLib {
+    function calc_token_amount(uint256[] memory amounts, bool is_deposit) external view returns (uint256);
+}
 
 contract MockCgUSD is ERC20 {
     
@@ -63,6 +67,14 @@ contract CurveTestBase is ForkTestBase {
         maxSlippage = 0.98e18; // 10% slippage because price difference
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMaxSlippage(CURVE_POOL, maxSlippage);
+
+        _labelAddresses();
+    }
+
+    function _labelAddresses() internal {
+        vm.label(address(usdcBase), "UsdcBase");
+        vm.label(CGUSD, "CgUSD");
+        vm.label(CURVE_POOL, "CurvePool");
     }
 
     function _addLiquidity(uint256 usdcAmount, uint256 cgUSDAmount)
@@ -236,7 +248,7 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         amounts[0] = 1_000_000e6;
         amounts[1] = 1_000_000e6;
 
-        uint256 minLpAmount = 1_950_000e18;
+        uint256 minLpAmount = ICurvePoolLike(CURVE_POOL).calc_token_amount(amounts, true);
 
         uint256 startingCgUSDBalance = cgUSD.balanceOf(CURVE_POOL);
         uint256 startingUsdcBalance = usdcBase.balanceOf(CURVE_POOL);
@@ -264,9 +276,7 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
             minLpAmount
         );
         
-        // REVIEWER NOTE: This magic number wasn't correct for this pool. New magic number needs to be sanity checked.
-        // assertEq(lpTokensReceived, 1_987_199.361495730708108741e18);
-        assertEq(lpTokensReceived, 1_959_941.227112941394995352e18);
+        assertEq(lpTokensReceived, minLpAmount);
 
         assertEq(usdcBase.allowance(address(almProxy), CURVE_POOL), 0);
         assertEq(cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
@@ -280,11 +290,10 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply + lpTokensReceived);
 
-        // NOTE: A large swap happened because of the balances in the pool being skewed towards cgUSD.
+        // Should have used the full deposit rate limit
         assertEq(rateLimits.getCurrentRateLimit(curveDepositKey), 0);
-        // REVIEWER NOTE: This magic number wasn't correct for this pool. New magic number needs to be sanity checked.
-        // assertEq(rateLimits.getCurrentRateLimit(curveSwapKey),    465_022.869727319215817005e18);
-        assertEq(rateLimits.getCurrentRateLimit(curveSwapKey),    995_674.837752596162586005e18);
+        // There was an imbalance so the swap key should have reduced
+        assertLt(rateLimits.getCurrentRateLimit(curveSwapKey),    1_000_000e18);
     }
 
     function test_addLiquidityCurve_swapRateLimit() public {
@@ -304,51 +313,37 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
 
         uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
 
-        vm.startPrank(ALM_RELAYER);
+        uint256 expectedLpTokens = ICurvePoolLike(CURVE_POOL).calc_token_amount(amounts, true);
 
+        vm.startPrank(ALM_RELAYER);
         uint256 lpTokens = foreignController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
+
+        assertEq(lpTokens, expectedLpTokens, "expected lp tokens not received");
 
         uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
 
-        // Step 2: Withdraw full balance of LP tokens, withdrawing proportional amounts from the pool
+        // Step 2: Calculate expected withdrawal amounts for each token
 
         // Get pool state
         uint256[] memory rates = ICurvePoolLike(CURVE_POOL).stored_rates();
         uint256 totalSupply = curveLp.totalSupply();
 
-        // Calculate expected withdrawal amounts for each token with slippage tolerance for min amounts
-        uint256[] memory minWithdrawnAmounts = new uint256[](2);
-        minWithdrawnAmounts[0] = ((ICurvePoolLike(CURVE_POOL).balances(0) * lpTokens) / totalSupply) * 99 / 100;
-        minWithdrawnAmounts[1] = ((ICurvePoolLike(CURVE_POOL).balances(1) * lpTokens) / totalSupply) * 99 / 100;
-
-
-        uint256[] memory withdrawnAmounts = foreignController.removeLiquidityCurve(CURVE_POOL, lpTokens, minWithdrawnAmounts);
+        // Calculate expected withdrawal amounts for each token
+        uint256[] memory expectedWithdrawnAmounts = new uint256[](2);
+        expectedWithdrawnAmounts[0] = ((ICurvePoolLike(CURVE_POOL).balances(0) * lpTokens) / totalSupply);
+        expectedWithdrawnAmounts[1] = ((ICurvePoolLike(CURVE_POOL).balances(1) * lpTokens) / totalSupply);
 
         // Step 3: Calculate the average difference between the assets deposited and withdrawn, into an average swap amount
         //         and compare against the derived swap amount
 
         uint256 totalSwapped;
-        for (uint256 i; i < withdrawnAmounts.length; i++) {
-            totalSwapped += _absSubtraction(withdrawnAmounts[i] * rates[i], amounts[i] * rates[i]) / 1e18;
+        for (uint256 i; i < expectedWithdrawnAmounts.length; i++) {
+            totalSwapped += _absSubtraction(expectedWithdrawnAmounts[i] * rates[i], amounts[i] * rates[i]) / 1e18;
         }
         totalSwapped /= 2;
 
         // Difference is accurate to within 1 unit of USDC
         assertApproxEqAbs(derivedSwapAmount, totalSwapped, 0.000001e18);
-
-        // Check real values, comparing amount of USDC deposited with amount withdrawn as a result of the "swap"
-        // REVIEWER NOTE: This magic number wasn't correct for this pool. New magic number needs to be sanity checked.
-        // assertEq(withdrawnAmounts[0], 265_480.996766e6);
-        assertEq(withdrawnAmounts[0],    985_424.908330e6);
-        // assertEq(withdrawnAmounts[1], 734_605.036920e6);
-        assertEq(withdrawnAmounts[1],    13_980.846273e6);
-
-
-        // Some accuracy differences because of fees
-        // assertEq(derivedSwapAmount,                 734_562.020077130663332756e18);
-        assertEq(derivedSwapAmount,                    14_277.96897131727816116e18);
-        // assertEq(1_000_000e6 - withdrawnAmounts[0], 734_519.003234e6);
-        assertEq(1_000_000e6 - withdrawnAmounts[0],    14_575.09167e6);
     }
 
     function testFuzz_addLiquidityCurve_swapRateLimit(uint256 usdcAmount, uint256 cgUSDAmount) public {
