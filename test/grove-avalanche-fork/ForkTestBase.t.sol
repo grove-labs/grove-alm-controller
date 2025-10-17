@@ -109,10 +109,11 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin : GROVE_EXECUTOR,
-            psm   : address(psmAvalanche),
-            usdc  : USDC_AVALANCHE,
-            cctp  : CCTP_TOKEN_MESSENGER
+            admin        : GROVE_EXECUTOR,
+            psm          : address(psmAvalanche),
+            usdc         : USDC_AVALANCHE,
+            cctp         : CCTP_TOKEN_MESSENGER,
+            pendleRouter : address(0) // No Pendle Router on Avalanche
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));

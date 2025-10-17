@@ -309,10 +309,11 @@ contract FullStagingDeploy is Script {
         // Step 1: Deploy ALM controller
 
         controllerInst = ForeignControllerDeploy.deployFull({
-            admin : domain.admin,
-            psm   : domain.input.readAddress(".psm"),
-            usdc  : domain.input.readAddress(".usdc"),
-            cctp  : domain.input.readAddress(".cctpTokenMessenger")
+            admin        : domain.admin,
+            psm          : domain.input.readAddress(".psm"),
+            usdc         : domain.input.readAddress(".usdc"),
+            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
+            pendleRouter : domain.input.readAddress(".pendleRouter")
         });
 
         // Step 2: Initialize ALM system
