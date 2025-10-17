@@ -115,7 +115,6 @@ contract ForkTestBase is DssTest {
     address USDS_JOIN;
 
     DssInstance dss;  // Mainnet DSS
-
     /**********************************************************************************************/
     /*** ALM system and allocation system deployments                                           ***/
     /**********************************************************************************************/

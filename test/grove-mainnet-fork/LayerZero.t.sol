@@ -10,6 +10,7 @@ import { ERC20Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC20Moc
 import { PSM3Deploy }       from "spark-psm/deploy/PSM3Deploy.sol";
 import { IPSM3 }            from "spark-psm/src/PSM3.sol";
 import { MockRateProvider } from "spark-psm/test/mocks/MockRateProvider.sol";
+import { IRateProviderLike } from "spark-psm/src/interfaces/IRateProviderLike.sol";
 
 // import { CCTPBridgeTesting } from "xchain-helpers/testing/bridges/CCTPBridgeTesting.sol";
 // import { CCTPForwarder }     from "xchain-helpers/forwarders/CCTPForwarder.sol";
@@ -32,6 +33,7 @@ import "./ForkTestBase.t.sol";
 // TODO: Figure out finalized structure for this repo/testing structure wise
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     using DomainHelpers for *;
+    using LZBridgeTesting for Bridge;
 
     /**********************************************************************************************/
     /*** Constants/state variables                                                              ***/
@@ -46,12 +48,12 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     // TODO revisit
     address constant CCTP_MESSENGER_ARB = address(0xDeadBeef);
     address constant SPARK_EXECUTOR     = address(0xDeadBeef);
-    address constant SSR_ORACLE         = address(0xDeadBeef);
+    address constant SSR_ORACLE         = address(0);
     
     // Plasma OUpgradeable USDT OFT
-    address constant USDT_OFT           = 0x02ca37966753bDdDf11216B73B16C1dE756A7CF9;
+    address constant USDT0_OFT_PLASMA_ADDRESS           = 0x02ca37966753bDdDf11216B73B16C1dE756A7CF9;
     // Plasma USDT0
-    address constant USDT0              = 0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb;
+    address constant USDT0_PLASMA_ADDRESS              = 0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -64,30 +66,52 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     /**********************************************************************************************/
     /*** Casted addresses for testing                                                           ***/
     /**********************************************************************************************/
+
+    // Mainnet LayerZero OFTs
+    IERC20 usdtOft;
+
+
     IERC20 usdsPlasma;
     IERC20 susdsPlasma;
     IERC20 usdt0Plasma;
+    IERC20 usdt0OftPlasma;
+    
     IPSM3 psmPlasma;
 
     uint256 USDT0_PLASMA_SUPPLY;
 
+    uint32 constant sourceEndpointId = 30101;  // Ethereum EID
     uint32 constant destinationEndpointId = 30383;  // Plasma EID
+
+    MockRateProvider mockRateProvider;
+    IRateProviderLike rateProvider;
+    
 
     function setUp() public override virtual {
         super.setUp();
 
         /*** Step 1: Set up environment and deploy mocks ***/
 
-        destination = getChain(1).createSelectFork(23591129);  // Oct 16, 2025
+        // TODO: replace with env var
+        setChain("plasma", ChainData({name: "plasma", chainId: 9745, rpcUrl: "https://rpc.plasma.to"}));
+
+        destination = getChain("plasma").createSelectFork();
 
         usdsPlasma  = IERC20(address(new ERC20Mock()));
         susdsPlasma = IERC20(address(new ERC20Mock()));
-        usdt0Plasma = IERC20(USDT0);
+        usdt0Plasma = IERC20(USDT0_PLASMA_ADDRESS);
+        usdt0OftPlasma = IERC20(USDT0_OFT_PLASMA_ADDRESS);
 
         /*** Step 2: Deploy and configure PSM with a pocket ***/
 
+        mockRateProvider = new MockRateProvider();
+        mockRateProvider.__setConversionRate(1.25e27);
+        rateProvider = IRateProviderLike(address(mockRateProvider));
+
+        deal(address(usdsPlasma), address(this), 1e18);  // For seeding PSM during deployment
+
         psmPlasma = IPSM3(PSM3Deploy.deploy(
-            SPARK_EXECUTOR, address(usdt0Plasma), address(usdsPlasma), address(susdsPlasma), SSR_ORACLE
+            SPARK_EXECUTOR, address(usdt0Plasma), address(usdsPlasma), address(susdsPlasma), address(rateProvider)
         ));
 
         vm.prank(SPARK_EXECUTOR);
@@ -108,6 +132,9 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         foreignAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
         foreignRateLimits = RateLimits(controllerInst.rateLimits);
         foreignController = ForeignController(controllerInst.controller);
+
+        deal(address(foreignController), 100 ether);
+        deal(address(mainnetController), 100 ether);
 
         address[] memory relayers = new address[](1);
         relayers[0] = relayer;
@@ -132,7 +159,11 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             mintRecipient : bytes32(uint256(uint160(address(almProxy))))
         });
 
-        ForeignControllerInit.LayerZeroRecipient[] memory layerZeroRecipients = new ForeignControllerInit.LayerZeroRecipient[](0);
+        ForeignControllerInit.LayerZeroRecipient[] memory layerZeroRecipients = new ForeignControllerInit.LayerZeroRecipient[](1);
+        layerZeroRecipients[0] = ForeignControllerInit.LayerZeroRecipient({
+            destinationEndpointId: LZForwarder.ENDPOINT_ID_ETHEREUM,
+            recipient: bytes32(uint256(uint160(address(almProxy))))
+        });
 
         ForeignControllerInit.CentrifugeRecipient[] memory centrifugeRecipients = new ForeignControllerInit.CentrifugeRecipient[](0);
 
@@ -149,9 +180,67 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             centrifugeRecipients
         );
 
+
+        uint256 usdt0PlasmaMaxAmount = 5_000_000e6;
+        uint256 usdt0PlasmaSlope     = uint256(1_000_000e6) / 4 hours;
+        foreignRateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                foreignController.LIMIT_LAYERZERO_TRANSFER(),
+                usdt0OftPlasma,
+                sourceEndpointId
+            )),
+            usdt0PlasmaMaxAmount,
+            usdt0PlasmaSlope
+        );
+
         vm.stopPrank();
+
+        /*** Step 4: Set up mainnet ***/
+        source.selectFork();
+
+        usdtOft = IERC20(0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee);
+
+        // Gas cost for LZ
+        deal(address(mainnetController), 1 ether);
+
+        bridge = LZBridgeTesting.createLZBridge(source, destination);
+
+        vm.startPrank(Ethereum.GROVE_PROXY);
+        uint256 usdtMaxAmount = 5_000_000e6;
+        uint256 usdtSlope     = uint256(1_000_000e6) / 4 hours;
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(
+                mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+                usdtOft,
+                destinationEndpointId
+            )),
+            usdtMaxAmount,
+            usdtSlope
+        );
+
+        // Add set 
+        mainnetController.setLayerZeroRecipient(destinationEndpointId, bytes32(uint256(uint160(address(foreignAlmProxy)))));
+
+        vm.stopPrank();
+    
+        /*** Step 5: Label addresses ***/
+        vm.label(address(usdsPlasma), "usdsPlasma");
+        vm.label(address(susdsPlasma), "susdsPlasma");
+        vm.label(address(usdt0Plasma), "usdt0Plasma");
+        vm.label(address(usdt0OftPlasma), "usdt0OftPlasma");
+        vm.label(address(usdtOft), "usdtOft");
+        vm.label(address(usdt), "usdt");
+        vm.label(address(mainnetController), "mainnetController");
+        vm.label(address(foreignAlmProxy), "foreignAlmProxy");
+        vm.label(address(foreignRateLimits), "foreignRateLimits");
+        vm.label(address(foreignController), "foreignController");
+        vm.label(address(rateLimits), "rateLimits");
+        vm.label(address(almProxy), "almProxy");
     }
 
+    function _getBlock() internal pure override returns (uint256) {
+        return 23593452;  // Oct-16-2025
+    }
 }
 
 contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
@@ -179,22 +268,20 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
     function test_transferUSDTToLZ_sourceToDestination() external {
         deal(address(usdt), address(almProxy), 1e6);
 
+        uint256 oftBalanceBefore = IERC20(usdt).balanceOf(address(usdtOft));
         assertEq(usdt.balanceOf(address(almProxy)),          1e6);
         assertEq(usdt.balanceOf(address(mainnetController)), 0);
-        assertEq(usdt.totalSupply(),                         USDT_SUPPLY);
+        assertEq(IERC20(usdt).balanceOf(address(usdtOft)),           oftBalanceBefore);
 
-        // assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
 
         // _expectEthereumCCTPEmit(114_803, 1e6);
 
         vm.prank(relayer);
-        mainnetController.transferTokenLayerZero(address(usdt), 1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
+        mainnetController.transferTokenLayerZero(address(usdtOft), 1e6, destinationEndpointId);
 
-        assertEq(usdc.balanceOf(address(almProxy)),          0);
-        assertEq(usdc.balanceOf(address(mainnetController)), 0);
-        assertEq(usdc.totalSupply(),                         USDT_SUPPLY - 1e6);
-
-        assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
+        assertEq(usdt.balanceOf(address(almProxy)),          0,                 "ALM Proxy balance should be 0");
+        assertEq(usdt.balanceOf(address(mainnetController)), 0,                 "Mainnet Controller balance should be 0");
+        assertEq(IERC20(usdt).balanceOf(address(usdtOft)),           oftBalanceBefore + 1e6, "OFT balance should be increased by 1e6");
 
         destination.selectFork();
 
@@ -202,11 +289,11 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         assertEq(usdt0Plasma.balanceOf(address(foreignController)), 0);
         assertEq(usdt0Plasma.totalSupply(),                         USDT0_PLASMA_SUPPLY);
 
-        bridge.relayMessagesToDestination(true, address(almProxy), address(foreignAlmProxy));
+        bridge.relayMessagesToDestination(true, address(usdtOft), address(usdt0OftPlasma));
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)),   1e6);
-        assertEq(usdt0Plasma.balanceOf(address(foreignController)), 0);
-        assertEq(usdt0Plasma.totalSupply(),                         USDT0_PLASMA_SUPPLY + 1e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)),   1e6, "Foreign ALM Proxy balance should be 1e6 after message relay");
+        assertEq(usdt0Plasma.balanceOf(address(foreignController)), 0, "Foreign Controller balance should be 0 after message relay");
+        assertEq(usdt0Plasma.totalSupply(),                         USDT0_PLASMA_SUPPLY + 1e6, "Total supply should be increased by 1e6 after message relay");
     }
 
     // function test_transferUSDTToLZ_sourceToDestination_bigTransfer() external {
@@ -280,40 +367,40 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
     //     vm.stopPrank();
     // }
 
-    // function test_transferUSDTToLZ_destinationToSource() external {
-    //     destination.selectFork();
+    function test_transferUSDTToLZ_destinationToSource() external {
+        destination.selectFork();
 
-    //     deal(address(usdcBase), address(foreignAlmProxy), 1e6);
+        deal(address(usdt0Plasma), address(foreignAlmProxy), 1e6);
 
-    //     assertEq(usdcBase.balanceOf(address(foreignAlmProxy)),   1e6);
-    //     assertEq(usdcBase.balanceOf(address(foreignController)), 0);
-    //     assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)),   1e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignController)), 0);
+        // assertEq(usdt0Plasma.totalSupply(),                         USDT0_PLASMA_SUPPLY);
 
-    //     assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        // assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
-    //     // _expectBaseCCTPEmit(296_114, 1e6);
+        // _expectBaseCCTPEmit(296_114, 1e6);
 
-    //     vm.prank(relayer);
-    //     foreignController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM);
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 1e6, sourceEndpointId);
 
-    //     assertEq(usdcBase.balanceOf(address(foreignAlmProxy)),   0);
-    //     assertEq(usdcBase.balanceOf(address(foreignController)), 0);
-    //     assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY - 1e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)),   0);
+        assertEq(usdt0Plasma.balanceOf(address(foreignController)), 0);
+        // assertEq(usdt0Plasma.totalSupply(),                         USDT0_PLASMA_SUPPLY - 1e6);
 
-    //     assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        // assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
-    //     source.selectFork();
+        source.selectFork();
 
-    //     assertEq(usdc.balanceOf(address(almProxy)),          0);
-    //     assertEq(usdc.balanceOf(address(mainnetController)), 0);
-    //     assertEq(usdc.totalSupply(),                         USDT_SUPPLY);
+        assertEq(usdt.balanceOf(address(almProxy)),          0);
+        assertEq(usdt.balanceOf(address(mainnetController)), 0);
+        // assertEq(usdt.totalSupply(),                         USDT_SUPPLY);
 
-    //     bridge.relayMessagesToSource(true);
+        bridge.relayMessagesToSource(true, address(usdt0OftPlasma), address(usdtOft));
 
-    //     assertEq(usdc.balanceOf(address(almProxy)),          1e6);
-    //     assertEq(usdc.balanceOf(address(mainnetController)), 0);
-    //     assertEq(usdc.totalSupply(),                         USDT_SUPPLY + 1e6);
-    // }
+        assertEq(usdt.balanceOf(address(almProxy)),          1e6);
+        assertEq(usdt.balanceOf(address(mainnetController)), 0);
+        // assertEq(usdc.totalSupply(),                         USDT_SUPPLY + 1e6);
+    }
 
     // function test_transferUSDTToLZ_destinationToSource_bigTransfer() external {
     //     destination.selectFork();
@@ -437,5 +524,6 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
     //         amount
     //     );
     // }
+    
 
 }
