@@ -50,13 +50,6 @@ struct OFTReceipt {
  }
 
 interface ILayerZero {
-    event OFTSent(
-        bytes32 indexed guid,
-        uint32 dstEid,
-        address indexed fromAddress,
-        uint256 amountSentLD,
-        uint256 amountReceivedLD
-    );
 
     function quoteOFT(
         SendParam calldata _sendParam

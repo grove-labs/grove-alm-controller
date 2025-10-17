@@ -115,6 +115,7 @@ contract ForkTestBase is DssTest {
     address USDS_JOIN;
 
     DssInstance dss;  // Mainnet DSS
+
     /**********************************************************************************************/
     /*** ALM system and allocation system deployments                                           ***/
     /**********************************************************************************************/
@@ -144,7 +145,6 @@ contract ForkTestBase is DssTest {
     uint256 USDC_SUPPLY;
     uint256 USDS_SUPPLY;
     uint256 USDS_BAL_SUSDS;
-    uint256 USDT_SUPPLY;
     uint256 VAT_DAI_USDS_JOIN;
 
     /**********************************************************************************************/
@@ -167,7 +167,6 @@ contract ForkTestBase is DssTest {
         USDC_BAL_PSM      = usdc.balanceOf(POCKET);
         USDC_SUPPLY       = usdc.totalSupply();
         USDS_SUPPLY       = usds.totalSupply();
-        USDT_SUPPLY       = usdt.totalSupply();
         USDS_BAL_SUSDS    = usds.balanceOf(address(susds));
         VAT_DAI_USDS_JOIN = dss.vat.dai(USDS_JOIN);
 
