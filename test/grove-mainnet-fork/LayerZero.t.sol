@@ -25,58 +25,37 @@ import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 
 import "./ForkTestBase.t.sol";
 
-// TODO: Figure out finalized structure for this repo/testing structure wise
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     using DomainHelpers for *;
     using LZBridgeTesting for Bridge;
 
-    /**
-     *
-     */
-    /**
-     * Constants/state variables                                                              **
-     */
-    /**
-     *
-     */
+    /**********************************************************************************************/
+    /*** Constants/state variables                                                              ***/
+    /**********************************************************************************************/
+
     address pocket = makeAddr("pocket");
 
-    /**
-     *
-     */
-    /**
-     * Plasma addresses                                                                     **
-     */
-    /**
-     *
-     */
+
+    /**********************************************************************************************/
+    /*** Plasma addresses                                                                         ***/
+    /**********************************************************************************************/
+
     // Plasma OUpgradeable USDT OFT
     address constant USDT0_OFT_PLASMA_ADDRESS = 0x02ca37966753bDdDf11216B73B16C1dE756A7CF9;
     // Plasma USDT0
     address constant USDT0_PLASMA_ADDRESS = 0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb;
 
-    /**
-     *
-     */
-    /**
-     * ALM system deployments                                                                 **
-     */
-    /**
-     *
-     */
+    /**********************************************************************************************/
+    /*** ALM system deployments                                                                 ***/
+    /**********************************************************************************************/
+
     ALMProxy foreignAlmProxy;
     RateLimits foreignRateLimits;
     ForeignController foreignController;
 
-    /**
-     *
-     */
-    /**
-     * Casted addresses for testing                                                           **
-     */
-    /**
-     *
-     */
+    /**********************************************************************************************/
+    /*** Casted addresses for testing                                                           ***/
+    /**********************************************************************************************/
 
     // Mainnet OFTs
     IERC20 usdtOft;
@@ -568,31 +547,31 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
 
         vm.startPrank(relayer);
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 9_000_000e6);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 5_000_000e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 9_000_000e6, "Foreign ALM Proxy balance should be 9_000_000e6 before transfer");
+        assertEq(foreignRateLimits.getCurrentRateLimit(key), 5_000_000e6, "Rate limit should be 5_000_000e6 before transfer");
 
         foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 2_000_000e6, sourceEndpointId);
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 7_000_000e6);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 3_000_000e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 7_000_000e6, "Foreign ALM Proxy balance should be 7_000_000e6 after transfer");
+        assertEq(foreignRateLimits.getCurrentRateLimit(key), 3_000_000e6, "Rate limit should be 3_000_000e6 after transfer");
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 3_000_001e6, sourceEndpointId);
 
         foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 3_000_000e6, sourceEndpointId);
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6, "Foreign ALM Proxy balance should be 4_000_000e6 after transfer");
+        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
 
         skip(4 hours);
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 999_999.9936e6);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6, "Foreign ALM Proxy balance should be 4_000_000e6 after skipping");
+        assertEq(foreignRateLimits.getCurrentRateLimit(key), 999_999.9936e6, "Rate limit should be 999_999.9936e6 after skipping");
 
         foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 999_999.9936e6, sourceEndpointId);
 
-        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 3_000_000.0064e6);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0);
+        assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 3_000_000.0064e6, "Foreign ALM Proxy balance should be 3_000_000.0064e6 after transfer");
+        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
 
         vm.stopPrank();
     }
