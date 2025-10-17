@@ -243,10 +243,11 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin : Base.SPARK_EXECUTOR,
-            psm   : address(psmBase),
-            cctp  : Base.CCTP_TOKEN_MESSENGER,
-            usdc  : address(usdcBase)
+            admin        : Base.SPARK_EXECUTOR,
+            psm          : address(psmBase),
+            cctp         : Base.CCTP_TOKEN_MESSENGER,
+            usdc         : address(usdcBase),
+            pendleRouter : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });

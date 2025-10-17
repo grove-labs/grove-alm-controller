@@ -293,10 +293,11 @@ contract ArbitrumChainLayerZeroTestBase is ForkTestBase {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin : SPARK_EXECUTOR,
-            psm   : address(psmArb),
-            cctp  : CCTP_MESSENGER_ARB,
-            usdc  : address(usdcArb)
+            admin        : SPARK_EXECUTOR,
+            psm          : address(psmArb),
+            cctp         : CCTP_MESSENGER_ARB,
+            usdc         : address(usdcArb),
+            pendleRouter : PENDLE_ROUTER_ARB
             // susds : address(susdsArb),
             // usds  : address(usdsArb)
         });

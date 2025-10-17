@@ -87,6 +87,7 @@ contract ForeignController is AccessControl {
     IRateLimits public immutable rateLimits;
 
     IERC20 public immutable usdc;
+
     address public immutable pendleRouter;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
