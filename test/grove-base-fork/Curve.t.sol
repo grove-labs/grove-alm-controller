@@ -53,6 +53,20 @@ contract CurveTestBase is ForkTestBase {
         // Preserve the balance of the CGUSD token in the pool
         deal(address(cgUSD), CURVE_POOL, curveCGUSDBalance);
 
+        if (curveCGUSDBalance < 100_000_000e6 || usdcBase.balanceOf(CURVE_POOL) < 100_000_000e6) {
+            // boost liquidity to help later tests
+            uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 100_000_000e6;
+            amounts[1] = 100_000_000e6;
+            
+            deal(address(usdcBase), address(this), amounts[0]);
+            deal(address(cgUSD), address(this), amounts[1]);
+
+            usdcBase.approve(CURVE_POOL, amounts[0]);
+            cgUSD.approve(CURVE_POOL, amounts[1]);
+            ICurvePoolLike(CURVE_POOL).add_liquidity(amounts, 1e18, address(this));
+        }
+
         curveDepositKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
         curveSwapKey     = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
         curveWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
@@ -371,7 +385,6 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
 
         vm.startPrank(ALM_RELAYER);
-
         uint256 lpTokens = foreignController.addLiquidityCurve(CURVE_POOL, amounts, 1e18);
 
         uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
