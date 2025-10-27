@@ -651,9 +651,30 @@ contract MainnetControllerRemoveLiquidityUniswapV3FailureTests is UniswapV3TestB
         );
         vm.stopPrank();
     }
+
+    function test_removeLiquidityUniswapV3_minAmountNotMet_dueToStrictSlippage() public {
+        (uint256 tokenId, uint128 liquidity,,) = _mintPosition(1_000_000e6, 1_000_000e6);
+
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_POOL, 1.01e18);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("MainnetController/min-amount-not-met");
+        mainnetController.removeLiquidityUniswapV3(
+            UNISWAP_V3_POOL,
+            tokenId,
+            liquidity,
+            0,
+            0,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
 }
 
 contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestBase {
+
+    uint256 internal constant RATE_LIMIT_TOLERANCE = 2_000_000_000_000;  // accounts for rounding in 6-decimal tokens
 
     function _mintPosition(uint256 amount0Desired, uint256 amount1Desired)
         internal
@@ -697,7 +718,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestB
         assertApproxEqAbs(
             removeLimitBefore - removeLimitAfter,
             normalizedMintedValue,
-            1,
+            RATE_LIMIT_TOLERANCE,
             "withdraw limit should decrease by normalized minted value"
         );
 
@@ -757,7 +778,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestB
         assertApproxEqAbs(
             removeLimitBefore - removeLimitAfter,
             expectedDecrease,
-            10,
+            RATE_LIMIT_TOLERANCE,
             "withdraw limit decrease should scale with withdrawn liquidity"
         );
 
@@ -767,6 +788,27 @@ contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestB
             1,
             "remaining liquidity should reflect partial withdrawal"
         );
+    }
+
+    function test_removeLiquidityUniswapV3_respectsMinAmounts() public {
+        uint256 amount0Desired = 1_000_000e6;
+        uint256 amount1Desired = 1_000_000e6;
+
+        (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
+            = _mintPosition(amount0Desired, amount1Desired);
+
+        uint256 amount0Min = amount0Used > 0 ? amount0Used - 1 : 0;
+        uint256 amount1Min = amount1Used > 0 ? amount1Used - 1 : 0;
+
+        (uint256 amount0Collected, uint256 amount1Collected) = _removeLiquidity(
+            tokenId,
+            liquidity,
+            amount0Min,
+            amount1Min
+        );
+
+        assertGe(amount0Collected, amount0Min, "collected token0 should satisfy minimum");
+        assertGe(amount1Collected, amount1Min, "collected token1 should satisfy minimum");
     }
 
     function test_removeLiquidityUniswapV3_singleSidedToken0Range() public {
@@ -811,7 +853,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestB
         assertApproxEqAbs(
             removeLimitBefore - removeLimitAfter,
             normalizedMintedValue,
-            1,
+            RATE_LIMIT_TOLERANCE,
             "withdraw limit should decrease by normalized minted value"
         );
 
