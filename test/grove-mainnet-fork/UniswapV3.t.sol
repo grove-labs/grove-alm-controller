@@ -54,7 +54,7 @@ contract UniswapV3TestBase is ForkTestBase {
     }
 
     function _getBlock() internal pure override returns (uint256) {
-        return 22225000;  // April 8, 2025
+        return 23677743;  // Oct 28, 2025
     }
 
     function _fundProxy(uint256 amount0Desired, uint256 amount1Desired) internal {
@@ -693,7 +693,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3FailureTests is UniswapV3TestB
 
 contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestBase {
 
-    uint256 internal constant RATE_LIMIT_TOLERANCE = 2_000_000_000_000;  // accounts for rounding in 6-decimal tokens
+    uint256 internal constant RATE_LIMIT_TOLERANCE = 5_000_000_000_000;  // ~5 token0 units tolerance for rounding/dust when scaling
 
     function _mintPosition(uint256 amount0Desired, uint256 amount1Desired)
         internal

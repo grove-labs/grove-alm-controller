@@ -28,6 +28,8 @@ import "./interfaces/ILayerZero.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
+import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
+
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
 
 interface IATokenWithPool is IAToken {
@@ -58,6 +60,13 @@ contract ForeignController is AccessControl {
 
     event RelayerRemoved(address indexed relayer);
 
+    event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+
+    event UniswapV3RouterSet(address indexed router);
+
+    event UniswapV3PositionManagerSet(address indexed positionManager);
+
+
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
@@ -78,6 +87,9 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
     bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
@@ -89,6 +101,14 @@ contract ForeignController is AccessControl {
     IERC20 public immutable usdc;
 
     address public immutable pendleRouter;
+
+    mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
+
+      // Uniswap V3 router used for swaps
+    address public uniswapV3Router;
+
+    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    address public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -157,6 +177,24 @@ contract ForeignController is AccessControl {
     {
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
+    }
+
+    function setMaxSlippage(address pool, uint256 maxSlippage) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        maxSlippages[pool] = maxSlippage;
+        emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+    function setUniswapV3Router(address router) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        uniswapV3Router = router;
+        emit UniswapV3RouterSet(router);
+    }
+
+    function setUniswapV3PositionManager(address positionManager) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        uniswapV3PositionManager = positionManager;
+        emit UniswapV3PositionManagerSet(positionManager);
     }
 
     function setCentrifugeRecipient(uint16 destinationCentrifugeId, bytes32 recipient)
@@ -645,6 +683,98 @@ contract ForeignController is AccessControl {
             pendleRouter : pendleRouter,
             pyAmountIn   : pyAmountIn,
             minAmountOut : minAmountOut
+        }));
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer UniswapV3 functions                                                            ***/
+    /**********************************************************************************************/
+    function swapUniswapV3(
+        address pool,
+        address tokenIn,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        uint256 deadline
+    )
+        external returns (uint256 amountOut)
+    {
+        _checkRole(RELAYER);
+        require(uniswapV3Router != address(0), "ForeignController/router-not-set");
+
+        amountOut = UniswapV3Lib.swap(UniswapV3Lib.SwapParams({
+            proxy             : proxy,
+            rateLimits        : rateLimits,
+            router            : uniswapV3Router,
+            pool              : pool,
+            rateLimitId       : LIMIT_UNISWAP_V3_SWAP,
+            tokenIn           : tokenIn,
+            amountIn          : amountIn,
+            minAmountOut      : minAmountOut,
+            maxSlippage       : maxSlippages[pool],
+            deadline          : deadline
+        }));
+    }
+
+    function addLiquidityUniswapV3(
+        address pool,
+        int24   tickLower,
+        int24   tickUpper,
+        uint256 amount0Desired,
+        uint256 amount1Desired,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    )
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        _checkRole(RELAYER);
+        require(uniswapV3PositionManager != address(0), "ForeignController/position-manager-not-set");
+
+        (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(UniswapV3Lib.AddLiquidityParams({
+            proxy                   : proxy,
+            rateLimits              : rateLimits,
+            positionManager         : uniswapV3PositionManager,
+            pool                    : pool,
+            addLiquidityRateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
+            swapRateLimitId         : LIMIT_UNISWAP_V3_SWAP,
+            tickLower               : tickLower,
+            tickUpper               : tickUpper,
+            amount0Desired          : amount0Desired,
+            amount1Desired          : amount1Desired,
+            amount0Min              : amount0Min,
+            amount1Min              : amount1Min,
+            maxSlippage             : maxSlippages[pool],
+            deadline                : deadline
+        }));
+    }
+
+    function removeLiquidityUniswapV3(
+        address pool,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    )
+        external
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        _checkRole(RELAYER);
+        require(uniswapV3PositionManager != address(0), "ForeignController/position-manager-not-set");
+
+        (amount0Collected, amount1Collected) = UniswapV3Lib.removeLiquidity(UniswapV3Lib.RemoveLiquidityParams({
+            proxy              : proxy,
+            rateLimits         : rateLimits,
+            positionManager    : uniswapV3PositionManager,
+            pool               : pool,
+            rateLimitId        : LIMIT_UNISWAP_V3_WITHDRAW,
+            tokenId            : tokenId,
+            liquidity          : liquidity,
+            amount0Min         : amount0Min,
+            amount1Min         : amount1Min,
+            maxSlippage        : maxSlippages[pool],
+            deadline           : deadline
         }));
     }
 
