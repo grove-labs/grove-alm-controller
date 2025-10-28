@@ -112,10 +112,8 @@ library UniswapV3Lib {
         IRateLimits rateLimits;
         address     router;
         address     pool;
-        uint24      fee;
         bytes32     rateLimitId;
         address     tokenIn;
-        address     tokenOut;
         uint256     amountIn;
         uint256     minAmountOut;
         uint256     maxSlippage;
@@ -129,7 +127,6 @@ library UniswapV3Lib {
         address     pool;
         bytes32     addLiquidityRateLimitId;
         bytes32     swapRateLimitId;
-        uint24      fee;
         int24       tickLower;
         int24       tickUpper;
         uint256     amount0Desired;
@@ -181,17 +178,19 @@ library UniswapV3Lib {
     /**********************************************************************************************/
 
     function swap(SwapParams calldata params) external returns (uint256 amountOut) {
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
         address token0 = pool.token0();
         address token1 = pool.token1();
+        require(token0 != address(0) && token1 != address(0), "UniswapV3Lib/invalid-pool");
         require(
-            (params.tokenIn == token0 && params.tokenOut == token1)
-                || (params.tokenIn == token1 && params.tokenOut == token0),
+            params.tokenIn == token0 || params.tokenIn == token1,
             "UniswapV3Lib/invalid-token-pair"
         );
+
+        address tokenOut = params.tokenIn == token0 ? token1 : token0;
 
         (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
         uint256 priceX192 = _priceX192(sqrtPriceX96);
@@ -208,7 +207,7 @@ library UniswapV3Lib {
         }
 
         uint256 minOutBySlippage = expectedOut * params.maxSlippage / 1e18;
-        require(params.minAmountOut >= minOutBySlippage, "MainnetController/min-amount-not-met");
+        require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
         uint8 token0Decimals = IERC20Metadata(token0).decimals();
         uint256 normalizedValue = _scaleTo1e18(valueInToken0, token0Decimals);
@@ -220,11 +219,11 @@ library UniswapV3Lib {
 
         _transfer(params.proxy, params.tokenIn, params.router, params.amountIn);
 
-        uint256 tokenOutBalanceBefore = IERC20(params.tokenOut).balanceOf(address(params.proxy));
+        uint256 tokenOutBalanceBefore = IERC20(tokenOut).balanceOf(address(params.proxy));
 
         bytes memory commands = abi.encodePacked(COMMAND_V3_SWAP_EXACT_IN);
         bytes[] memory inputs = new bytes[](1);
-        bytes memory path = abi.encodePacked(params.tokenIn, pool.fee(), params.tokenOut);
+        bytes memory path = abi.encodePacked(params.tokenIn, pool.fee(), tokenOut);
         inputs[0] = abi.encode(
             address(params.proxy),
             params.amountIn,
@@ -241,7 +240,7 @@ library UniswapV3Lib {
             )
         );
 
-        uint256 tokenOutBalanceAfter = IERC20(params.tokenOut).balanceOf(address(params.proxy));
+        uint256 tokenOutBalanceAfter = IERC20(tokenOut).balanceOf(address(params.proxy));
         require(tokenOutBalanceAfter >= tokenOutBalanceBefore, "UniswapV3Lib/invalid-amount-out");
         amountOut = tokenOutBalanceAfter - tokenOutBalanceBefore;
     }
@@ -250,7 +249,7 @@ library UniswapV3Lib {
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
@@ -326,7 +325,7 @@ library UniswapV3Lib {
         uint256 minimumAcceptedValue = cache.normalizedDesiredValue * params.maxSlippage / 1e18;
         require(
             normalizedMintedValue >= minimumAcceptedValue,
-            "MainnetController/min-amount-not-met"
+            "UniswapV3Lib/min-amount-not-met"
         );
 
         params.rateLimits.triggerRateLimitDecrease(
@@ -352,7 +351,7 @@ library UniswapV3Lib {
         external
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
-        require(params.maxSlippage != 0, "MainnetController/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
@@ -440,7 +439,7 @@ library UniswapV3Lib {
 
         require(
             normalizedCollectedValue >= minimumAcceptedValue,
-            "MainnetController/min-amount-not-met"
+            "UniswapV3Lib/min-amount-not-met"
         );
 
         params.rateLimits.triggerRateLimitDecrease(

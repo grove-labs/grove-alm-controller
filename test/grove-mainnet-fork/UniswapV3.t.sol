@@ -131,6 +131,25 @@ contract UniswapV3TestBase is ForkTestBase {
         vm.stopPrank();
     }
 
+    function _swap(
+        address tokenIn,
+        uint256 amountIn,
+        uint256 minAmountOut
+    )
+        internal
+        returns (uint256 amountOut)
+    {
+        vm.startPrank(relayer);
+        amountOut = mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            tokenIn,
+            amountIn,
+            minAmountOut,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
     function _getCurrentTick() internal view returns (int24 tick) {
         (, tick,, , , ,) = IUniswapV3PoolLike(UNISWAP_V3_POOL).slot0();
     }
@@ -218,7 +237,7 @@ contract MainnetControllerAddLiquidityUniswapV3FailureTests is UniswapV3TestBase
         mainnetController.setMaxSlippage(UNISWAP_V3_POOL, 0);
 
         vm.startPrank(relayer);
-        vm.expectRevert("MainnetController/max-slippage-not-set");
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
         mainnetController.addLiquidityUniswapV3(
             UNISWAP_V3_POOL,
             DEFAULT_TICK_LOWER,
@@ -589,7 +608,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3FailureTests is UniswapV3TestB
         mainnetController.setMaxSlippage(UNISWAP_V3_POOL, 0);
 
         vm.startPrank(relayer);
-        vm.expectRevert("MainnetController/max-slippage-not-set");
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
         mainnetController.removeLiquidityUniswapV3(
             UNISWAP_V3_POOL,
             tokenId,
@@ -659,7 +678,7 @@ contract MainnetControllerRemoveLiquidityUniswapV3FailureTests is UniswapV3TestB
         mainnetController.setMaxSlippage(UNISWAP_V3_POOL, 1.01e18);
 
         vm.startPrank(relayer);
-        vm.expectRevert("MainnetController/min-amount-not-met");
+        vm.expectRevert("UniswapV3Lib/min-amount-not-met");
         mainnetController.removeLiquidityUniswapV3(
             UNISWAP_V3_POOL,
             tokenId,
@@ -869,6 +888,178 @@ contract MainnetControllerRemoveLiquidityUniswapV3SuccessTests is UniswapV3TestB
         );
 
         assertEq(_getPositionLiquidity(tokenId), 0, "position should be fully exited");
+    }
+}
+
+contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
+
+    function test_swapUniswapV3_notRelayer() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            RELAYER
+        ));
+        mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            address(token0),
+            1,
+            1,
+            block.timestamp + 1 hours
+        );
+    }
+
+    function test_swapUniswapV3_routerNotSet() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.prank(GROVE_PROXY);
+        mainnetController.setUniswapV3Router(address(0));
+
+        vm.startPrank(relayer);
+        vm.expectRevert("MainnetController/router-not-set");
+        mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            address(token0),
+            amountIn,
+            0,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_maxSlippageNotSet() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_POOL, 0);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
+        mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            address(token0),
+            amountIn,
+            0,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_invalidTokenIn() public {
+        uint256 amountIn = 100_000e6;
+        deal(address(dai), address(almProxy), amountIn);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/invalid-token-pair");
+        mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            address(dai),
+            amountIn,
+            amountIn,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_minAmountNotMet() public {
+        uint256 amountIn = 150_000e6;
+        _fundProxy(amountIn, 0);
+
+        uint256 priceX192 = _getCurrentPriceX192();
+        uint256 expectedOut = FullMath.mulDiv(amountIn, priceX192, Q192);
+        uint256 maxSlippage = mainnetController.maxSlippages(UNISWAP_V3_POOL);
+        uint256 minOutBySlippage = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
+        assertGt(minOutBySlippage, 0, "expected minOut to be positive");
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-not-met");
+        mainnetController.swapUniswapV3(
+            UNISWAP_V3_POOL,
+            address(token0),
+            amountIn,
+            minOutBySlippage - 1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+}
+
+contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
+
+    function test_swapUniswapV3_token0ToToken1() public {
+        uint256 amountIn = 250_000e6;
+        _fundProxy(amountIn, 0);
+
+        uint256 priceX192 = _getCurrentPriceX192();
+        uint256 expectedOut = FullMath.mulDiv(amountIn, priceX192, Q192);
+        uint256 maxSlippage = mainnetController.maxSlippages(UNISWAP_V3_POOL);
+        uint256 minAmountOut = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
+
+        uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(uniswapV3SwapKey);
+        uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
+        uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
+
+        uint256 amountOut = _swap(address(token0), amountIn, minAmountOut);
+
+        uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(uniswapV3SwapKey);
+        uint256 normalizedValue = _scaleTo1e18(amountIn, token0Decimals);
+
+        assertGt(amountOut, 0, "expected token1 output");
+        assertGe(amountOut, minAmountOut, "swap output should satisfy minimum");
+        assertEq(
+            token0.balanceOf(address(almProxy)),
+            token0BalanceBefore - amountIn,
+            "proxy should spend token0"
+        );
+        assertEq(
+            token1.balanceOf(address(almProxy)),
+            token1BalanceBefore + amountOut,
+            "proxy should receive token1"
+        );
+        assertEq(
+            swapLimitBefore - swapLimitAfter,
+            normalizedValue,
+            "swap rate limit should decrease by normalized token0 value"
+        );
+    }
+
+    function test_swapUniswapV3_token1ToToken0() public {
+        uint256 amountIn = 300_000e6;
+        _fundProxy(0, amountIn);
+
+        uint256 priceX192 = _getCurrentPriceX192();
+        uint256 expectedOut = FullMath.mulDiv(amountIn, Q192, priceX192);
+        uint256 maxSlippage = mainnetController.maxSlippages(UNISWAP_V3_POOL);
+        uint256 minAmountOut = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
+
+        uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(uniswapV3SwapKey);
+        uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
+        uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
+
+        uint256 amountOut = _swap(address(token1), amountIn, minAmountOut);
+
+        uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(uniswapV3SwapKey);
+        uint256 valueInToken0 = FullMath.mulDiv(amountIn, Q192, priceX192);
+        uint256 normalizedValue = _scaleTo1e18(valueInToken0, token0Decimals);
+
+        assertGt(amountOut, 0, "expected token0 output");
+        assertGe(amountOut, minAmountOut, "swap output should satisfy minimum");
+        assertEq(
+            token1.balanceOf(address(almProxy)),
+            token1BalanceBefore - amountIn,
+            "proxy should spend token1"
+        );
+        assertEq(
+            token0.balanceOf(address(almProxy)),
+            token0BalanceBefore + amountOut,
+            "proxy should receive token0"
+        );
+        assertEq(
+            swapLimitBefore - swapLimitAfter,
+            normalizedValue,
+            "swap rate limit should decrease by normalized value"
+        );
     }
 }
 

@@ -582,14 +582,6 @@ contract MainnetController is AccessControl {
         _checkRole(RELAYER);
         require(uniswapV3Router != address(0), "MainnetController/router-not-set");
 
-        // Derive tokenOut and fee from the pool
-        IUniswapV3PoolMinimal poolIf = IUniswapV3PoolMinimal(pool);
-        address token0 = poolIf.token0();
-        address token1 = poolIf.token1();
-        require(tokenIn == token0 || tokenIn == token1, "MainnetController/invalid-tokenIn");
-        address tokenOut = tokenIn == token0 ? token1 : token0;
-        uint24 fee = poolIf.fee();
-
         amountOut = UniswapV3Lib.swap(UniswapV3Lib.SwapParams({
             proxy             : proxy,
             rateLimits        : rateLimits,
@@ -597,8 +589,6 @@ contract MainnetController is AccessControl {
             pool              : pool,
             rateLimitId       : LIMIT_UNISWAP_V3_SWAP,
             tokenIn           : tokenIn,
-            tokenOut          : tokenOut,
-            fee               : fee,
             amountIn          : amountIn,
             minAmountOut      : minAmountOut,
             maxSlippage       : maxSlippages[pool],
@@ -622,9 +612,6 @@ contract MainnetController is AccessControl {
         _checkRole(RELAYER);
         require(uniswapV3PositionManager != address(0), "MainnetController/position-manager-not-set");
 
-        // Derive fee from the pool
-        uint24 fee = IUniswapV3PoolMinimal(pool).fee();
-
         (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(UniswapV3Lib.AddLiquidityParams({
             proxy                   : proxy,
             rateLimits              : rateLimits,
@@ -632,7 +619,6 @@ contract MainnetController is AccessControl {
             pool                    : pool,
             addLiquidityRateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
             swapRateLimitId         : LIMIT_UNISWAP_V3_SWAP,
-            fee                     : fee,
             tickLower               : tickLower,
             tickUpper               : tickUpper,
             amount0Desired          : amount0Desired,
