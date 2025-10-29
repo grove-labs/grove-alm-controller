@@ -87,12 +87,31 @@ contract DeployMainnetController is Script {
 
 }
 
-contract DeployForeignFull is Script {
+contract ForeignScript is Script {
+
+    function registerChains() internal {
+        setChain("plume", ChainData({
+            name: "Plume",
+            rpcUrl: vm.envString("PLUME_RPC_URL"),
+            chainId: 98866
+        }));
+        setChain("plasma", ChainData({
+            name: "Plasma",
+            rpcUrl: vm.envString("PLASMA_RPC_URL"),
+            chainId: 9745
+        }));
+    }
+
+}
+
+contract DeployForeignFull is ForeignScript {
 
     using stdJson     for string;
     using ScriptTools for string;
 
     function run() external {
+        registerChains();
+
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
 
@@ -127,12 +146,14 @@ contract DeployForeignFull is Script {
 
 }
 
-contract DeployForeignController is Script {
+contract DeployForeignController is ForeignScript {
 
     using stdJson     for string;
     using ScriptTools for string;
 
     function run() external {
+        registerChains();
+
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
 
