@@ -27,7 +27,8 @@ interface ICurvePoolLike is IERC20 {
     function remove_liquidity(
         uint256 burnAmount,
         uint256[] memory minAmounts,
-        address receiver
+        address receiver, 
+        bool claimAdminFees
     ) external;
     function stored_rates() external view returns (uint256[] memory);
 }
@@ -244,7 +245,7 @@ library CurveLib {
                 params.pool,
                 abi.encodeCall(
                     curvePool.remove_liquidity,
-                    (params.lpBurnAmount, params.minWithdrawAmounts, address(params.proxy))
+                    (params.lpBurnAmount, params.minWithdrawAmounts, address(params.proxy), false)
                 )
             ),
             (uint256[])
