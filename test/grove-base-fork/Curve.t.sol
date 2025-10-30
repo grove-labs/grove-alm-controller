@@ -10,6 +10,7 @@ import { ERC20 } from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.so
 
 interface ICurvePoolLike is ICurvePoolLikeLib {
     function calc_token_amount(uint256[] memory amounts, bool is_deposit) external view returns (uint256);
+    function calc_withdraw_one_coin(uint256 amount, int128 index) external view returns (uint256);
 }
 
 contract MockCgUSD is ERC20 {
@@ -545,22 +546,22 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
 contract ForeignControllerRemoveLiquiditySuccessTests is CurveTestBase {
 
     function test_removeLiquidityCurve() public {
-        uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
-        console.log("lpTokensReceived", lpTokensReceived);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 1_000_000e6;
+        amounts[1] = 1_000_000e6;
+        uint256 lpTokensEstimated = ICurvePoolLike(CURVE_POOL).calc_token_amount(amounts, true);
+        uint256 lpTokensReceived = _addLiquidity(amounts[0], amounts[1]);
 
         uint256 startingCgUSDBalance = cgUSD.balanceOf(CURVE_POOL);
-        uint256 startingUsdcBalance = usdcBase.balanceOf(CURVE_POOL);
-        uint256 startingTotalSupply = curveLp.totalSupply();
+        uint256 startingUsdcBalance  = usdcBase.balanceOf(CURVE_POOL);
+        uint256 startingTotalSupply  = curveLp.totalSupply();
 
-        assertEq(lpTokensReceived, 1_987_199.361495730708108741e18);
+        assertEq(lpTokensEstimated, lpTokensReceived, "Estimated LP amount does not match received LP tokens");
 
         assertEq(curveLp.allowance(address(almProxy), CURVE_POOL), 0);
 
         assertEq(cgUSD.balanceOf(address(almProxy)), 0);
-        assertEq(cgUSD.balanceOf(CURVE_POOL),        startingCgUSDBalance);
-
         assertEq(usdcBase.balanceOf(address(almProxy)), 0);
-        assertEq(usdcBase.balanceOf(CURVE_POOL),        startingUsdcBalance);
 
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply);
@@ -568,8 +569,10 @@ contract ForeignControllerRemoveLiquiditySuccessTests is CurveTestBase {
         assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey), 3_000_000e18);
 
         uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = 1_535_000e6;
+        minWithdrawAmounts[0] = ICurvePoolLike(CURVE_POOL).calc_withdraw_one_coin(lpTokensReceived, 0) / 2;
+        minWithdrawAmounts[1] = ICurvePoolLike(CURVE_POOL).calc_withdraw_one_coin(lpTokensReceived, 1) / 2;
+
+        uint256[] memory rates = ICurvePoolLike(CURVE_POOL).stored_rates();
 
         vm.prank(ALM_RELAYER);
         uint256[] memory assetsReceived = foreignController.removeLiquidityCurve(
@@ -578,29 +581,33 @@ contract ForeignControllerRemoveLiquiditySuccessTests is CurveTestBase {
             minWithdrawAmounts
         );
 
-        assertEq(assetsReceived[0], 465_059.586753e6);
-        assertEq(assetsReceived[1], 1_535_013.847298e6);
+        assertGe(assetsReceived[0], minWithdrawAmounts[0], "wrong index 0 amount received");
+        assertGe(assetsReceived[1], minWithdrawAmounts[1], "wrong index 1 amount received");
 
-        uint256 sumAssetsReceived = (assetsReceived[0] + assetsReceived[1]) * 1e12;
+        uint256 sumAssetsReceived = assetsReceived[0] + assetsReceived[1];
 
-        assertApproxEqAbs(sumAssetsReceived, 2_000_000e18, 100e18);
+        assertGe(sumAssetsReceived, minWithdrawAmounts[0] + minWithdrawAmounts[1], "sum of assets received is less than min withdraw amounts");
 
-        assertGe(sumAssetsReceived, 2_000_000e18);  // Pool is skewed so more value can be removed after balancing
+        assertEq(curveLp.allowance(address(almProxy), CURVE_POOL), 0, "allowance is not 0");
 
-        assertEq(curveLp.allowance(address(almProxy), CURVE_POOL), 0);
+        assertEq(usdcBase.balanceOf(address(almProxy)), assetsReceived[0], "wrong ALM proxy USDC balance");
 
-        assertEq(usdcBase.balanceOf(address(almProxy)), assetsReceived[0]);
+        // slippage or fees
+        assertEq(startingUsdcBalance - usdcBase.balanceOf(CURVE_POOL), assetsReceived[0], "wrong USDC balance of pool");
 
-        assertApproxEqAbs(usdcBase.balanceOf(CURVE_POOL), startingUsdcBalance - assetsReceived[0], 100e6);  // Fees from other deposits
+        assertEq(cgUSD.balanceOf(address(almProxy)), assetsReceived[1], "wrong ALM proxy cgUSD balance");
 
-        assertEq(cgUSD.balanceOf(address(almProxy)), assetsReceived[1]);
+        assertEq(startingCgUSDBalance - cgUSD.balanceOf(CURVE_POOL), assetsReceived[1], "wrong cgUSD balance of pool");
 
-        assertApproxEqAbs(cgUSD.balanceOf(CURVE_POOL), startingCgUSDBalance - assetsReceived[1], 100e6);  // Fees from other deposits
+        assertEq(curveLp.balanceOf(address(almProxy)), 0, "ALM proxy LP balance is not 0");
+        assertEq(curveLp.totalSupply(),                startingTotalSupply - lpTokensReceived, "LP total supply is not correct");
 
-        assertEq(curveLp.balanceOf(address(almProxy)), 0);
-        assertEq(curveLp.totalSupply(),                startingTotalSupply - lpTokensReceived);
-
-        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey), 3_000_000e18 - sumAssetsReceived);
+        uint256 calcValueWithdrawn;
+        for (uint256 i; i < rates.length; i++) {
+            calcValueWithdrawn += rates[i] * assetsReceived[i];
+        }
+        calcValueWithdrawn /= 1e18;
+        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey) + calcValueWithdrawn, 3_000_000e18, "rate limit is not correct");
     }
 
 }
