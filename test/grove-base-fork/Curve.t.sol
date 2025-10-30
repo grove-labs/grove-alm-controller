@@ -117,6 +117,36 @@ contract CurveTestBase is ForkTestBase {
         return 36918285;  // Oct 16, 2025 02:45:17 PM +UTC
     }
 
+    function _calcMinWithdrawAmounts(uint256 lpBurnAmount) internal view returns (uint256[] memory) {
+        uint256[] memory rates = curvePool.stored_rates();
+        uint256[] memory minWithdrawAmounts = new uint256[](2);
+        uint256 totalSupply = curveLp.totalSupply();
+        uint256 virtualPrice = curvePool.get_virtual_price();
+
+        // Calculate the minimum required total value based on slippage
+        // This matches CurveLib: valueMinWithdrawn >= lpBurnAmount * virtualPrice * maxSlippage / 1e36
+        // After the /1e18 normalization in CurveLib, this gives us the min value in 18 decimals
+        uint256 minRequiredValue = lpBurnAmount * virtualPrice * maxSlippage / 1e36; // in 18 decimal precision
+
+        // Calculate expected withdrawal amounts proportionally
+        uint256[] memory expectedAmounts = new uint256[](2);
+        uint256 totalExpectedValue = 0;
+
+        for (uint256 i = 0; i < 2; i++) {
+            expectedAmounts[i] = curvePool.balances(i) * lpBurnAmount / totalSupply;
+            totalExpectedValue += expectedAmounts[i] * rates[i];
+        }
+        totalExpectedValue /= 1e18; // Normalize to 18 decimals to match CurveLib
+
+        // Distribute the minimum required value proportionally across tokens
+        // Add 1 to each amount to compensate for rounding errors and ensure we're at/above the boundary
+        for (uint256 i = 0; i < 2; i++) {
+            minWithdrawAmounts[i] = expectedAmounts[i] * minRequiredValue / totalExpectedValue + 1;
+        }
+
+        return minWithdrawAmounts;
+    }
+
 }
 
 contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
@@ -474,17 +504,16 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
 
         assertApproxEqAbs(minTotalReturned, 1_960_000e18, 50_000e18);  // Sanity check on precision
 
-        // Skewed pool, using 465k as anchor point because USDC balance of pool is low
-        uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = minTotalReturned / 1e12 - 465_000e6;
+        // Get boundary amounts, then subtract to go below boundary (should fail)
+        uint256[] memory minWithdrawAmounts = _calcMinWithdrawAmounts(lpTokensReceived);
+        minWithdrawAmounts[0] -= 100;
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("CurveLib/min-amount-not-met");
         foreignController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
 
-        // Add one to get over the boundary
-        minWithdrawAmounts[1] += 1;
+        // Add back to get to the boundary (should succeed)
+        minWithdrawAmounts[0] += 100;
 
         foreignController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
     }
@@ -510,8 +539,8 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
         uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = 1_535_000e6;
+        minWithdrawAmounts[0] = ICurvePoolLike(CURVE_POOL).calc_withdraw_one_coin(lpTokensReceived, 0) / 2;
+        minWithdrawAmounts[1] = ICurvePoolLike(CURVE_POOL).calc_withdraw_one_coin(lpTokensReceived, 1) / 2;
 
         uint256 id = vm.snapshotState();
 
