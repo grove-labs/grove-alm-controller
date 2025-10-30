@@ -18,7 +18,7 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      
+
       - name: Install dependencies
         run: |
           forge install
@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-      
+
       - name: Install dependencies
         run: |
           forge install
@@ -47,6 +47,7 @@ jobs:
           ARBITRUM_ONE_RPC_URL: ${{secrets.ARBITRUM_ONE_RPC_URL}}
           ARBITRUM_NOVA_RPC_URL: ${{secrets.ARBITRUM_NOVA_RPC_URL}}
           GNOSIS_CHAIN_RPC_URL: ${{secrets.GNOSIS_CHAIN_RPC_URL}}
+          PLUME_RPC_URL: ${{secrets.PLUME_RPC_URL}}
           BASE_RPC_URL: ${{secrets.BASE_RPC_URL}}
           PLASMA_RPC_URL: ${{secrets.PLASMA_RPC_URL}}
         run: FOUNDRY_PROFILE=ci forge test
@@ -70,6 +71,7 @@ jobs:
           ARBITRUM_ONE_RPC_URL: ${{secrets.ARBITRUM_ONE_RPC_URL}}
           ARBITRUM_NOVA_RPC_URL: ${{secrets.ARBITRUM_NOVA_RPC_URL}}
           GNOSIS_CHAIN_RPC_URL: ${{secrets.GNOSIS_CHAIN_RPC_URL}}
+          PLUME_RPC_URL: ${{secrets.PLUME_RPC_URL}}
           BASE_RPC_URL: ${{secrets.BASE_RPC_URL}}
           PLASMA_RPC_URL: ${{secrets.PLASMA_RPC_URL}}
         run: forge coverage --report summary --report lcov
