@@ -116,7 +116,7 @@ library UniswapV3Lib {
         address     tokenIn;
         uint256     amountIn;
         uint256     minAmountOut;
-        // uint256     maxSlippage;
+        uint256     maxSlippage;
         uint256     deadline;
     }
 
@@ -126,15 +126,25 @@ library UniswapV3Lib {
         address     positionManager;
         address     pool;
         bytes32     addLiquidityRateLimitId;
-        // bytes32     swapRateLimitId;
+        bytes32     swapRateLimitId;
         int24       tickLower;
         int24       tickUpper;
         uint256     amount0Desired;
         uint256     amount1Desired;
         uint256     amount0Min;
         uint256     amount1Min;
-        // uint256     maxSlippage;
+        uint256     maxSlippage;
         uint256     deadline;
+    }
+
+    struct AddLiquidityCache {
+        address token0;
+        address token1;
+        uint24  fee;
+        uint160 sqrtPriceX96;
+        uint256 priceX192;
+        uint8   token0Decimals;
+        uint256 normalizedDesiredValue;
     }
 
     struct RemoveLiquidityParams {
@@ -147,8 +157,20 @@ library UniswapV3Lib {
         uint128     liquidity;
         uint256     amount0Min;
         uint256     amount1Min;
-        // uint256     maxSlippage;
+        uint256     maxSlippage;
         uint256     deadline;
+    }
+
+    struct RemoveLiquidityCache {
+        address token0;
+        address token1;
+        uint160 sqrtPriceX96;
+        uint8   token0Decimals;
+        uint256 priceX192;
+        int24   tickLower;
+        int24   tickUpper;
+        uint24  fee;
+        uint128 positionLiquidity;
     }
 
     /**********************************************************************************************/
@@ -156,7 +178,7 @@ library UniswapV3Lib {
     /**********************************************************************************************/
 
     function swap(SwapParams calldata params) external returns (uint256 amountOut) {
-        // require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
@@ -184,8 +206,8 @@ library UniswapV3Lib {
             valueInToken0 = FullMath.mulDiv(params.amountIn, Q192, priceX192);
         }
 
-        // uint256 minOutBySlippage = expectedOut * params.maxSlippage / 1e18;
-        // require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
+        uint256 minOutBySlippage = expectedOut * params.maxSlippage / 1e18;
+        require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
         uint8 token0Decimals = IERC20Metadata(token0).decimals();
         uint256 normalizedValue = _scaleTo1e18(valueInToken0, token0Decimals);
@@ -227,27 +249,28 @@ library UniswapV3Lib {
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
-        // require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-        uint24 fee = pool.fee();
+        AddLiquidityCache memory cache;
+        cache.token0 = pool.token0();
+        cache.token1 = pool.token1();
+        cache.fee = pool.fee();
 
         require(
             params.amount0Desired != 0 || params.amount1Desired != 0,
             "UniswapV3Lib/zero-liquidity"
         );
 
-        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
-        uint8 token0Decimals = IERC20Metadata(token0).decimals();
-        uint256 priceX192 = _priceX192(sqrtPriceX96);
+        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
+        cache.priceX192 = _priceX192(cache.sqrtPriceX96);
+        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
 
         (uint256 expectedAmount0, uint256 expectedAmount1) = UniV3Utils.getExpectedAmounts(
-            token0,
-            token1,
-            fee,
+            cache.token0,
+            cache.token1,
+            cache.fee,
             params.tickLower,
             params.tickUpper,
             0,
@@ -256,23 +279,23 @@ library UniswapV3Lib {
             false
         );
 
-        uint256 normalizedDesiredValue = _scaleTo1e18(
-            _valueInToken0(priceX192, expectedAmount0, expectedAmount1),
-            token0Decimals
+        cache.normalizedDesiredValue = _scaleTo1e18(
+            _valueInToken0(cache.priceX192, expectedAmount0, expectedAmount1),
+            cache.token0Decimals
         );
 
         if (params.amount0Desired != 0) {
-            _approve(params.proxy, token0, params.positionManager, params.amount0Desired);
+            _approve(params.proxy, cache.token0, params.positionManager, params.amount0Desired);
         }
         if (params.amount1Desired != 0) {
-            _approve(params.proxy, token1, params.positionManager, params.amount1Desired);
+            _approve(params.proxy, cache.token1, params.positionManager, params.amount1Desired);
         }
 
         INonfungiblePositionManager.MintParams memory mintParams
             = INonfungiblePositionManager.MintParams({
-                token0: token0,
-                token1: token1,
-                fee: fee,
+                token0: cache.token0,
+                token1: cache.token1,
+                fee: cache.fee,
                 tickLower: params.tickLower,
                 tickUpper: params.tickUpper,
                 amount0Desired: params.amount0Desired,
@@ -295,52 +318,52 @@ library UniswapV3Lib {
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-minted");
 
         uint256 normalizedMintedValue = _scaleTo1e18(
-            _valueInToken0(priceX192, amount0, amount1),
-            token0Decimals
+            _valueInToken0(cache.priceX192, amount0, amount1),
+            cache.token0Decimals
         );
 
-        // uint256 minimumAcceptedValue = normalizedDesiredValue * params.maxSlippage / 1e18;
-        // require(
-        //     normalizedMintedValue >= minimumAcceptedValue,
-        //     "UniswapV3Lib/min-amount-not-met"
-        // );
+        uint256 minimumAcceptedValue = cache.normalizedDesiredValue * params.maxSlippage / 1e18;
+        require(
+            normalizedMintedValue >= minimumAcceptedValue,
+            "UniswapV3Lib/min-amount-not-met"
+        );
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.addLiquidityRateLimitId, params.pool),
             normalizedMintedValue
         );
 
-        // if (params.swapRateLimitId != bytes32(0)) {
-        //     uint256 valueDelta = normalizedDesiredValue > normalizedMintedValue
-        //         ? normalizedDesiredValue - normalizedMintedValue
-        //         : normalizedMintedValue - normalizedDesiredValue;
+        if (params.swapRateLimitId != bytes32(0)) {
+            uint256 valueDelta = cache.normalizedDesiredValue > normalizedMintedValue
+                ? cache.normalizedDesiredValue - normalizedMintedValue
+                : normalizedMintedValue - cache.normalizedDesiredValue;
 
-        //     if (valueDelta != 0) {
-        //         params.rateLimits.triggerRateLimitDecrease(
-        //             RateLimitHelpers.makeAssetKey(params.swapRateLimitId, params.pool),
-        //             valueDelta / 2
-        //         );
-        //     }
-        // }
+            if (valueDelta != 0) {
+                params.rateLimits.triggerRateLimitDecrease(
+                    RateLimitHelpers.makeAssetKey(params.swapRateLimitId, params.pool),
+                    valueDelta / 2
+                );
+            }
+        }
     }
 
     function removeLiquidity(RemoveLiquidityParams calldata params)
         external
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
-        // require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage != 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(params.pool);
 
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-        uint24  fee    = pool.fee();
+        RemoveLiquidityCache memory cache;
 
-        int24 tickLower;
-        int24 tickUpper;
-        uint128 positionLiquidity;
+        cache.token0 = pool.token0();
+        cache.token1 = pool.token1();
+        cache.fee    = pool.fee();
 
         {
+            uint128 owed0;
+            uint128 owed1;
             address positionToken0;
             address positionToken1;
             uint24  positionFee;
@@ -350,30 +373,36 @@ library UniswapV3Lib {
                 positionToken0,
                 positionToken1,
                 positionFee,
-                tickLower,
-                tickUpper,
-                positionLiquidity,
+                cache.tickLower,
+                cache.tickUpper,
+                cache.positionLiquidity,
                 ,
                 ,
-                ,
+                owed0,
+                owed1
             ) = INonfungiblePositionManager(params.positionManager).positions(params.tokenId);
 
-            require(positionToken0 == token0 && positionToken1 == token1, "UniswapV3Lib/invalid-position");
-            require(positionFee == fee, "UniswapV3Lib/fee-mismatch");
+            require(
+                params.liquidity != 0 || owed0 != 0 || owed1 != 0,
+                "UniswapV3Lib/nothing-to-withdraw"
+            );
+
+            require(positionToken0 == cache.token0 && positionToken1 == cache.token1, "UniswapV3Lib/invalid-position");
+            require(positionFee == cache.fee, "UniswapV3Lib/fee-mismatch");
         }
 
-        require(params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-too-high");
+        require(params.liquidity <= cache.positionLiquidity, "UniswapV3Lib/liquidity-too-high");
 
-        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
-        uint8 token0Decimals = IERC20Metadata(token0).decimals();
-        uint256 priceX192 = _priceX192(sqrtPriceX96);
+        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
+        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
+        cache.priceX192 = _priceX192(cache.sqrtPriceX96);
 
         (uint256 expectedAmount0, uint256 expectedAmount1) = UniV3Utils.getExpectedAmounts(
-            token0,
-            token1,
-            fee,
-            tickLower,
-            tickUpper,
+            cache.token0,
+            cache.token1,
+            cache.fee,
+            cache.tickLower,
+            cache.tickUpper,
             params.liquidity,
             0,
             0,
@@ -381,10 +410,10 @@ library UniswapV3Lib {
         );
 
         uint256 expectedValue = _scaleTo1e18(
-            _valueInToken0(priceX192, expectedAmount0, expectedAmount1),
-            token0Decimals
+            _valueInToken0(cache.priceX192, expectedAmount0, expectedAmount1),
+            cache.token0Decimals
         );
-        // uint256 minimumAcceptedValue = expectedValue * params.maxSlippage / 1e18;
+        uint256 minimumAcceptedValue = expectedValue * params.maxSlippage / 1e18;
 
         _decreaseLiquidityCall(
             params.proxy,
@@ -404,14 +433,14 @@ library UniswapV3Lib {
         );
 
         uint256 normalizedCollectedValue = _scaleTo1e18(
-            _valueInToken0(priceX192, amount0Collected, amount1Collected),
-            token0Decimals
+            _valueInToken0(cache.priceX192, amount0Collected, amount1Collected),
+            cache.token0Decimals
         );
 
-        // require(
-        //     normalizedCollectedValue >= minimumAcceptedValue,
-        //     "UniswapV3Lib/min-amount-not-met"
-        // );
+        require(
+            normalizedCollectedValue >= minimumAcceptedValue,
+            "UniswapV3Lib/min-amount-not-met"
+        );
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),

@@ -710,7 +710,7 @@ contract ForeignController is AccessControl {
             tokenIn           : tokenIn,
             amountIn          : amountIn,
             minAmountOut      : minAmountOut,
-            maxSlippage       : maxSlippages[pool],
+            // maxSlippage       : maxSlippages[pool],
             deadline          : deadline
         }));
     }
@@ -737,14 +737,14 @@ contract ForeignController is AccessControl {
             positionManager         : uniswapV3PositionManager,
             pool                    : pool,
             addLiquidityRateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
-            swapRateLimitId         : LIMIT_UNISWAP_V3_SWAP,
+            // swapRateLimitId         : LIMIT_UNISWAP_V3_SWAP,
             tickLower               : tickLower,
             tickUpper               : tickUpper,
             amount0Desired          : amount0Desired,
             amount1Desired          : amount1Desired,
             amount0Min              : amount0Min,
             amount1Min              : amount1Min,
-            maxSlippage             : maxSlippages[pool],
+            // maxSlippage             : maxSlippages[pool],
             deadline                : deadline
         }));
     }
@@ -773,7 +773,7 @@ contract ForeignController is AccessControl {
             liquidity          : liquidity,
             amount0Min         : amount0Min,
             amount1Min         : amount1Min,
-            maxSlippage        : maxSlippages[pool],
+            // maxSlippage        : maxSlippages[pool],
             deadline           : deadline
         }));
     }
