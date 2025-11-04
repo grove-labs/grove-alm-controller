@@ -18,6 +18,9 @@ import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 import { IALMProxy }   from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits } from "./interfaces/IRateLimits.sol";
+import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
+
+import { PendleLib } from "./libraries/PendleLib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
@@ -72,6 +75,7 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public constant LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public constant LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
+    bytes32 public constant LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public constant LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
     bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
@@ -86,7 +90,11 @@ contract ForeignController is AccessControl {
 
     IERC20 public immutable usdc;
 
+<<<<<<< HEAD
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
+=======
+    address public immutable pendleRouter;
+>>>>>>> dev
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -102,15 +110,17 @@ contract ForeignController is AccessControl {
         address rateLimits_,
         address psm_,
         address usdc_,
-        address cctp_
+        address cctp_,
+        address pendleRouter_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
-        proxy      = IALMProxy(proxy_);
-        rateLimits = IRateLimits(rateLimits_);
-        psm        = IPSM3(psm_);
-        usdc       = IERC20(usdc_);
-        cctp       = ICCTPLike(cctp_);
+        proxy        = IALMProxy(proxy_);
+        rateLimits   = IRateLimits(rateLimits_);
+        psm          = IPSM3(psm_);
+        usdc         = IERC20(usdc_);
+        cctp         = ICCTPLike(cctp_);
+        pendleRouter = pendleRouter_;
     }
 
     /**********************************************************************************************/
@@ -697,6 +707,28 @@ contract ForeignController is AccessControl {
             morphoVault,
             abi.encodeCall(IMetaMorpho(morphoVault).reallocate, (allocations))
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Pendle functions                                                               ***/
+    /**********************************************************************************************/
+
+    function redeemPendlePT(
+        address pendleMarket,
+        uint256 pyAmountIn,
+        uint256 minAmountOut
+    ) external {
+        _checkRole(RELAYER);
+
+        PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
+            pendleMarket : IPendleMarket(pendleMarket),
+            pendleRouter : pendleRouter,
+            pyAmountIn   : pyAmountIn,
+            minAmountOut : minAmountOut
+        }));
     }
 
 

@@ -52,6 +52,8 @@ contract ForkTestBase is Test {
     address constant CCTP_MESSENGER_BASE = Base.CCTP_TOKEN_MESSENGER;
     address constant USDC_BASE           = Base.USDC;
     address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
+    // TODO: Get this from the registry after added there
+    address constant PENDLE_ROUTER_BASE  = 0x888888888889758F76e7103c6CbF23ABbF58F946;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -101,10 +103,11 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin : SPARK_EXECUTOR,
-            psm   : address(psmBase),
-            usdc  : USDC_BASE,
-            cctp  : CCTP_MESSENGER_BASE
+            admin        : SPARK_EXECUTOR,
+            psm          : address(psmBase),
+            usdc         : USDC_BASE,
+            cctp         : CCTP_MESSENGER_BASE,
+            pendleRouter : PENDLE_ROUTER_BASE
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -127,10 +130,11 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
-            admin : Base.SPARK_EXECUTOR,
-            psm   : address(psmBase),
-            cctp  : Base.CCTP_TOKEN_MESSENGER,
-            usdc  : address(usdcBase)
+            admin        : Base.SPARK_EXECUTOR,
+            psm          : address(psmBase),
+            cctp         : Base.CCTP_TOKEN_MESSENGER,
+            usdc         : address(usdcBase),
+            pendleRouter : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });

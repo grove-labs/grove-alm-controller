@@ -7,10 +7,13 @@ import { IERC20 } from "forge-std/interfaces/IERC20.sol";
 
 import { ERC20Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 
+<<<<<<< HEAD
 // TODO: Need Grove Base address registry
 // import { Base } from "grove-address-registry/Base.sol";
 import { Base } from "spark-address-registry/Base.sol";
 
+=======
+>>>>>>> dev
 import { PSM3Deploy } from "spark-psm/deploy/PSM3Deploy.sol";
 import { IPSM3 }      from "spark-psm/src/PSM3.sol";
 
@@ -56,7 +59,7 @@ contract ForkTestBase is Test {
     address constant ALM_FREEZER          = Base.ALM_FREEZER;
     address constant ALM_RELAYER          = Base.ALM_RELAYER;
     address constant CCTP_TOKEN_MESSENGER = Base.CCTP_TOKEN_MESSENGER;
-    address constant GROVE_EXECUTOR       = Base.SPARK_EXECUTOR;
+    address constant GROVE_EXECUTOR       = makeAddr("groveExecutor");
     address constant USDC_BASE            = Base.USDC;
 
     /**********************************************************************************************/
@@ -111,10 +114,18 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
+<<<<<<< HEAD
             admin : GROVE_EXECUTOR,
             psm   : address(psmBase),
             usdc  : USDC_BASE,
             cctp  : CCTP_TOKEN_MESSENGER
+=======
+            admin        : GROVE_EXECUTOR,
+            psm          : address(psmBase),
+            usdc         : USDC_BASE,
+            cctp         : CCTP_TOKEN_MESSENGER,
+            pendleRouter : PENDLE_ROUTER_BASE
+>>>>>>> dev
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -137,10 +148,18 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
+<<<<<<< HEAD
             admin : GROVE_EXECUTOR,
             psm   : address(psmBase),
             cctp  : CCTP_TOKEN_MESSENGER,
             usdc  : USDC_BASE
+=======
+            admin        : GROVE_EXECUTOR,
+            psm          : address(psmBase),
+            cctp         : CCTP_TOKEN_MESSENGER,
+            usdc         : USDC_BASE,
+            pendleRouter : PENDLE_ROUTER_BASE
+>>>>>>> dev
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });
@@ -172,11 +191,15 @@ contract ForkTestBase is Test {
 
     // Default configuration for the fork, can be overridden in inheriting tests
     function _getBlock() internal virtual pure returns (uint256) {
+<<<<<<< HEAD
         return 65896755;  // July 22, 2025
     }
 
     function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {
         return a > b ? a - b : b - a;
+=======
+        return 36912750; //  October 16, 2025
+>>>>>>> dev
     }
 
 }
