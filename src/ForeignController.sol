@@ -87,18 +87,13 @@ contract ForeignController is AccessControl {
     ICCTPLike   public immutable cctp;
     IPSM3       public immutable psm;
     IRateLimits public immutable rateLimits;
+    IERC20      public immutable usdc;
+    address     public immutable pendleRouter;
 
-    IERC20 public immutable usdc;
-
-<<<<<<< HEAD
-    mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
-=======
-    address public immutable pendleRouter;
->>>>>>> dev
-
-    mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
-    mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
-    mapping(uint16 destinationCentrifugeId => bytes32 recipient)          public centrifugeRecipients;
+    mapping(address pool                    => uint256 maxSlippage)        public maxSlippages;  // 1e18 precision
+    mapping(uint32  destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
+    mapping(uint32  destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
+    mapping(uint16  destinationCentrifugeId => bytes32 recipient)          public centrifugeRecipients;
 
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
