@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
-
-import { IERC4626 } from "lib/forge-std/src/interfaces/IERC4626.sol";
-
 import "./ForkTestBase.t.sol";
 
 import { ICurvePoolLike as ICurvePoolLikeLib } from "../../src/libraries/CurveLib.sol";
-import { ERC20 } from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 interface ICurvePoolLike is ICurvePoolLikeLib {
     function calc_token_amount(uint256[] memory amounts, bool is_deposit) external view returns (uint256);
