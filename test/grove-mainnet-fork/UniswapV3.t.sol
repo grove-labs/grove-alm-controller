@@ -10,13 +10,13 @@ import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
 
 contract UniswapV3TestBase is ForkTestBase {
-    address constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-    address constant UNISWAP_V3_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
-    address constant UNISWAP_V3_USDC_USDT_POOL = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
-    address constant UNISWAP_V3_DAI_USDC_POOL = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
+    address constant UNISWAP_V3_ROUTER              = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address constant UNISWAP_V3_POSITION_MANAGER    = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
+    address constant UNISWAP_V3_USDC_USDT_POOL      = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
+    address constant UNISWAP_V3_DAI_USDC_POOL       = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
 
-    int24 internal constant DEFAULT_TICK_LOWER = -600;
-    int24 internal constant DEFAULT_TICK_UPPER = 600;
+    int24 internal constant DEFAULT_TICK_LOWER      = -600;
+    int24 internal constant DEFAULT_TICK_UPPER      = 600;
 
     bytes32 uniswapV3AddLiquidityKey;
     bytes32 uniswapV3_UsdcUsdtPool_UsdcSwapKey;
@@ -36,21 +36,20 @@ contract UniswapV3TestBase is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        uniswapV3_UsdcUsdtPool_UsdcSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
 
-        uniswapV3_DaiUsdcPool_DaiSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai), UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
 
-        uniswapV3AddLiquidityKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  _getPool());
-        
+        uniswapV3AddLiquidityKey   = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  _getPool());
         uniswapV3RemoveLiquidityKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), _getPool());
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e18, uint256(1_000_000e18) / 1 days);
 
         vm.stopPrank();
 
@@ -63,9 +62,9 @@ contract UniswapV3TestBase is ForkTestBase {
         mainnetController.setUniswapV3Router(UNISWAP_V3_ROUTER);
         vm.stopPrank();
 
-        token0 = IERC20(IUniswapV3PoolLike(_getPool()).token0());
-        token1 = IERC20(IUniswapV3PoolLike(_getPool()).token1());
-        poolFee = IUniswapV3PoolLike(_getPool()).fee();
+        token0         = IERC20(IUniswapV3PoolLike(_getPool()).token0());
+        token1         = IERC20(IUniswapV3PoolLike(_getPool()).token1());
+        poolFee        = IUniswapV3PoolLike(_getPool()).fee();
         token0Decimals = IERC20Metadata(address(token0)).decimals();
     }
 
@@ -75,10 +74,10 @@ contract UniswapV3TestBase is ForkTestBase {
     }
     
     function _label() internal {
-        vm.label(UNISWAP_V3_ROUTER, "UniswapV3Router");
-        vm.label(UNISWAP_V3_POSITION_MANAGER, "UniswapV3PositionManager");
-        vm.label(UNISWAP_V3_USDC_USDT_POOL, "USDC-USDT Pool");
-        vm.label(UNISWAP_V3_DAI_USDC_POOL, "DAI-USDC Pool");
+        vm.label(UNISWAP_V3_ROUTER,            'UniswapV3Router');
+        vm.label(UNISWAP_V3_POSITION_MANAGER,  'UniswapV3PositionManager');
+        vm.label(UNISWAP_V3_USDC_USDT_POOL,    'USDC-USDT Pool');
+        vm.label(UNISWAP_V3_DAI_USDC_POOL,     'DAI-USDC Pool');
     }
 
     function _getPool() internal pure virtual returns (address) {
@@ -210,7 +209,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function test_swapUniswapV3_minAmountNotMet() public {
+    function test_swapUniswapV3_slippageTooHigh() public {
         uint256 amountIn = 150_000e6;
         _fundProxy(amountIn, 0);
 
@@ -265,6 +264,23 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
 
         vm.stopPrank();
     }
+
+    function test_swapUniswapV3_minAmountNotMet() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-not-met");
+        mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            0,
+            200,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
 }
 
 contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
@@ -273,13 +289,13 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountIn = 250_000e6;
         _fundProxy(amountIn, 0);
 
-        uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
+        uint256 swapLimitBefore     = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
         uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
         uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
 
         uint256 amountOut = _swap(address(token0), amountIn, amountIn * 999/1000);
 
-        uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
+        uint256 swapLimitAfter  = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
         uint256 normalizedValue = _scaleTo1e18(amountIn, token0Decimals);
 
         assertApproxEqAbs(amountIn, amountOut, .0001e18, "swap output should be within 0.01% of amountIn");
@@ -304,7 +320,7 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountIn = 300_000e6;
         _fundProxy(0, amountIn);
 
-        uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(_getSwapKey(address(token1)));
+        uint256 swapLimitBefore     = rateLimits.getCurrentRateLimit(_getSwapKey(address(token1)));
         uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
         uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
 
@@ -336,13 +352,13 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
     function _e2e_swapUniswapV3(uint256 swapAmount, IERC20 tokenIn, IERC20 tokenOut, bytes32 swapKey) internal {
         deal(address(tokenIn), address(almProxy), swapAmount);
 
-        uint8 tokenInDecimals = IERC20Metadata(address(tokenIn)).decimals();
+        uint8 tokenInDecimals  = IERC20Metadata(address(tokenIn)).decimals();
         uint8 tokenOutDecimals = IERC20Metadata(address(tokenOut)).decimals();
 
         uint256 swapAmountOut = FullMath.mulDiv(swapAmount, 10**tokenOutDecimals, 10**tokenInDecimals);
 
         uint256 tokenOutBalanceBeforeSwap = tokenOut.balanceOf(address(almProxy));
-        uint256 swapDeadline = block.timestamp + 1 hours;
+        uint256 swapDeadline              = block.timestamp + 1 hours;
 
         uint256 swapRateLimitBefore = rateLimits.getCurrentRateLimit(swapKey);
 
