@@ -73,6 +73,7 @@ contract MainnetController is AccessControl {
     event RelayerRemoved(address indexed relayer);
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
+    event UniswapV3PoolParamsSet(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -126,6 +127,9 @@ contract MainnetController is AccessControl {
     uint256 public psmTo18ConversionFactor;
 
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
+
+
+    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     // Uniswap V3 router used for swaps
     address public uniswapV3Router;
@@ -208,6 +212,15 @@ contract MainnetController is AccessControl {
         _checkRole(DEFAULT_ADMIN_ROLE);
         uniswapV3PositionManager = positionManager;
         emit UniswapV3PositionManagerSet(positionManager);
+    }
+
+    function setUniswapV3PoolParams(address pool, UniswapV3Lib.UniswapV3PoolParams memory params) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(params.swapMaxTickDelta > 0 && params.swapMaxTickDelta < UniswapV3Lib.MAX_TICK_DELTA, "MainnetController/max-tick-delta-out-of-bounds");
+
+        uniswapV3PoolParams[pool] = params;
+        emit UniswapV3PoolParamsSet(pool, params);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -575,13 +588,14 @@ contract MainnetController is AccessControl {
         address tokenIn,
         uint256 amountIn,
         uint256 minAmountOut,
-        int24   maxPriceTick,
+        uint24  swapMaxTickDelta,
         uint256 deadline
     )
         external returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
         require(uniswapV3Router != address(0), "MainnetController/router-not-set");
+        require(swapMaxTickDelta <= uniswapV3PoolParams[pool].swapMaxTickDelta, "MainnetController/invalid-max-tick-delta");
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
@@ -597,7 +611,7 @@ contract MainnetController is AccessControl {
                 amountIn     : amountIn,
                 minAmountOut : minAmountOut,
                 maxSlippage  : maxSlippages[pool],
-                maxPriceTick : maxPriceTick
+                maxTickDelta : swapMaxTickDelta
             })
         );
     }
