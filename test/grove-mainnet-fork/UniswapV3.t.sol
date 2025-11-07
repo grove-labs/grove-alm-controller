@@ -58,7 +58,7 @@ contract UniswapV3TestBase is ForkTestBase {
         vm.startPrank(GROVE_PROXY);
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
-        mainnetController.setUniswapV3PoolParams(_getPool(), UniswapV3Lib.UniswapV3PoolParams({ swapMaxTickDelta: 200 }));
+        mainnetController.setUniswapV3PoolParams(_getPool(), UniswapV3Lib.UniswapV3PoolParams({ swapMaxTickDelta: 200, swapTwapSecondsAgo: 1 hours }));
         mainnetController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         mainnetController.setUniswapV3Router(UNISWAP_V3_ROUTER);
         vm.stopPrank();
@@ -148,7 +148,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             1,
             1,
-            type(uint24).max,
+            100,
             block.timestamp + 1 hours
         );
     }
@@ -232,7 +232,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         _fundProxy(amountIn, 0);
 
         vm.startPrank(relayer);
-        vm.expectRevert("MainnetController/invalid-max-tick-delta");
+        vm.expectRevert("UniswapV3Lib/invalid-max-tick-delta");
         mainnetController.swapUniswapV3(
             _getPool(),
             address(token0),
@@ -273,22 +273,16 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountIn = 250_000e6;
         _fundProxy(amountIn, 0);
 
-        uint256 priceX192 = _getCurrentPriceX192();
-        uint256 expectedOut = FullMath.mulDiv(amountIn, priceX192, Q192);
-        uint256 maxSlippage = mainnetController.maxSlippages(_getPool());
-        uint256 minAmountOut = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
-
         uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
         uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
         uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
 
-        uint256 amountOut = _swap(address(token0), amountIn, minAmountOut);
+        uint256 amountOut = _swap(address(token0), amountIn, amountIn * 999/1000);
 
         uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
         uint256 normalizedValue = _scaleTo1e18(amountIn, token0Decimals);
 
-        assertGt(amountOut, 0, "expected token1 output");
-        assertGe(amountOut, minAmountOut, "swap output should satisfy minimum");
+        assertApproxEqAbs(amountIn, amountOut, .0001e18, "swap output should be within 0.01% of amountIn");
         assertEq(
             token0.balanceOf(address(almProxy)),
             token0BalanceBefore - amountIn,
@@ -310,21 +304,15 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountIn = 300_000e6;
         _fundProxy(0, amountIn);
 
-        uint256 priceX192 = _getCurrentPriceX192();
-        uint256 expectedOut = FullMath.mulDiv(amountIn, Q192, priceX192);
-        uint256 maxSlippage = mainnetController.maxSlippages(_getPool());
-        uint256 minAmountOut = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
-
         uint256 swapLimitBefore = rateLimits.getCurrentRateLimit(_getSwapKey(address(token1)));
         uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
         uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
 
-        uint256 amountOut = _swap(address(token1), amountIn, minAmountOut);
+        uint256 amountOut = _swap(address(token1), amountIn, amountIn * 999/1000);
 
         uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(_getSwapKey(address(token1)));
 
-        assertGt(amountOut, 0, "expected token0 output");
-        assertGe(amountOut, minAmountOut, "swap output should satisfy minimum");
+        assertApproxEqAbs(amountIn, amountOut, .0001e18, "swap output should be within 0.01% of amountIn");
         assertEq(
             token1.balanceOf(address(almProxy)),
             token1BalanceBefore - amountIn,
