@@ -27,6 +27,7 @@ library UniswapV3Lib {
     /**********************************************************************************************/
     struct UniswapV3PoolParams {
         uint24 swapMaxTickDelta;
+        uint32 swapTwapSecondsAgo;
     }
 
     struct UniV3Context {
@@ -38,22 +39,22 @@ library UniswapV3Lib {
     }
 
     struct SwapParams {
-        address     router;
-        address     tokenIn;
-        uint256     amountIn;
-        uint256     minAmountOut;
-        uint24      maxTickDelta; // The maximum that the tick can move by after completing the swap; type(uint24).max for no limit
-        uint256     maxSlippage;
+        UniswapV3PoolParams poolParams;
+        address             router;
+        address             tokenIn;
+        uint256             amountIn;
+        uint256             minAmountOut;
+        uint24              maxTickDelta; // The maximum that the tick can move by after completing the swap; type(uint24).max for no limit
+        uint256             maxSlippage;
     }
 
     struct SwapCache {
         IUniswapV3PoolLike pool;
-        address token0;
-        address token1;
-        address tokenOut;
-        uint160 sqrtPriceX96;
-        uint160 sqrtPriceLimitX96;
-        uint256 expectedOut;
+        address            token0;
+        address            token1;
+        address            tokenOut;
+        uint160            sqrtPriceLimitX96;
+        uint256            twapExpectedOut;
     }
 
     /**********************************************************************************************/
@@ -69,12 +70,11 @@ library UniswapV3Lib {
             "UniswapV3Lib/invalid-token-pair"
         );
         require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxTickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
-        // TODO: come up with a better way to calculate minAmountOut
-        // uint256 minOutBySlippage = cache.expectedOut * params.maxSlippage / 1e18;
-        // console2.log(minOutBySlippage);
-        // console2.log(params.minAmountOut);
-        // require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
+        uint256 minOutBySlippage = cache.twapExpectedOut * params.maxSlippage / 1e18;
+
+        require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
         _approve(context.proxy, params.tokenIn, params.router, params.amountIn);
 
@@ -90,26 +90,21 @@ library UniswapV3Lib {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
         address token0 = pool.token0();
         address token1 = pool.token1();
-        (uint160 sqrtPriceX96, int24 currentTick, , , , , ) = pool.slot0();
-        uint256 priceX192 = _priceX192(sqrtPriceX96);
-
-        bool zeroForOne = (params.tokenIn == token0);
+        (, int24 currentTick, , , , , ) = pool.slot0();
 
         int24 delta = int24(params.maxTickDelta);
 
-        // Note: expectedOut approximates the amount of tokenOut without crossing the tick. It is not meant to be used
-        //       to approximate amountOut. 
-        uint256 expectedOut;
+        address tokenOut = params.tokenIn == token0 ? token1 : token0;
+        
+        // Expected out is calculated by by converting amountIn to amountOut using the TWAP tick since some time ago
+        (int24 twapExpectedOutTick, ) = _consult(context.pool, params.poolParams.swapTwapSecondsAgo); 
+        uint256 twapExpectedOut = getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, tokenOut);
 
         int24 limitTick;
-        if (zeroForOne) {
-            expectedOut = FullMath.mulDiv(params.amountIn, priceX192, Q192);
-
+        if (params.tokenIn == token0) {
             limitTick = currentTick - delta;
             if (limitTick < TickMath.MIN_TICK) limitTick = TickMath.MIN_TICK;
         } else {
-            expectedOut = FullMath.mulDiv(params.amountIn, Q192, priceX192);
-
             limitTick = currentTick + delta;
             if (limitTick > TickMath.MAX_TICK) limitTick = TickMath.MAX_TICK;
         }
@@ -120,10 +115,9 @@ library UniswapV3Lib {
             pool: pool,
             token0: token0,
             token1: token1,
-            tokenOut: token0 == params.tokenIn ? token1 : token0,
-            sqrtPriceX96: sqrtPriceX96,
+            tokenOut: tokenOut,
             sqrtPriceLimitX96: sqrtPriceLimitX96,
-            expectedOut: expectedOut
+            twapExpectedOut: twapExpectedOut
         });
     }
 
@@ -199,6 +193,69 @@ library UniswapV3Lib {
             return amount * 10 ** (18 - decimals_);
         } else {
             return amount / 10 ** (decimals_ - 18);
+        }
+    }
+
+    /// Taken from https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
+    /// @notice Calculates time-weighted means of tick and liquidity for a given Uniswap V3 pool
+    /// @param pool Address of the pool that we want to observe
+    /// @param secondsAgo Number of seconds in the past from which to calculate the time-weighted means
+    /// @return arithmeticMeanTick The arithmetic mean tick from (block.timestamp - secondsAgo) to block.timestamp
+    /// @return harmonicMeanLiquidity The harmonic mean liquidity from (block.timestamp - secondsAgo) to block.timestamp
+    /// Changes: changed the require message, explicitly cast secondsAgo to int32, and UniswapV3PoolLike to IUniswapV3PoolLike
+    function _consult(address pool, uint32 secondsAgo)
+        internal
+        view
+        returns (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity)
+    {
+        require(secondsAgo != 0, 'UniswapV3Lib/consult-seconds-ago-not-zero');
+
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = secondsAgo;
+        secondsAgos[1] = 0;
+
+        (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s) =
+            IUniswapV3PoolLike(pool).observe(secondsAgos);
+
+        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
+        uint160 secondsPerLiquidityCumulativesDelta =
+            secondsPerLiquidityCumulativeX128s[1] - secondsPerLiquidityCumulativeX128s[0];
+
+        arithmeticMeanTick = int24(tickCumulativesDelta / int32(secondsAgo));
+        // Always round to negative infinity
+        if (tickCumulativesDelta < 0 && (tickCumulativesDelta % int32(secondsAgo) != 0)) arithmeticMeanTick--;
+
+        // We are multiplying here instead of shifting to ensure that harmonicMeanLiquidity doesn't overflow uint128
+        uint192 secondsAgoX160 = uint192(secondsAgo) * type(uint160).max;
+        harmonicMeanLiquidity = uint128(secondsAgoX160 / (uint192(secondsPerLiquidityCumulativesDelta) << 32));
+    }
+
+    /// Taken from https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
+    /// @notice Given a tick and a token amount, calculates the amount of token received in exchange
+    /// @param tick Tick value used to calculate the quote
+    /// @param baseAmount Amount of token to be converted
+    /// @param baseToken Address of an ERC20 token contract used as the baseAmount denomination
+    /// @param quoteToken Address of an ERC20 token contract used as the quoteAmount denomination
+    /// @return quoteAmount Amount of quoteToken received for baseAmount of baseToken
+    function getQuoteAtTick(
+        int24 tick,
+        uint128 baseAmount,
+        address baseToken,
+        address quoteToken
+    ) internal pure returns (uint256 quoteAmount) {
+        uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
+
+        // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
+        if (sqrtRatioX96 <= type(uint128).max) {
+            uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
+            quoteAmount = baseToken < quoteToken
+                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
+                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
+        } else {
+            uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, 1 << 64);
+            quoteAmount = baseToken < quoteToken
+                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
+                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
         }
     }
 }

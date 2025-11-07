@@ -128,7 +128,6 @@ contract MainnetController is AccessControl {
 
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
 
-
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     // Uniswap V3 router used for swaps
@@ -595,7 +594,6 @@ contract MainnetController is AccessControl {
     {
         _checkRole(RELAYER);
         require(uniswapV3Router != address(0), "MainnetController/router-not-set");
-        require(swapMaxTickDelta <= uniswapV3PoolParams[pool].swapMaxTickDelta, "MainnetController/invalid-max-tick-delta");
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
@@ -606,12 +604,13 @@ contract MainnetController is AccessControl {
                 deadline    : deadline
             }),
             UniswapV3Lib.SwapParams({
-                router       : uniswapV3Router,
-                tokenIn      : tokenIn,
-                amountIn     : amountIn,
-                minAmountOut : minAmountOut,
-                maxSlippage  : maxSlippages[pool],
-                maxTickDelta : swapMaxTickDelta
+                router         : uniswapV3Router,
+                tokenIn        : tokenIn,
+                amountIn       : amountIn,
+                minAmountOut   : minAmountOut,
+                maxSlippage    : maxSlippages[pool],
+                maxTickDelta   : swapMaxTickDelta,
+                poolParams     : uniswapV3PoolParams[pool]
             })
         );
     }
