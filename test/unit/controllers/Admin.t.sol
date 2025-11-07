@@ -297,6 +297,7 @@ contract ForeignControllerSetLayerZeroRecipientTests is ForeignControllerAdminTe
 }
 
 contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase {
+
     function test_setMaxSlippage_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
@@ -333,4 +334,5 @@ contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase 
 
         assertEq(foreignController.maxSlippages(pool), 0.02e18);
     }
+
 }

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
-import "./ForkTestBase.t.sol";
+
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import { ICurvePoolLike as ICurvePoolLikeLib } from "../../src/libraries/CurveLib.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+import "./ForkTestBase.t.sol";
 
 interface ICurvePoolLike is ICurvePoolLikeLib {
     function calc_token_amount(uint256[] memory amounts, bool is_deposit) external view returns (uint256);
@@ -28,10 +30,10 @@ contract CurveTestBase is ForkTestBase {
 
     // TODO: replace with real target pool once available
     address constant CURVE_POOL = 0xa9D6867C347B8b5f395B8421FB31710B8Fb21a16; // USDC/ cgUSD
-    address constant CGUSD = 0xCa72827a3D211CfD8F6b00Ac98824872b72CAb49;
+    address constant CGUSD      = 0xCa72827a3D211CfD8F6b00Ac98824872b72CAb49;
 
     IERC20 curveLp = IERC20(CURVE_POOL);
-    IERC20 cgUSD = IERC20(CGUSD);
+    IERC20 cgUSD   = IERC20(CGUSD);
 
     ICurvePoolLike curvePool = ICurvePoolLike(CURVE_POOL);
 
@@ -59,10 +61,10 @@ contract CurveTestBase is ForkTestBase {
             amounts[1] = 100_000_000e6;
             
             deal(address(usdcBase), address(this), amounts[0]);
-            deal(address(cgUSD), address(this), amounts[1]);
+            deal(address(cgUSD),    address(this), amounts[1]);
 
             usdcBase.approve(CURVE_POOL, amounts[0]);
-            cgUSD.approve(CURVE_POOL, amounts[1]);
+            cgUSD.approve(CURVE_POOL,    amounts[1]);
             ICurvePoolLike(CURVE_POOL).add_liquidity(amounts, 1e18, address(this));
         }
 
@@ -86,21 +88,21 @@ contract CurveTestBase is ForkTestBase {
 
     function _labelAddresses() internal {
         vm.label(address(usdcBase), "UsdcBase");
-        vm.label(CGUSD, "CgUSD");
-        vm.label(CURVE_POOL, "CurvePool");
+        vm.label(CGUSD,             "CgUSD");
+        vm.label(CURVE_POOL,        "CurvePool");
     }
 
     function _addLiquidity(uint256 usdcAmount, uint256 cgUSDAmount)
         internal returns (uint256 lpTokensReceived)
     {
         deal(address(usdcBase), address(almProxy), usdcAmount);
-        deal(address(cgUSD), address(almProxy), cgUSDAmount);
+        deal(address(cgUSD),    address(almProxy), cgUSDAmount);
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = usdcAmount;
         amounts[1] = cgUSDAmount;
 
-        uint256 minLpAmount = (usdcAmount + cgUSDAmount) * 1e12 * 98/100;
+        uint256 minLpAmount = (usdcAmount + cgUSDAmount) * 1e12 * 98 / 100;
 
         vm.prank(ALM_RELAYER);
         lpTokensReceived = foreignController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
@@ -203,7 +205,7 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
 
     function test_addLiquidityCurve_underAllowableSlippageBoundary() public {
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
-        deal(address(cgUSD), address(almProxy), 1_000_000e6);
+        deal(address(cgUSD),      address(almProxy), 1_000_000e6);
         
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
@@ -243,7 +245,7 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
 
     function test_addLiquidityCurve_rateLimitBoundaryAsset0() public {
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
-        deal(address(cgUSD), address(almProxy), 1_000_000e6);
+        deal(address(cgUSD),      address(almProxy), 1_000_000e6);
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
@@ -264,7 +266,7 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
 
     function test_addLiquidityCurve_rateLimitBoundaryAsset1() public {
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
-        deal(address(cgUSD), address(almProxy), 1_000_000e6);
+        deal(address(cgUSD),      address(almProxy), 1_000_000e6);
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
@@ -289,7 +291,7 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
 
     function test_addLiquidityCurve() public {
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
-        deal(address(cgUSD), address(almProxy), 1_000_000e6);
+        deal(address(cgUSD),      address(almProxy), 1_000_000e6);
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
@@ -302,7 +304,7 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         uint256 startingTotalSupply = curveLp.totalSupply();
 
         assertEq(usdcBase.allowance(address(almProxy), CURVE_POOL), 0);
-        assertEq(cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
+        assertEq(cgUSD.allowance(address(almProxy),    CURVE_POOL), 0);
 
         assertEq(usdcBase.balanceOf(address(almProxy)), 1_000_000e6);
         assertEq(usdcBase.balanceOf(CURVE_POOL),        startingUsdcBalance);
@@ -326,7 +328,7 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(lpTokensReceived, minLpAmount);
 
         assertEq(usdcBase.allowance(address(almProxy), CURVE_POOL), 0);
-        assertEq(cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
+        assertEq(cgUSD.allowance(address(almProxy),      CURVE_POOL), 0);
 
         assertEq(usdcBase.balanceOf(address(almProxy)), 0);
         assertEq(usdcBase.balanceOf(CURVE_POOL),        startingUsdcBalance + 1_000_000e6);
@@ -403,11 +405,11 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         rateLimits.setRateLimitData(curveSwapKey, type(uint256).max - 1, type(uint256).max - 1);
         vm.stopPrank();
 
-        usdcAmount = _bound(usdcAmount, 1_000_000e6, 10_000_000_000e6);
+        usdcAmount    = _bound(usdcAmount.   , 1_000_000e6, 10_000_000_000e6);
         cgUSDAmount = _bound(cgUSDAmount, 1_000_000e6, 10_000_000_000e6);
 
         deal(address(usdcBase), address(almProxy), usdcAmount);
-        deal(address(cgUSD), address(almProxy), cgUSDAmount);
+        deal(address(cgUSD),      address(almProxy), cgUSDAmount);
 
         // Step 1: Add liquidity with fuzzed inputs, check how much the rate limit was reduced
 
@@ -577,7 +579,7 @@ contract ForeignControllerRemoveLiquiditySuccessTests is CurveTestBase {
         amounts[0] = 1_000_000e6;
         amounts[1] = 1_000_000e6;
         uint256 lpTokensEstimated = ICurvePoolLike(CURVE_POOL).calc_token_amount(amounts, true);
-        uint256 lpTokensReceived = _addLiquidity(amounts[0], amounts[1]);
+        uint256 lpTokensReceived  = _addLiquidity(amounts[0], amounts[1]);
 
         uint256 startingCgUSDBalance = cgUSD.balanceOf(CURVE_POOL);
         uint256 startingUsdcBalance  = usdcBase.balanceOf(CURVE_POOL);
@@ -587,7 +589,7 @@ contract ForeignControllerRemoveLiquiditySuccessTests is CurveTestBase {
 
         assertEq(curveLp.allowance(address(almProxy), CURVE_POOL), 0);
 
-        assertEq(cgUSD.balanceOf(address(almProxy)), 0);
+        assertEq(     cgUSD.balanceOf(address(almProxy)), 0);
         assertEq(usdcBase.balanceOf(address(almProxy)), 0);
 
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
@@ -753,7 +755,7 @@ contract ForeignControllerSwapCurveSuccessTests is CurveTestBase {
         foreignController.setMaxSlippage(CURVE_POOL, 0.999e18);  // 0.1%
 
         uint256 startingCgUSDBalance = cgUSD.balanceOf(CURVE_POOL);
-        uint256 startingUsdcBalance = usdcBase.balanceOf(CURVE_POOL);
+        uint256 startingUsdcBalance    = usdcBase.balanceOf(CURVE_POOL);
 
         deal(address(cgUSD), address(almProxy), 1_000_000e6);
 
@@ -766,7 +768,7 @@ contract ForeignControllerSwapCurveSuccessTests is CurveTestBase {
         assertEq(rateLimits.getCurrentRateLimit(curveSwapKey), 1_000_000e18);
 
         assertEq(usdcBase.allowance(address(almProxy), CURVE_POOL), 0);
-        assertEq(cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
+        assertEq(     cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
 
         // Calculate expected swap output dynamically
         uint256 expectedAmountOut = curvePool.get_dy(1, 0, 1_000_000e6);
@@ -782,7 +784,7 @@ contract ForeignControllerSwapCurveSuccessTests is CurveTestBase {
         assertEq(amountOut, expectedAmountOut);
 
         assertEq(usdcBase.allowance(address(almProxy), CURVE_POOL), 0);
-        assertEq(cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
+        assertEq(     cgUSD.allowance(address(almProxy), CURVE_POOL), 0);
 
         assertEq(cgUSD.balanceOf(address(almProxy)), 0);
         assertEq(cgUSD.balanceOf(CURVE_POOL),        startingCgUSDBalance + 1_000_000e6);
@@ -1048,9 +1050,9 @@ contract ForeignControllerE2ECurveCgUSDUsdcBasePoolTest is CurveTestBase {
         foreignController.setMaxSlippage(CURVE_POOL, 0.95e18);
 
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
-        deal(address(cgUSD), address(almProxy), 1_000_000e6);
+        deal(address(     cgUSD), address(almProxy), 1_000_000e6);
 
-        uint256 initialUsdcBalance = usdcBase.balanceOf(CURVE_POOL);
+        uint256 initialUsdcBalance     = usdcBase.balanceOf(CURVE_POOL);
         uint256 initialCgUSDBalance = cgUSD.balanceOf(CURVE_POOL);
 
         // Step 1: Add liquidity
@@ -1064,7 +1066,7 @@ contract ForeignControllerE2ECurveCgUSDUsdcBasePoolTest is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), 0);
 
         assertEq(usdcBase.balanceOf(address(almProxy)), 1_000_000e6);
-        assertEq(cgUSD.balanceOf(address(almProxy)), 1_000_000e6);
+        assertEq(     cgUSD.balanceOf(address(almProxy)), 1_000_000e6);
 
         vm.prank(ALM_RELAYER);
         uint256 lpTokensReceived = foreignController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
@@ -1072,16 +1074,16 @@ contract ForeignControllerE2ECurveCgUSDUsdcBasePoolTest is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
 
         assertEq(usdcBase.balanceOf(address(almProxy)), 0);
-        assertEq(cgUSD.balanceOf(address(almProxy)), 0);
+        assertEq(     cgUSD.balanceOf(address(almProxy)), 0);
 
         assertEq(usdcBase.balanceOf(CURVE_POOL), initialUsdcBalance + 1_000_000e6);
-        assertEq(cgUSD.balanceOf(CURVE_POOL), initialCgUSDBalance + 1_000_000e6);
+        assertEq(     cgUSD.balanceOf(CURVE_POOL), initialCgUSDBalance + 1_000_000e6);
 
         // Step 2: Swap cgUSD for USDC
 
         deal(address(cgUSD), address(almProxy), 100_000e6);
 
-        assertEq(cgUSD.balanceOf(address(almProxy)), 100_000e6);
+        assertEq(     cgUSD.balanceOf(address(almProxy)), 100_000e6);
         assertEq(usdcBase.balanceOf(address(almProxy)), 0);
 
         // Calculate expected output dynamically using Curve's get_dy function
