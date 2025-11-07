@@ -25,6 +25,7 @@ import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
+import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
@@ -51,6 +52,12 @@ interface IVaultLike {
     function wipe(uint256 usdsAmount) external;
 }
 
+interface IUniswapV3PoolMinimal {
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function fee() external view returns (uint24);
+}
+
 contract MainnetController is AccessControl {
 
     using OptionsBuilder for bytes;
@@ -64,6 +71,8 @@ contract MainnetController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
+    event UniswapV3RouterSet(address indexed router);
+    event UniswapV3PositionManagerSet(address indexed positionManager);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -92,6 +101,9 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
     bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
     bytes32 public LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
+    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -114,6 +126,12 @@ contract MainnetController is AccessControl {
     uint256 public psmTo18ConversionFactor;
 
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
+
+    // Uniswap V3 router used for swaps
+    address public uniswapV3Router;
+
+    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    address public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -178,6 +196,18 @@ contract MainnetController is AccessControl {
         _checkRole(DEFAULT_ADMIN_ROLE);
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+    function setUniswapV3Router(address router) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        uniswapV3Router = router;
+        emit UniswapV3RouterSet(router);
+    }
+
+    function setUniswapV3PositionManager(address positionManager) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        uniswapV3PositionManager = positionManager;
+        emit UniswapV3PositionManagerSet(positionManager);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -535,6 +565,41 @@ contract MainnetController is AccessControl {
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
         }));
+    }
+    
+    /**********************************************************************************************/
+    /*** Relayer UniswapV3 functions                                                            ***/
+    /**********************************************************************************************/
+    function swapUniswapV3(
+        address pool,
+        address tokenIn,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        int24   maxPriceTick,
+        uint256 deadline
+    )
+        external returns (uint256 amountOut)
+    {
+        _checkRole(RELAYER);
+        require(uniswapV3Router != address(0), "MainnetController/router-not-set");
+
+        amountOut = UniswapV3Lib.swap(
+            UniswapV3Lib.UniV3Context({
+                proxy       : proxy,
+                rateLimits  : rateLimits,
+                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
+                pool        : pool,
+                deadline    : deadline
+            }),
+            UniswapV3Lib.SwapParams({
+                router       : uniswapV3Router,
+                tokenIn      : tokenIn,
+                amountIn     : amountIn,
+                minAmountOut : minAmountOut,
+                maxSlippage  : maxSlippages[pool],
+                maxPriceTick : maxPriceTick
+            })
+        );
     }
 
     /**********************************************************************************************/
