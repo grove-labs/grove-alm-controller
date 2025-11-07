@@ -54,6 +54,12 @@ interface IVaultLike {
     function wipe(uint256 usdsAmount) external;
 }
 
+interface IUniswapV3PoolMinimal {
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function fee() external view returns (uint24);
+}
+
 contract MainnetController is AccessControl {
 
     using OptionsBuilder for bytes;
@@ -69,7 +75,6 @@ contract MainnetController is AccessControl {
     event RelayerRemoved(address indexed relayer);
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
-    event UniswapV3SwapMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -126,7 +131,11 @@ contract MainnetController is AccessControl {
 
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
 
-    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+    // Uniswap V3 router used for swaps
+    address public uniswapV3Router;
+
+    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    address public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -195,28 +204,14 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3Router(address router) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3Router = ISwapRouter(router);
+        uniswapV3Router = router;
         emit UniswapV3RouterSet(router);
     }
 
     function setUniswapV3PositionManager(address positionManager) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
+        uniswapV3PositionManager = positionManager;
         emit UniswapV3PositionManagerSet(positionManager);
-    }
-
-    function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-
-        require(
-            maxTickDelta > 0 &&
-            maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "MainnetController/max-tick-delta-out-of-bounds"
-        );
-
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        params.swapMaxTickDelta = maxTickDelta;
-        emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -578,18 +573,21 @@ contract MainnetController is AccessControl {
         address tokenIn,
         uint256 amountIn,
         uint256 minAmountOut,
-        uint24  swapMaxTickDelta
+        int24   maxPriceTick,
+        uint256 deadline
     )
         external returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
+        require(uniswapV3Router != address(0), "MainnetController/router-not-set");
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
                 rateLimitId : LIMIT_UNISWAP_V3_SWAP,
-                pool        : pool
+                pool        : pool,
+                deadline    : deadline
             }),
             UniswapV3Lib.SwapParams({
                 router       : uniswapV3Router,
@@ -597,8 +595,7 @@ contract MainnetController is AccessControl {
                 amountIn     : amountIn,
                 minAmountOut : minAmountOut,
                 maxSlippage  : maxSlippages[pool],
-                tickDelta    : swapMaxTickDelta,
-                poolParams   : uniswapV3PoolParams[pool]
+                maxPriceTick : maxPriceTick
             })
         );
     }
