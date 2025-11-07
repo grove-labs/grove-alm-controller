@@ -7,6 +7,7 @@ import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/ext
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
+import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
 
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -56,6 +57,8 @@ contract UniswapV3TestBase is ForkTestBase {
         // Set a higher slippage to allow for successes
         vm.startPrank(GROVE_PROXY);
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
+        // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
+        mainnetController.setUniswapV3PoolParams(_getPool(), UniswapV3Lib.UniswapV3PoolParams({ swapMaxTickDelta: 200 }));
         mainnetController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         mainnetController.setUniswapV3Router(UNISWAP_V3_ROUTER);
         vm.stopPrank();
@@ -105,7 +108,7 @@ contract UniswapV3TestBase is ForkTestBase {
             tokenIn,
             amountIn,
             minAmountOut,
-            type(int24).min,
+            200,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -145,7 +148,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             1,
             1,
-            0,
+            type(uint24).max,
             block.timestamp + 1 hours
         );
     }
@@ -164,7 +167,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            0,
+            200,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -184,7 +187,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            0,
+            200,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -201,7 +204,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(dai),
             amountIn,
             0,
-            0,
+            200,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -211,22 +214,55 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         uint256 amountIn = 150_000e6;
         _fundProxy(amountIn, 0);
 
-        uint256 priceX192 = _getCurrentPriceX192();
-        uint256 expectedOut = FullMath.mulDiv(amountIn, priceX192, Q192);
-        uint256 maxSlippage = mainnetController.maxSlippages(_getPool());
-        uint256 minOutBySlippage = FullMath.mulDiv(expectedOut, maxSlippage, 1e18);
-        assertGt(minOutBySlippage, 0, "expected minOut to be positive");
-
         vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/min-amount-not-met");
+        vm.expectRevert("Too little received");
         mainnetController.swapUniswapV3(
             _getPool(),
             address(token0),
             amountIn,
-            minOutBySlippage - 1,
+            amountIn * 9999/10000,
             0,
             block.timestamp + 1 hours
         );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_invalidMaxTickDelta() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("MainnetController/invalid-max-tick-delta");
+        mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            0,
+            type(uint24).max,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_limitsAmountOutWhenCrossingMaxTick() public {
+        uint256 amountIn = 2_000_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setRateLimitData(_getSwapKey(address(token0)), 2_000_000e18, uint256(2_000_000e18) / 1 days);
+        vm.stopPrank();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("Too little received");
+        mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            amountIn * 999/1000,
+            0, // amountOut will be capped to only liquidity that's within the current tick
+            block.timestamp + 1 hours
+        );
+
         vm.stopPrank();
     }
 }
@@ -286,8 +322,6 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountOut = _swap(address(token1), amountIn, minAmountOut);
 
         uint256 swapLimitAfter = rateLimits.getCurrentRateLimit(_getSwapKey(address(token1)));
-        uint256 valueInToken0 = FullMath.mulDiv(amountIn, Q192, priceX192);
-        uint256 normalizedValue = _scaleTo1e18(valueInToken0, token0Decimals);
 
         assertGt(amountOut, 0, "expected token0 output");
         assertGe(amountOut, minAmountOut, "swap output should satisfy minimum");
@@ -330,7 +364,7 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
             address(tokenIn),
             swapAmount,
             swapAmountOut * 999 / 1000,
-            10000, // allow for price impact of up to 10bps
+            200, // allow for price impact of up to 2 points
             swapDeadline
         );
         vm.stopPrank();
