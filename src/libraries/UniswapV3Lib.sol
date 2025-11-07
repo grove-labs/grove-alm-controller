@@ -16,10 +16,9 @@ import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "..
 
 import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
-import { console2 } from "forge-std/console2.sol";
-
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
+
     uint256 internal constant Q192 = 2 ** 192;
 
     /**********************************************************************************************/
@@ -44,7 +43,7 @@ library UniswapV3Lib {
         address             tokenIn;
         uint256             amountIn;
         uint256             minAmountOut;
-        uint24              maxTickDelta; // The maximum that the tick can move by after completing the swap; type(uint24).max for no limit
+        uint24              tickDelta; // The maximum that the tick can move by after completing the swap; type(uint24).max for no limit
         uint256             maxSlippage;
     }
 
@@ -70,7 +69,7 @@ library UniswapV3Lib {
             "UniswapV3Lib/invalid-token-pair"
         );
         require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
-        require(params.maxTickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
+        require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
         uint256 minOutBySlippage = cache.twapExpectedOut * params.maxSlippage / 1e18;
 
@@ -86,19 +85,24 @@ library UniswapV3Lib {
         );
     }
 
+    /**********************************************************************************************/
+    /*** Helper functions                                                                       ***/
+    /**********************************************************************************************/
+    
+    //-- Swap helper functions
     function _populateSwapCache(UniV3Context calldata context, SwapParams calldata params) internal view returns (SwapCache memory) {
-        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
-        address token0 = pool.token0();
-        address token1 = pool.token1();
+        IUniswapV3PoolLike pool         = IUniswapV3PoolLike(context.pool);
+        address token0                  = pool.token0();
+        address token1                  = pool.token1();
         (, int24 currentTick, , , , , ) = pool.slot0();
 
-        int24 delta = int24(params.maxTickDelta);
+        int24 delta = int24(params.tickDelta);
 
         address tokenOut = params.tokenIn == token0 ? token1 : token0;
         
         // Expected out is calculated by by converting amountIn to amountOut using the TWAP tick since some time ago
-        (int24 twapExpectedOutTick, ) = _consult(context.pool, params.poolParams.swapTwapSecondsAgo); 
-        uint256 twapExpectedOut = getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, tokenOut);
+        (int24 twapExpectedOutTick, ) = UniswapV3OracleLibrary.consult(context.pool, params.poolParams.swapTwapSecondsAgo); 
+        uint256 twapExpectedOut       = UniswapV3OracleLibrary.getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, tokenOut);
 
         int24 limitTick;
         if (params.tokenIn == token0) {
@@ -112,12 +116,12 @@ library UniswapV3Lib {
         uint160 sqrtPriceLimitX96 = TickMath.getSqrtRatioAtTick(limitTick);
 
         return SwapCache({
-            pool: pool,
-            token0: token0,
-            token1: token1,
-            tokenOut: tokenOut,
+            pool             : pool,
+            token0           : token0,
+            token1           : token1,
+            tokenOut         : tokenOut,
             sqrtPriceLimitX96: sqrtPriceLimitX96,
-            twapExpectedOut: twapExpectedOut
+            twapExpectedOut  : twapExpectedOut
         });
     }
 
@@ -129,13 +133,13 @@ library UniswapV3Lib {
             abi.encodeWithSelector(
                 ISwapRouter.exactInputSingle.selector,
                 ISwapRouter.ExactInputSingleParams({
-                    tokenIn: params.tokenIn,
-                    tokenOut: tokenOut,
-                    fee: cache.pool.fee(),
-                    recipient: address(context.proxy),
-                    deadline: context.deadline,
-                    amountIn: params.amountIn,
-                    amountOutMinimum: params.minAmountOut,
+                    tokenIn          : params.tokenIn,
+                    tokenOut         : tokenOut,
+                    fee              : cache.pool.fee(),
+                    recipient        : address(context.proxy),
+                    deadline         : context.deadline,
+                    amountIn         : params.amountIn,
+                    amountOutMinimum : params.minAmountOut,
                     sqrtPriceLimitX96: cache.sqrtPriceLimitX96
                 })
             )
@@ -144,10 +148,7 @@ library UniswapV3Lib {
         amountOut = abi.decode(result, (uint256));
     }
 
-    /**********************************************************************************************/
-    /*** Helper functions                                                                       ***/
-    /**********************************************************************************************/
-
+    //-- General helper functions
     function _approve(
         IALMProxy proxy,
         address   token,
@@ -182,10 +183,6 @@ library UniswapV3Lib {
         );
     }
 
-    function _priceX192(uint160 sqrtPriceX96) internal pure returns (uint256) {
-        return FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1);
-    }
-
     function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
         if (decimals_ == 18) {
             return amount;
@@ -195,7 +192,9 @@ library UniswapV3Lib {
             return amount / 10 ** (decimals_ - 18);
         }
     }
+}
 
+library UniswapV3OracleLibrary {
     /// Taken from https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
     /// @notice Calculates time-weighted means of tick and liquidity for a given Uniswap V3 pool
     /// @param pool Address of the pool that we want to observe
@@ -203,23 +202,22 @@ library UniswapV3Lib {
     /// @return arithmeticMeanTick The arithmetic mean tick from (block.timestamp - secondsAgo) to block.timestamp
     /// @return harmonicMeanLiquidity The harmonic mean liquidity from (block.timestamp - secondsAgo) to block.timestamp
     /// Changes: changed the require message, explicitly cast secondsAgo to int32, and UniswapV3PoolLike to IUniswapV3PoolLike
-    function _consult(address pool, uint32 secondsAgo)
-        internal
+    function consult(address pool, uint32 secondsAgo)
+        external
         view
         returns (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity)
     {
         require(secondsAgo != 0, 'UniswapV3Lib/consult-seconds-ago-not-zero');
 
         uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = secondsAgo;
-        secondsAgos[1] = 0;
+        secondsAgos[0]              = secondsAgo;
+        secondsAgos[1]              = 0;
 
         (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s) =
             IUniswapV3PoolLike(pool).observe(secondsAgos);
 
-        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
-        uint160 secondsPerLiquidityCumulativesDelta =
-            secondsPerLiquidityCumulativeX128s[1] - secondsPerLiquidityCumulativeX128s[0];
+        int56 tickCumulativesDelta                  = tickCumulatives[1] - tickCumulatives[0];
+        uint160 secondsPerLiquidityCumulativesDelta = secondsPerLiquidityCumulativeX128s[1] - secondsPerLiquidityCumulativeX128s[0];
 
         arithmeticMeanTick = int24(tickCumulativesDelta / int32(secondsAgo));
         // Always round to negative infinity
@@ -227,7 +225,7 @@ library UniswapV3Lib {
 
         // We are multiplying here instead of shifting to ensure that harmonicMeanLiquidity doesn't overflow uint128
         uint192 secondsAgoX160 = uint192(secondsAgo) * type(uint160).max;
-        harmonicMeanLiquidity = uint128(secondsAgoX160 / (uint192(secondsPerLiquidityCumulativesDelta) << 32));
+        harmonicMeanLiquidity  = uint128(secondsAgoX160 / (uint192(secondsPerLiquidityCumulativesDelta) << 32));
     }
 
     /// Taken from https://github.com/Uniswap/v3-periphery/blob/main/contracts/libraries/OracleLibrary.sol
@@ -242,20 +240,20 @@ library UniswapV3Lib {
         uint128 baseAmount,
         address baseToken,
         address quoteToken
-    ) internal pure returns (uint256 quoteAmount) {
+    ) external pure returns (uint256 quoteAmount) {
         uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
 
         // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
         if (sqrtRatioX96 <= type(uint128).max) {
             uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
-                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
+            quoteAmount       = baseToken < quoteToken
+                                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
+                                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
         } else {
             uint256 ratioX128 = FullMath.mulDiv(sqrtRatioX96, sqrtRatioX96, 1 << 64);
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
-                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
+            quoteAmount       = baseToken < quoteToken
+                                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
+                                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
         }
     }
 }
