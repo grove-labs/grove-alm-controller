@@ -7,7 +7,7 @@ interface ISwapRouter {
         address tokenOut;
         uint24 fee;
         address recipient;
-        // uint256 deadline;
+        uint256 deadline;
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
@@ -35,11 +35,6 @@ interface IUniswapV3PoolLike {
             uint8 feeProtocol,
             bool unlocked
         );
-    
-    function observe(uint32[] calldata secondsAgos)
-        external
-        view
-        returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX96);
 }
 
 interface INonfungiblePositionManager {
