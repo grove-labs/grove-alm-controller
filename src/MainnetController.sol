@@ -52,12 +52,6 @@ interface IVaultLike {
     function wipe(uint256 usdsAmount) external;
 }
 
-interface IUniswapV3PoolMinimal {
-    function token0() external view returns (address);
-    function token1() external view returns (address);
-    function fee() external view returns (uint24);
-}
-
 contract MainnetController is AccessControl {
 
     using OptionsBuilder for bytes;
@@ -216,7 +210,11 @@ contract MainnetController is AccessControl {
     function setUniswapV3PoolParams(address pool, UniswapV3Lib.UniswapV3PoolParams memory params) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        require(params.swapMaxTickDelta > 0 && params.swapMaxTickDelta < UniswapV3Lib.MAX_TICK_DELTA, "MainnetController/max-tick-delta-out-of-bounds");
+        require(
+            params.swapMaxTickDelta > 0 &&
+            params.swapMaxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
+            "MainnetController/max-tick-delta-out-of-bounds"
+        );
 
         uniswapV3PoolParams[pool] = params;
         emit UniswapV3PoolParamsSet(pool, params);
@@ -609,7 +607,7 @@ contract MainnetController is AccessControl {
                 amountIn       : amountIn,
                 minAmountOut   : minAmountOut,
                 maxSlippage    : maxSlippages[pool],
-                maxTickDelta   : swapMaxTickDelta,
+                tickDelta   : swapMaxTickDelta,
                 poolParams     : uniswapV3PoolParams[pool]
             })
         );
