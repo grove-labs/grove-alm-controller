@@ -69,7 +69,7 @@ contract MainnetController is AccessControl {
     event RelayerRemoved(address indexed relayer);
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
-    event UniswapV3PoolParamsSet(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
+    event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -211,17 +211,27 @@ contract MainnetController is AccessControl {
         emit UniswapV3PositionManagerSet(positionManager);
     }
 
-    function setUniswapV3PoolParams(address pool, UniswapV3Lib.UniswapV3PoolParams memory params) external {
+    function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
         require(
-            params.swapMaxTickDelta > 0 &&
-            params.swapMaxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
+            maxTickDelta > 0 &&
+            maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
             "MainnetController/max-tick-delta-out-of-bounds"
         );
 
-        uniswapV3PoolParams[pool] = params;
-        emit UniswapV3PoolParamsSet(pool, params);
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        params.swapMaxTickDelta = maxTickDelta;
+        emit UniswapV3PoolParamsUpdated(pool, params);
+    }
+
+    function setUniswapV3SwapTwapSecondsAgo(address pool, uint32 swapTwapSecondsAgo) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        params.swapTwapSecondsAgo = swapTwapSecondsAgo;
+        
+        emit UniswapV3PoolParamsUpdated(pool, params);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -605,7 +615,7 @@ contract MainnetController is AccessControl {
                 amountIn       : amountIn,
                 minAmountOut   : minAmountOut,
                 maxSlippage    : maxSlippages[pool],
-                tickDelta   : swapMaxTickDelta,
+                tickDelta      : swapMaxTickDelta,
                 poolParams     : uniswapV3PoolParams[pool]
             })
         );
