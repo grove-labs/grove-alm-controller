@@ -31,8 +31,6 @@ contract UniswapV3TestBase is ForkTestBase {
     uint24 internal poolFee;
     uint8  internal token0Decimals;
 
-    uint256 internal constant Q192 = 2 ** 192;
-
     function setUp() public virtual override  {
         super.setUp();
 
@@ -57,7 +55,9 @@ contract UniswapV3TestBase is ForkTestBase {
         vm.startPrank(GROVE_PROXY);
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
-        mainnetController.setUniswapV3PoolParams(_getPool(), UniswapV3Lib.UniswapV3PoolParams({ swapMaxTickDelta: 200, swapTwapSecondsAgo: 1 hours }));
+        mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
+        mainnetController.setUniswapV3SwapTwapSecondsAgo(_getPool(), 1 hours);
+        
         mainnetController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         mainnetController.setUniswapV3Router(UNISWAP_V3_ROUTER);
         vm.stopPrank();
