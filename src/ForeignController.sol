@@ -20,8 +20,9 @@ import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits } from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { PendleLib } from "./libraries/PendleLib.sol";
-import { ERC20Lib }  from "./libraries/ERC20Lib.sol";
+import { PendleLib }    from "./libraries/PendleLib.sol";
+import { ERC20Lib }     from "./libraries/ERC20Lib.sol";
+import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
@@ -59,6 +60,12 @@ contract ForeignController is AccessControl {
 
     event RelayerRemoved(address indexed relayer);
 
+    event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+
+    event UniswapV3PositionManagerSet(address indexed positionManager);
+    event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
+
+
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
@@ -80,8 +87,15 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
     bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public constant LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public constant LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public constant LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
+
+    // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
+    int24 internal constant MIN_TICK = -887272;
+    int24 internal constant MAX_TICK = -MIN_TICK;
 
     IALMProxy   public immutable proxy;
     ICCTPLike   public immutable cctp;
@@ -91,6 +105,12 @@ contract ForeignController is AccessControl {
     IERC20 public immutable usdc;
 
     address public immutable pendleRouter;
+
+    mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
+    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+
+    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    address public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -167,6 +187,41 @@ contract ForeignController is AccessControl {
     {
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
+    }
+
+
+    function setMaxSlippage(address pool, uint256 maxSlippage) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        maxSlippages[pool] = maxSlippage;
+        emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+    function setUniswapV3PositionManager(address positionManager) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(positionManager != address(0), "ForeignController/invalid-position-manager");
+
+        uniswapV3PositionManager = positionManager;
+        emit UniswapV3PositionManagerSet(positionManager);
+    }
+
+    function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.lower = lowerTickBound;
+        emit UniswapV3PoolParamsUpdated(pool, params);
+    }
+
+    function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.upper = upperTickBound;
+        emit UniswapV3PoolParamsUpdated(pool, params);
+    }
+
+    function setUniswapV3SwapTwapSecondsAgo(address pool, uint32 swapTwapSecondsAgo) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        params.swapTwapSecondsAgo = swapTwapSecondsAgo;
+        emit UniswapV3PoolParamsUpdated(pool, params);
     }
 
     /**********************************************************************************************/
@@ -663,6 +718,47 @@ contract ForeignController is AccessControl {
             pyAmountIn   : pyAmountIn,
             minAmountOut : minAmountOut
         }));
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer UniswapV3 functions                                                            ***/
+    /**********************************************************************************************/
+    function addLiquidityUniswapV3(
+        address pool,
+        uint256 _tokenId,
+        UniswapV3Lib.Tick calldata tick,
+        UniswapV3Lib.LiquidityPosition calldata desired,
+        UniswapV3Lib.LiquidityPosition calldata min,
+        uint256 deadline
+    )
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        _checkRole(RELAYER);
+        require(uniswapV3PositionManager != address(0), "MainnetController/position-manager-not-set");
+
+        UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
+        uint256 poolMaxSlippage = maxSlippages[pool];
+
+        (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(
+            UniswapV3Lib.UniV3Context({
+                proxy       : proxy,
+                rateLimits  : rateLimits,
+                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
+                pool        : pool,
+                deadline    : deadline
+            }),
+            UniswapV3Lib.AddLiquidityParams({
+                positionManager         : uniswapV3PositionManager,
+                tokenId                 : _tokenId,
+                tick                    : tick,
+                amountDesired           : desired,
+                amountMin               : min,
+                tickBounds              : poolParams.addLiquidityTickBounds,
+                twapSecondsAgo          : poolParams.swapTwapSecondsAgo,
+                maxSlippage             : poolMaxSlippage
+            })
+        );
     }
 
 
