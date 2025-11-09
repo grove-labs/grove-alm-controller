@@ -18,13 +18,18 @@ contract UniswapV3TestBase is ForkTestBase {
     int24 internal constant DEFAULT_TICK_LOWER      = -600;
     int24 internal constant DEFAULT_TICK_UPPER      = 600;
 
-    bytes32 uniswapV3AddLiquidityKey;
     bytes32 uniswapV3_UsdcUsdtPool_UsdcSwapKey;
     bytes32 uniswapV3_UsdcUsdtPool_UsdtSwapKey;
-    bytes32 uniswapV3RemoveLiquidityKey;
+    bytes32 uniswapV3_UsdcUsdtPool_UsdcAddLiquidityKey;
+    bytes32 uniswapV3_UsdcUsdtPool_UsdtAddLiquidityKey;
+    
 
     bytes32 uniswapV3_DaiUsdcPool_DaiSwapKey;
     bytes32 uniswapV3_DaiUsdcPool_UsdcSwapKey;
+    bytes32 uniswapV3_DaiUsdcPool_DaiAddLiquidityKey;
+    bytes32 uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey;
+
+    bytes32 uniswapV3RemoveLiquidityKey;
 
     IERC20 internal token0;
     IERC20 internal token1;
@@ -34,13 +39,12 @@ contract UniswapV3TestBase is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        uniswapV3_UsdcUsdtPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcSwapKey         = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtSwapKey         = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
 
-        uniswapV3_DaiUsdcPool_DaiSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai), UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiSwapKey          = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai),  UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcSwapKey         = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
 
-        uniswapV3AddLiquidityKey   = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  _getPool());
         uniswapV3RemoveLiquidityKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), _getPool());
 
         vm.startPrank(GROVE_PROXY);
@@ -49,10 +53,7 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e6,  uint256(1_000_000e6) / 1 days);
 
-        vm.stopPrank();
-
         // Set a higher slippage to allow for successes
-        vm.startPrank(GROVE_PROXY);
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);

@@ -13,9 +13,12 @@ import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "..
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
+import { LiquidityAmounts } from "lib/dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
+
+import { console } from "forge-std/console.sol";
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
@@ -23,8 +26,19 @@ library UniswapV3Lib {
     /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
+    struct Tick {
+        int24 lower;
+        int24 upper;
+    }
+
+    struct LiquidityPosition {
+        uint256 amount0;
+        uint256 amount1;
+    }
+
     struct UniswapV3PoolParams {
         uint24 swapMaxTickDelta;
+        Tick addLiquidityTickBounds;
     }
 
     struct UniV3Context {
@@ -47,6 +61,28 @@ library UniswapV3Lib {
     struct SwapCache {
         address tokenOut;
         uint160 sqrtPriceLimitX96;
+    }
+
+    struct AddLiquidityParams {
+        uint256     tokenId; // 0 for a new position
+        address     positionManager;
+        Tick        tick;
+        LiquidityPosition amountDesired;
+        LiquidityPosition amountMin;
+        Tick        tickBounds;
+        uint32      twapSecondsAgo;
+        uint256     maxSlippage;
+    }
+
+    struct AddLiquidityCache {
+        address token0;
+        address token1;
+        uint24  fee;
+        uint160 sqrtPriceX96;
+        uint256 priceX192;
+        uint8   token0Decimals;
+        uint8   token1Decimals;
+        uint256 normalizedDesiredValue;
     }
 
     /**********************************************************************************************/
@@ -73,6 +109,51 @@ library UniswapV3Lib {
 
         uint256 endingBalance = IERC20(cache.tokenOut).balanceOf(address(context.proxy));
         require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
+    }
+
+    function addLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        require(
+            params.amountDesired.amount0 != 0 || params.amountDesired.amount1 != 0,
+            "UniswapV3Lib/zero-liquidity"
+        );
+
+        require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.twapSecondsAgo != 0, "UniswapV3Lib/invalid-twap-seconds");
+
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        AddLiquidityCache memory cache = _populateAddLiquidityCache(pool);
+
+        _approve(context.proxy, cache.token0, params.positionManager, params.amountDesired.amount0);
+        _approve(context.proxy, cache.token1, params.positionManager, params.amountDesired.amount1);
+
+        _validateAddLiquidityMinAmounts(context, params);
+
+        if (params.tokenId == 0) {
+            require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
+            require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
+
+            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params, cache);
+        } else {
+            require(INonfungiblePositionManager(params.positionManager).ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+            (liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
+            tokenId = params.tokenId;
+        }
+
+        require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
+            _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
+        );
+
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
+            _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
+        );
     }
 
     /**********************************************************************************************/
@@ -135,5 +216,139 @@ library UniswapV3Lib {
         );
 
         amountOut = abi.decode(result, (uint256));
+    }
+
+    //-- Add liquidity functions
+    function _populateAddLiquidityCache(IUniswapV3PoolLike pool) internal view returns (AddLiquidityCache memory cache) {
+        cache.token0 = pool.token0();
+        cache.token1 = pool.token1();
+        cache.fee = pool.fee();
+
+        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
+        cache.token1Decimals = IERC20Metadata(cache.token1).decimals();
+    }
+
+    function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params, AddLiquidityCache memory cache)
+        internal
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        INonfungiblePositionManager.MintParams memory mintParams
+            = INonfungiblePositionManager.MintParams({
+                token0: cache.token0,
+                token1: cache.token1,
+                fee: cache.fee,
+                tickLower: params.tick.lower,
+                tickUpper: params.tick.upper,
+                recipient: address(context.proxy),
+                amount0Desired: params.amountDesired.amount0,
+                amount1Desired: params.amountDesired.amount1,
+                amount0Min: params.amountMin.amount0,
+                amount1Min: params.amountMin.amount1,
+                deadline: context.deadline
+            });
+
+        bytes memory result = context.proxy.doCall(
+            params.positionManager,
+            abi.encodeCall(
+                INonfungiblePositionManager.mint,
+                (mintParams)
+            )
+        );
+
+        (tokenId, liquidity, amount0, amount1) = abi.decode(result, (uint256, uint128, uint256, uint256));
+    }
+
+    function _addLiquidityToExistingPosition(UniV3Context calldata context, AddLiquidityParams calldata params)
+        internal
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
+            = INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId: params.tokenId,
+                amount0Desired: params.amountDesired.amount0,
+                amount1Desired: params.amountDesired.amount1,
+                amount0Min: params.amountMin.amount0,
+                amount1Min: params.amountMin.amount1,
+                deadline: context.deadline
+            });
+
+        bytes memory result = context.proxy.doCall(
+            params.positionManager,
+            abi.encodeCall(
+                INonfungiblePositionManager.increaseLiquidity,
+                (increaseLiquidityParams)
+            )
+        );
+
+        (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
+    }
+
+    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+        // Fetch twap tick
+        (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
+
+        uint160 sqrtTwapPriceX96   = TickMath.getSqrtRatioAtTick(twapTick);
+        uint160 sqrtRatioLowerX96  = TickMath.getSqrtRatioAtTick(params.tick.lower);
+        uint160 sqrtRatioUpperX96  = TickMath.getSqrtRatioAtTick(params.tick.upper);
+
+        uint128 expectedLiquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtTwapPriceX96,
+            sqrtRatioLowerX96,
+            sqrtRatioUpperX96,
+            params.amountDesired.amount0,
+            params.amountDesired.amount1
+        );
+
+        uint256 expectedAmount0;
+        uint256 expectedAmount1;
+
+        if (expectedLiquidity > 0) {
+            if (twapTick <= params.tick.lower) {
+                expectedAmount0 = UniV3Utils.getAmount0Delta(
+                    sqrtRatioLowerX96,
+                    sqrtRatioUpperX96,
+                    expectedLiquidity,
+                    false
+                );
+            } else if (twapTick >= params.tick.upper) {
+                expectedAmount1 = UniV3Utils.getAmount1Delta(
+                    sqrtRatioLowerX96,
+                    sqrtRatioUpperX96,
+                    expectedLiquidity,
+                    false
+                );
+            } else {
+                expectedAmount0 = UniV3Utils.getAmount0Delta(
+                    sqrtTwapPriceX96,
+                    sqrtRatioUpperX96,
+                    expectedLiquidity,
+                    false
+                );
+                expectedAmount1 = UniV3Utils.getAmount1Delta(
+                    sqrtRatioLowerX96,
+                    sqrtTwapPriceX96,
+                    expectedLiquidity,
+                    false
+                );
+                
+            }
+        }
+
+        uint256 minAmount0Threshold = FullMath.mulDiv(expectedAmount0, params.maxSlippage, 1e18);
+        uint256 minAmount1Threshold = FullMath.mulDiv(expectedAmount1, params.maxSlippage, 1e18);
+
+        require(params.amountMin.amount0 >= minAmount0Threshold, "UniswapV3Lib/min-amount0-below-bound");
+        require(params.amountMin.amount1 >= minAmount1Threshold, "UniswapV3Lib/min-amount1-below-bound");
+    }
+    
+    //-- General helper functions
+    function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
+        if (decimals_ == 18) {
+            return amount;
+        } else if (decimals_ < 18) {
+            return amount * 10 ** (18 - decimals_);
+        } else {
+            return amount / 10 ** (decimals_ - 18);
+        }
     }
 }
