@@ -11,6 +11,7 @@ import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
 import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 import { console } from "forge-std/console.sol";
+import { stdStorage, StdStorage } from "forge-std/StdStorage.sol";
 
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_ROUTER              = 0x2626664c2603336E57B271c5C0b26F421741e481;
@@ -162,6 +163,327 @@ contract UniswapV3TestBase is ForkTestBase {
         } else {
             return amount / 10 ** (decimals_ - 18);
         }
+    }
+}
+
+contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
+    using stdStorage for StdStorage;
+
+    function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
+        return UniswapV3Lib.Tick({ lower: initTick - 100, upper: initTick + 100 });
+    }
+
+    function _defaultDesiredPosition() internal view returns (UniswapV3Lib.LiquidityPosition memory) {
+        uint256 amount0 = 10 ** uint256(token0Decimals);
+        uint256 amount1 = 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+
+        return UniswapV3Lib.LiquidityPosition({ amount0: amount0, amount1: amount1 });
+    }
+
+    function _defaultMinPosition(UniswapV3Lib.LiquidityPosition memory desired) internal pure returns (UniswapV3Lib.LiquidityPosition memory) {
+        return UniswapV3Lib.LiquidityPosition({
+            amount0: desired.amount0 * 99 / 100,
+            amount1: desired.amount1 * 99 / 100
+        });
+    }
+
+    function _prepareDefaultAddLiquidity()
+        internal
+        returns (
+            UniswapV3Lib.Tick memory tick,
+            UniswapV3Lib.LiquidityPosition memory desired,
+            UniswapV3Lib.LiquidityPosition memory min
+        )
+    {
+        tick = _defaultTickRange();
+        desired = _defaultDesiredPosition();
+        min = _defaultMinPosition(desired);
+        _fundProxy(desired.amount0, desired.amount1);
+    }
+
+    function _mintExternalPosition() internal returns (uint256 tokenId) {
+        address stranger = makeAddr("stranger-lp");
+        uint256 amount0 = 5 * 10 ** uint256(token0Decimals);
+        uint8 token1Decimals = IERC20Metadata(address(token1)).decimals();
+        uint256 amount1 = 5 * 10 ** uint256(token1Decimals);
+
+        deal(address(token0), stranger, amount0);
+        deal(address(token1), stranger, amount1);
+
+        vm.startPrank(stranger);
+        token0.approve(UNISWAP_V3_POSITION_MANAGER, amount0);
+        token1.approve(UNISWAP_V3_POSITION_MANAGER, amount1);
+        (tokenId,,,) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
+            INonfungiblePositionManager.MintParams({
+                token0: address(token0),
+                token1: address(token1),
+                fee: poolFee,
+                tickLower: initTick - 50,
+                tickUpper: initTick + 50,
+                amount0Desired: amount0,
+                amount1Desired: amount1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: stranger,
+                deadline: block.timestamp + 1 hours
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_notRelayer() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "AccessControlUnauthorizedAccount(address,bytes32)",
+                address(this),
+                RELAYER
+            )
+        );
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+    }
+
+    function test_addLiquidityUniswapV3_positionManagerNotSet() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+
+        stdstore
+            .target(address(foreignController))
+            .sig("uniswapV3PositionManager()")
+            .checked_write(address(0));
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("MainnetController/position-manager-not-set");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_zeroAmount() public {
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+        UniswapV3Lib.LiquidityPosition memory zeroPosition = UniswapV3Lib.LiquidityPosition({
+            amount0: 0,
+            amount1: 0
+        });
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/zero-amount");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            zeroPosition,
+            zeroPosition,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_maxSlippageNotSet() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxSlippage(_getPool(), 0);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_zeroTwapSecondsAgo() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setUniswapV3SwapTwapSecondsAgo(_getPool(), 0);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_invalidTickLower() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+        tick.lower = initTick - 2000;
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/invalid-tick-lower");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_invalidTickUpper() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+        tick.upper = initTick + 2000;
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/invalid-tick-upper");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_minAmount0BelowBound() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired,) = _prepareDefaultAddLiquidity();
+        UniswapV3Lib.LiquidityPosition memory min = UniswapV3Lib.LiquidityPosition({
+            amount0: 0,
+            amount1: desired.amount1
+        });
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/min-amount0-below-bound");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_minAmount1BelowBound() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired,) = _prepareDefaultAddLiquidity();
+        UniswapV3Lib.LiquidityPosition memory min = UniswapV3Lib.LiquidityPosition({
+            amount0: desired.amount0,
+            amount1: 0
+        });
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/min-amount1-below-bound");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
+        uint256 tokenId = _mintExternalPosition();
+
+        vm.warp(block.timestamp + 1 hours);
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.LiquidityPosition memory desired, UniswapV3Lib.LiquidityPosition memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/proxy-does-not-own-token-id");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            tick,
+            desired,
+            min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_rateLimitExceeded_token0() public {
+        uint256 amount0 = 2_000_000e18;
+        uint256 amount1 = 0;
+
+        _fundProxy(amount0, amount1);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            UniswapV3Lib.Tick({
+                lower: -100,
+                upper: 100
+            }),
+            UniswapV3Lib.LiquidityPosition({
+                amount0: amount0,
+                amount1: amount1
+            }),
+            UniswapV3Lib.LiquidityPosition({
+                amount0: amount0 * 98 / 100,
+                amount1: amount1 * 98 / 100
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_rateLimitExceeded_token1() public {
+        uint256 amount0 = 0;
+        uint256 amount1 = 2_000_000e6;
+
+        _fundProxy(amount0, amount1);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            UniswapV3Lib.Tick({
+                lower: -100,
+                upper: 100
+            }),
+            UniswapV3Lib.LiquidityPosition({
+                amount0: amount0,
+                amount1: amount1
+            }),
+            UniswapV3Lib.LiquidityPosition({
+                amount0: amount0 * 98 / 100,
+                amount1: amount1 * 98 / 100
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
     }
 }
 
