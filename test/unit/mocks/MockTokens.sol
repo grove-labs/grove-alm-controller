@@ -132,3 +132,31 @@ contract MockTokenReturnNull {
     }
 
 }
+
+contract ERC20ApproveFalseExistingAllowance is ERC20 {
+
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
+    function approve(address spender, uint256 value) public virtual override returns (bool) {
+        // USDT-like resetting to 0 required. but returns false instead of reverting
+        if ((value != 0) && (allowance(msg.sender, spender) != 0)) {
+            return false;
+        }
+
+        return super.approve(spender, value);
+    }
+
+}
+
+contract ERC20ApproveFalseNonZeroAmount is ERC20 {
+
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
+    function approve(address spender, uint256 value) public virtual override returns (bool) {
+        // Used to assert hitting second revert condition
+        if (value != 0) return false;
+
+        return super.approve(spender, value);
+    }
+
+}
