@@ -8,6 +8,7 @@ import { MainnetController } from "../../src/MainnetController.sol";
 
 import { CurveLib } from "../../src/libraries/CurveLib.sol";
 
+import { ERC20Lib } from "../../src/libraries/ERC20Lib.sol";
 import { IALMProxy } from "../../src/interfaces/IALMProxy.sol";
 
 import { ERC20 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
@@ -34,7 +35,7 @@ contract MainnetControllerHarness is MainnetController {
     ) MainnetController(admin_, proxy_, rateLimits_, vault_, psm_, daiUsds_, cctp_) {}
 
     function approve(address token, address spender, uint256 amount) external {
-        _approve(token, spender, amount);
+        ERC20Lib.approve(proxy, token, spender, amount);
     }
 
     function approveCurve(address proxy, address token, address spender, uint256 amount) external {
@@ -56,7 +57,7 @@ contract ForeignControllerHarness is ForeignController {
     ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, pendleRouter_) {}
 
     function approve(address token, address spender, uint256 amount) external {
-        _approve(token, spender, amount);
+        ERC20Lib.approve(proxy, token, spender, amount);
     }
 
 }
