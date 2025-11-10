@@ -22,8 +22,6 @@ interface IHarness {
 
 contract MainnetControllerHarness is MainnetController {
 
-    using CurveLib for IALMProxy;
-
     constructor(
         address admin_,
         address proxy_,
@@ -38,8 +36,8 @@ contract MainnetControllerHarness is MainnetController {
         ERC20Lib.approve(proxy, token, spender, amount);
     }
 
-    function approveCurve(address proxy, address token, address spender, uint256 amount) external {
-        IALMProxy(proxy)._approve(token, spender, amount);
+    function approveCurve(address _proxy, address token, address spender, uint256 amount) external {
+        ERC20Lib.approve(IALMProxy(_proxy), token, spender, amount);
     }
 
 }
