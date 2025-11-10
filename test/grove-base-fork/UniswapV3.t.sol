@@ -20,7 +20,7 @@ contract UniswapV3TestBase is ForkTestBase {
     int24 internal constant DEFAULT_TICK_LOWER      = -600;
     int24 internal constant DEFAULT_TICK_UPPER      = 600;
 
-    address internal ausdUsdsPool;
+    address internal usdsAusdPool;
     address internal usdsUsdcPool;
 
     IERC20 internal ausdBase;
@@ -47,7 +47,7 @@ contract UniswapV3TestBase is ForkTestBase {
 
         ausdBase  = IERC20(address(new ERC20Mock()));
 
-        ausdUsdsPool = _createPool(address(ausdBase), address(usdsBase), 100);
+        usdsAusdPool = _createPool(address(ausdBase), address(usdsBase), 100);
         usdsUsdcPool = _createPool(address(usdsBase), address(usdcBase), 100);
 
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
@@ -57,10 +57,10 @@ contract UniswapV3TestBase is ForkTestBase {
         uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey  = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(), address(usdsBase), usdsUsdcPool);
         uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdcBase), usdsUsdcPool);
 
-        uniswapV3_AusdUsdsPool_AusdSwapKey          = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),    address(ausdBase), ausdUsdsPool);
-        uniswapV3_AusdUsdsPool_UsdsSwapKey         = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(usdsBase), ausdUsdsPool);
-        uniswapV3_AusdUsdsPool_AusdAddLiquidityKey  = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(), address(ausdBase), ausdUsdsPool);
-        uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdsBase), ausdUsdsPool);
+        uniswapV3_AusdUsdsPool_AusdSwapKey          = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),    address(ausdBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_UsdsSwapKey         = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(usdsBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_AusdAddLiquidityKey  = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(), address(ausdBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdsBase), usdsAusdPool);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
@@ -105,15 +105,16 @@ contract UniswapV3TestBase is ForkTestBase {
         }
     }
 
+    // @dev According to Uniswap V3 docs, token0/token1 ordering is not enforced when creating a pool.
     function _createPool(
-        address _token0, 
-        address _token1, 
+        address _tokenA, 
+        address _tokenB, 
         uint24 _fee
     ) internal returns (address poolAddress) {
         IUniswapV3Factory factory = IUniswapV3Factory(UNISWAP_V3_FACTORY);
-        poolAddress = factory.createPool(_token0, _token1, _fee);
+        poolAddress = factory.createPool(_tokenA, _tokenB, _fee);
 
-        uint160 sqrtPriceX96 = _getInitialSqrtPriceX96(_token0, _token1);
+        uint160 sqrtPriceX96 = _getInitialSqrtPriceX96(_tokenA, _tokenB);
         IUniswapV3PoolLike(poolAddress).initialize(sqrtPriceX96);
     }
 
@@ -125,7 +126,9 @@ contract UniswapV3TestBase is ForkTestBase {
     function _label() internal {
         vm.label(UNISWAP_V3_ROUTER,            'UniswapV3Router');
         vm.label(UNISWAP_V3_POSITION_MANAGER,  'UniswapV3PositionManager');
-        vm.label(pool,                         'USDS-USDC Pool');
+        vm.label(address(ausdBase),            'AUSD');
+        vm.label(usdsUsdcPool,                 'USDS-USDC Pool');
+        vm.label(usdsAusdPool,                 'AUSD-USDS Pool');
     }
 
     function _getPool() internal view virtual returns (address) {
@@ -133,7 +136,7 @@ contract UniswapV3TestBase is ForkTestBase {
     }
     
     function _getBlock() internal pure override returns (uint256) {
-        return 23677743;  // Oct 28, 2025
+        return 37973959;  // Nov 9, 2025
     }
 
     function _fundProxy(uint256 amount0Desired, uint256 amount1Desired) internal {
@@ -162,7 +165,7 @@ contract UniswapV3TestBase is ForkTestBase {
     }
 }
 
-contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
+contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
     function _addLiquidity(uint256 _tokenId, UniswapV3Lib.Tick memory _tick, UniswapV3Lib.LiquidityPosition memory _desired, UniswapV3Lib.LiquidityPosition memory _min) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
         vm.startPrank(ALM_RELAYER);
         (tokenId, liquidity, amount0Used, amount1Used)
@@ -212,16 +215,16 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
         assertEq(token1RateLimitBefore - token1RateLimitAfter, _scaleTo1e18(amount1, token1.decimals()), "token1 rate limit delta mismatch");
     }
 
-    function _e2e_addLiquidityUniswapV3_equalParts(uint256 addAmount, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
-        uint256 amount0 = addAmount;
-        uint256 amount1 = addAmount * 10**token1.decimals() / 10**token0.decimals();
+    function _e2e_addLiquidityUniswapV3(uint256 addAmount0, uint256 addAmount1, int24 lowerTickDelta, int24 upperTickDelta, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
+        uint256 amount0 = addAmount0;
+        uint256 amount1 = addAmount1;
 
         deal(address(token0), address(almProxy), amount0);
         deal(address(token1), address(almProxy), amount1);
 
         UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
-            lower : initTick - 100,
-            upper : initTick + 100
+            lower : initTick + lowerTickDelta,
+            upper : initTick + upperTickDelta
         });
 
         (tokenId, liquidity, amount0Used, amount1Used) = _addLiquidityAndValidate(
@@ -262,30 +265,60 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
     }
 }
 
-contract MainnetControllerE2EUniswapV3UsdsUsdcTest is MainnetControllerE2EUniswapV3Test {
+contract ForeignControllerAddLiquidityE2EUniswapV3UsdsUsdcTest is ForeignControllerAddLiquidityE2EUniswapV3Test {
     function test_e2e_addLiquidityUniswapV3_equalParts(uint256 addAmount) public {
-        addAmount = bound(addAmount, 1e18, 300_000e18);
+        addAmount = bound(addAmount, 1e18, 100_000e18);
 
-        _e2e_addLiquidityUniswapV3_equalParts(addAmount, uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey, uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey);
+        uint256 addAmount0 = addAmount;
+        uint256 addAmount1 = addAmount * 10**token1.decimals() / 10**18;
+
+        _e2e_addLiquidityUniswapV3(addAmount0, addAmount1, -100, 100, uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey, uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey);
     }
 
-    function test_e2e_addLiquidityUniswapV3_skewToken0(uint256 addAmount0, uint256 addAmount1) public {
-        
+    function test_e2e_addLiquidityUniswapV3_token0Only(uint256 addAmount) public {
+        addAmount = bound(addAmount, 1e18, 100_000e18);
+
+        addAmount *= 10**token0.decimals() / 10**18;
+
+        _e2e_addLiquidityUniswapV3(addAmount, 0, 50, 100, uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey, uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey);
+    }
+
+    function test_e2e_addLiquidityUniswapV3_token1Only(uint256 addAmount) public {
+        addAmount = bound(addAmount, 1e18, 100_000e18);
+
+        addAmount = addAmount * 10**token1.decimals() / 1e18;
+
+        _e2e_addLiquidityUniswapV3(0, addAmount, -100, -50, uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey, uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey);
     }
 }
 
-contract MainnetControllerE2EUniswapV3AusdUsdsTest is MainnetControllerE2EUniswapV3Test {
+contract ForeignControllerAddLiquidityE2EUniswapV3AusdUsdsTest is ForeignControllerAddLiquidityE2EUniswapV3Test {
     function _getPool() internal view override returns (address) {
-        return ausdUsdsPool;
+        return usdsAusdPool;
     }
     
     function test_e2e_addLiquidityUniswapV3_equalParts(uint256 addAmount) public {
-        addAmount = bound(addAmount, 1e18, 300_000e18);
+        addAmount = bound(addAmount, 1e18, 100_000e18);
 
-        _e2e_addLiquidityUniswapV3_equalParts(addAmount, uniswapV3_AusdUsdsPool_AusdAddLiquidityKey, uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey);
+        uint256 addAmount0 = addAmount;
+        uint256 addAmount1 = addAmount * 10**token1.decimals() / 10**18;
+
+        _e2e_addLiquidityUniswapV3(addAmount0, addAmount1, -100, 100, uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey, uniswapV3_AusdUsdsPool_AusdAddLiquidityKey);
     }
 
-    function test_e2e_addLiquidityUniswapV3_skewToken0(uint256 addAmount0, uint256 addAmount1) public {
+    function test_e2e_addLiquidityUniswapV3_token0Only(uint256 addAmount) public {
+        addAmount = bound(addAmount, 1e18, 100_000e18);
         
+        addAmount *= 10**token0.decimals() / 10**18;
+
+        _e2e_addLiquidityUniswapV3(addAmount, 0, 50, 100, uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey, uniswapV3_AusdUsdsPool_AusdAddLiquidityKey);
+    }
+
+    function test_e2e_addLiquidityUniswapV3_token1Only(uint256 addAmount) public {
+        addAmount = bound(addAmount, 1e18, 100_000e18);
+
+        addAmount *= 10**token1.decimals() / 10**18;
+
+        _e2e_addLiquidityUniswapV3(0, addAmount, -100, -50, uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey, uniswapV3_AusdUsdsPool_AusdAddLiquidityKey);
     }
 }

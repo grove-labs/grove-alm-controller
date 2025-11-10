@@ -116,19 +116,23 @@ library UniswapV3Lib {
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         require(
-            params.amountDesired.amount0 != 0 || params.amountDesired.amount1 != 0,
-            "UniswapV3Lib/zero-liquidity"
+            params.amountDesired.amount0 > 0 || params.amountDesired.amount1 > 0,
+            "UniswapV3Lib/zero-amount"
         );
 
         require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
-        require(params.twapSecondsAgo != 0, "UniswapV3Lib/invalid-twap-seconds");
+        require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         AddLiquidityCache memory cache = _populateAddLiquidityCache(pool);
 
-        _approve(context.proxy, cache.token0, params.positionManager, params.amountDesired.amount0);
-        _approve(context.proxy, cache.token1, params.positionManager, params.amountDesired.amount1);
+        if (params.amountDesired.amount0 > 0) {
+            _approve(context.proxy, cache.token0, params.positionManager, params.amountDesired.amount0);
+        }
+        if (params.amountDesired.amount1 > 0) {
+            _approve(context.proxy, cache.token1, params.positionManager, params.amountDesired.amount1);
+        }
 
         _validateAddLiquidityMinAmounts(context, params);
 
@@ -145,11 +149,11 @@ library UniswapV3Lib {
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
+
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
             _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
         );
-
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
             _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
