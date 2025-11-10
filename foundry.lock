@@ -44,6 +44,12 @@
   "lib/usds": {
     "rev": "1e91268374d2796abcbb1af2b75473b2af488265"
   },
+  "lib/v4-core": {
+    "tag": {
+      "name": "v4.0.0",
+      "rev": "e50237c43811bd9b526eff40f26772152a42daba"
+    }
+  },
   "lib/xchain-helpers": {
     "branch": {
       "name": "master",
