@@ -63,12 +63,12 @@ library UniswapV3Lib {
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
         uint256 minOutBySlippage = cache.twapExpectedOut * params.maxSlippage / 1e18;
-
         require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
         _approve(context.proxy, params.tokenIn, params.router, params.amountIn);
 
         amountOut = _callSwap(context, params, cache);
+        require(amountOut >= minOutBySlippage, "UniswapV3Lib/slippage-exceeded");
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
