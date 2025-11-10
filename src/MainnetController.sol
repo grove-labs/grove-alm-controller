@@ -26,6 +26,7 @@ import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
 import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
+import { UniswapV4Lib }                   from "./libraries/UniswapV4Lib.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
@@ -68,6 +69,7 @@ contract MainnetController is AccessControl {
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
+    event UniswapV4PoolParamsUpdated(bytes32 indexed poolId, UniswapV4Lib.UniswapV4PoolParams params);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -99,8 +101,14 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
     bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
     bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
+    bytes32 public LIMIT_UNISWAP_V4_DEPOSIT   = keccak256("LIMIT_UNISWAP_V4_DEPOSIT");
+    bytes32 public LIMIT_UNISWAP_V4_WITHDRAW  = keccak256("LIMIT_UNISWAP_V4_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
+
+    // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
+    int24 internal constant MIN_TICK = -887272;
+    int24 internal constant MAX_TICK = -MIN_TICK;
 
     address public buffer;
 
@@ -129,6 +137,9 @@ contract MainnetController is AccessControl {
 
     // Uniswap V3 NonfungiblePositionManager used for LP ops
     address public uniswapV3PositionManager;
+
+    // Uniswap V4 tick ranges
+    mapping(bytes32 poolId => UniswapV4Lib.UniswapV4PoolParams params) public uniswapV4PoolParams;
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -228,6 +239,22 @@ contract MainnetController is AccessControl {
         params.swapTwapSecondsAgo = swapTwapSecondsAgo;
         
         emit UniswapV3PoolParamsUpdated(pool, params);
+    }
+
+    function setUniswapV4AddLiquidityLowerTickBound(bytes32 poolId, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV4Lib.UniswapV4PoolParams storage params = uniswapV4PoolParams[poolId];
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.lower = lowerTickBound;
+        emit UniswapV4PoolParamsUpdated(poolId, params);
+    }
+
+    function setUniswapV4AddLiquidityUpperTickBound(bytes32 poolId, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV4Lib.UniswapV4PoolParams storage params = uniswapV4PoolParams[poolId];
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.upper = upperTickBound;
+        emit UniswapV4PoolParamsUpdated(poolId, params);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -621,6 +648,126 @@ contract MainnetController is AccessControl {
                 poolParams     : uniswapV3PoolParams[pool]
             })
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer UniswapV4 functions                                                            ***/
+    /**********************************************************************************************/
+    function mintPositionUniswapV4(
+        bytes32 poolId,
+        int24   tickUpper,
+        int24   tickLower,
+        uint128 liquidity,
+        uint256 amount0Max,
+        uint256 amount1Max
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.Tick memory limits = uniswapV4PoolParams[poolId].addLiquidityTickBounds;
+
+        require(tickLower >= limits.lower, "MainnetController/tickLower-too-low");
+        require(tickUpper <= limits.upper, "MainnetController/tickUpper-too-high");
+
+        // NOTE: `maxSlippages` is a mapping from address to uint256, so we have to take the lower
+        //       160 bits of the id. It is possible, buit highly unliekly there us a collision.
+        UniswapV4Lib.mintPosition({
+            commonParams: UniswapV4Lib.CommonParams({
+                proxy       : address(proxy),
+                rateLimits  : address(rateLimits),
+                rateLimitId : LIMIT_UNISWAP_V4_DEPOSIT,
+                // TODO: Use central state contract
+                maxSlippage : maxSlippages[address(uint160(uint256(poolId)))],
+                poolId      : poolId
+            }),
+            tickLower  : tickLower,
+            tickUpper  : tickUpper,
+            liquidity  : liquidity,
+            amount0Max : amount0Max,
+            amount1Max : amount1Max
+        });
+    }
+
+    function increaseLiquidityUniswapV4(
+        bytes32 poolId,
+        uint256 tokenId,
+        uint128 liquidityIncrease,
+        uint256 amount0Max,
+        uint256 amount1Max
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        // NOTE: `maxSlippages` is a mapping from address to uint256, so we have to take the lower
+        //       160 bits of the id. It is possible, buit highly unliekly there us a collision.
+        UniswapV4Lib.increasePosition({
+            commonParams: UniswapV4Lib.CommonParams({
+                proxy       : address(proxy),
+                rateLimits  : address(rateLimits),
+                rateLimitId : LIMIT_UNISWAP_V4_DEPOSIT,
+                // TODO: Use central state contract
+                maxSlippage : maxSlippages[address(uint160(uint256(poolId)))],
+                poolId      : poolId
+            }),
+            tokenId           : tokenId,
+            liquidityIncrease : liquidityIncrease,
+            amount0Max        : amount0Max,
+            amount1Max        : amount1Max
+        });
+    }
+
+    function burnPositionUniswapV4(
+        bytes32 poolId,
+        uint256 tokenId,
+        uint256 amount0Min,
+        uint256 amount1Min
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.burnPosition({
+            commonParams: UniswapV4Lib.CommonParams({
+                proxy       : address(proxy),
+                rateLimits  : address(rateLimits),
+                rateLimitId : LIMIT_UNISWAP_V4_WITHDRAW,
+                // TODO: Use central state contract
+                maxSlippage : maxSlippages[address(uint160(uint256(poolId)))],
+                poolId      : poolId
+            }),
+            tokenId    : tokenId,
+            amount0Min : amount0Min,
+            amount1Min : amount1Min
+        });
+    }
+
+    function decreaseLiquidityUniswapV4(
+        bytes32 poolId,
+        uint256 tokenId,
+        uint128 liquidityDecrease,
+        uint256 amount0Min,
+        uint256 amount1Min
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.decreasePosition({
+            commonParams: UniswapV4Lib.CommonParams({
+                proxy       : address(proxy),
+                rateLimits  : address(rateLimits),
+                rateLimitId : LIMIT_UNISWAP_V4_WITHDRAW,
+                // TODO: Use central state contract
+                maxSlippage : maxSlippages[address(uint160(uint256(poolId)))],
+                poolId      : poolId
+            }),
+            tokenId           : tokenId,
+            liquidityDecrease : liquidityDecrease,
+            amount0Min        : amount0Min,
+            amount1Min        : amount1Min
+        });
     }
 
     /**********************************************************************************************/
