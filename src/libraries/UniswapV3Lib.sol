@@ -67,6 +67,27 @@ library UniswapV3Lib {
         uint256                     maxSlippage;
         uint256                     deadline;
     }
+    struct RemoveLiquidityParams {
+        INonfungiblePositionManager positionManager;
+        uint256                     tokenId;
+        uint128                     liquidity;
+        uint256                     amount0Min;
+        uint256                     amount1Min;
+        // uint256     maxSlippage;
+    }
+
+    struct RemoveLiquidityCache {
+        address token0;
+        address token1;
+        uint160 sqrtPriceX96;
+        uint8   token0Decimals;
+        uint8   token1Decimals;
+        uint256 priceX192;
+        int24   tickLower;
+        int24   tickUpper;
+        uint24  fee;
+        uint128 positionLiquidity;
+    }
 
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
@@ -146,6 +167,49 @@ library UniswapV3Lib {
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, address(pool)),
             amount1
         );
+    }
+
+    function removeLiquidity(UniV3Context calldata context, RemoveLiquidityParams calldata params)
+        external
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        RemoveLiquidityCache memory cache = _populateRemoveLiquidityCache(pool, params);
+
+        // TODO: implement slippage check
+
+        _decreaseLiquidityCall(
+            context.proxy,
+            address(params.positionManager),
+            params.tokenId,
+            params.liquidity,
+            params.amount0Min,
+            params.amount1Min,
+            context.deadline
+        );
+
+        (amount0Collected, amount1Collected) = _collectAll(
+            context.proxy,
+            address(params.positionManager),
+            params.tokenId,
+            address(context.proxy)
+        );
+        
+        if (amount0Collected > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
+                _scaleTo1e18(amount0Collected, cache.token0Decimals)
+            );
+        }
+        if (amount1Collected > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
+                _scaleTo1e18(amount1Collected, cache.token1Decimals)
+            );
+        }
     }
 
     /**********************************************************************************************/
@@ -280,35 +344,100 @@ library UniswapV3Lib {
     }
 
 
-    function _checkTickBounds(AddLiquidityParams calldata params) internal view {
-        int24 tickLower;
-        int24 tickUpper;
-        bytes memory positionData = abi.encodeCall(
-            INonfungiblePositionManager.positions,
-            params.tokenId
+    // ---- Remove liquidity helper functions
+    function _populateRemoveLiquidityCache(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view returns (RemoveLiquidityCache memory) {
+        RemoveLiquidityCache memory cache;
+
+        cache.token0 = pool.token0();
+        cache.token1 = pool.token1();
+        cache.fee    = pool.fee();
+
+        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
+        // cache.priceX192 = _priceX192(cache.sqrtPriceX96);
+        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
+        cache.token1Decimals = IERC20Metadata(cache.token1).decimals();
+
+        uint128 owed0;
+        uint128 owed1;
+        address positionToken0;
+        address positionToken1;
+        uint24  positionFee;
+        (
+            ,
+            ,
+            positionToken0,
+            positionToken1,
+            positionFee,
+            cache.tickLower,
+            cache.tickUpper,
+            cache.positionLiquidity,
+            ,
+            ,
+            owed0,
+            owed1
+        ) = params.positionManager.positions(params.tokenId);
+
+        require(
+            params.liquidity != 0 || owed0 != 0 || owed1 != 0,
+            "UniswapV3Lib/nothing-to-withdraw"
         );
 
-        (bool success, bytes memory result) = address(params.positionManager).staticcall(positionData);
-        require(success, "UniswapV3Lib/positions-call-failed");
-        require(result.length >= 384, "UniswapV3Lib/invalid-positions-return-data");
+        require(positionToken0 == cache.token0 && positionToken1 == cache.token1, "UniswapV3Lib/invalid-position");
+        require(positionFee == cache.fee, "UniswapV3Lib/fee-mismatch");
+        require(params.liquidity <= cache.positionLiquidity, "UniswapV3Lib/liquidity-too-high");
 
-        assembly {
-            // positions returns 12 values, we need the 6th (tickLower) and 7th (tickUpper)
-            // Offsets: uint96(32) + address(32) + address(32) + address(32) + uint24(32) = 160 bytes
-            let offset := add(result, 192) // 32 (length) + 160 (first 5 values)
-
-            // Load and sign-extend int24 values
-            // ABI encoding already sign-extends, so we can directly load the 32-byte values
-            tickLower := mload(offset)
-            tickUpper := mload(add(offset, 32))
-
-            // Sign-extend from int24 to int256 for proper handling
-            // If bit 23 is set (negative), extend with 1s, otherwise with 0s
-            tickLower := signextend(2, tickLower)  // 2 = 24 bits - 1 byte (3 bytes total, 0-indexed = 2)
-            tickUpper := signextend(2, tickUpper)
-        }
-
-        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
-        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+        return cache;
     }
+
+    function _decreaseLiquidityCall(
+        IALMProxy proxy,
+        address positionManager,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    )
+        internal
+    {
+        proxy.doCall(
+            positionManager,
+            abi.encodeWithSelector(
+                INonfungiblePositionManager.decreaseLiquidity.selector,
+                INonfungiblePositionManager.DecreaseLiquidityParams({
+                    tokenId: tokenId,
+                    liquidity: liquidity,
+                    amount0Min: amount0Min,
+                    amount1Min: amount1Min,
+                    deadline: deadline
+                })
+            )
+        );
+    }
+
+    function _collectAll(
+        IALMProxy proxy,
+        address positionManager,
+        uint256 tokenId,
+        address recipient
+    )
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
+        bytes memory result = proxy.doCall(
+            positionManager,
+            abi.encodeWithSelector(
+                INonfungiblePositionManager.collect.selector,
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: tokenId,
+                    recipient: recipient,
+                    amount0Max: type(uint128).max,
+                    amount1Max: type(uint128).max
+                })
+            )
+        );
+
+        (amount0, amount1) = abi.decode(result, (uint256, uint256));
+    }
+
 }
