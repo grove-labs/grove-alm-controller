@@ -21,7 +21,7 @@ import { IRateLimits } from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { PendleLib } from "./libraries/PendleLib.sol";
-import { ApproveLib }                     from "./libraries/ApproveLib.sol";
+import { ERC20Lib }  from "./libraries/ERC20Lib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
@@ -656,7 +656,7 @@ contract ForeignController is AccessControl {
 
     // NOTE: This logic was inspired by OpenZeppelin's forceApprove in SafeERC20 library
     function _approve(address token, address spender, uint256 amount) internal {
-        ApproveLib.approve(proxy, token, spender, amount);
+        ERC20Lib.approve(proxy, token, spender, amount);
     }
 
     function _initiateCCTPTransfer(

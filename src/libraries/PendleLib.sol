@@ -5,7 +5,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
-import { ApproveLib }  from "../libraries/ApproveLib.sol";
+import { ERC20Lib }    from "../libraries/ERC20Lib.sol";
 
 import {
     IPendleMarket,
@@ -91,7 +91,7 @@ library PendleLib {
     )
         internal
     {
-        ApproveLib.approve(proxy, token, spender, amount);
+        ERC20Lib.approve(proxy, token, spender, amount);
     }
 
 }

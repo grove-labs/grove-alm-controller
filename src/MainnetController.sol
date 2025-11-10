@@ -25,7 +25,7 @@ import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
-import { ApproveLib }                     from "./libraries/ApproveLib.sol";
+import { ERC20Lib }                       from "./libraries/ERC20Lib.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
@@ -776,7 +776,7 @@ contract MainnetController is AccessControl {
 
     // NOTE: This logic was inspired by OpenZeppelin's forceApprove in SafeERC20 library
     function _approve(address token, address spender, uint256 amount) internal {
-        ApproveLib.approve(proxy, token, spender, amount);
+        ERC20Lib.approve(proxy, token, spender, amount);
     }
 
     /**********************************************************************************************/
