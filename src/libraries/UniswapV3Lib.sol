@@ -129,9 +129,17 @@ library UniswapV3Lib {
 
         if (params.amountDesired.amount0 > 0) {
             _approve(context.proxy, cache.token0, params.positionManager, params.amountDesired.amount0);
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
+                _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
+            );
         }
         if (params.amountDesired.amount1 > 0) {
             _approve(context.proxy, cache.token1, params.positionManager, params.amountDesired.amount1);
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
+                _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
+            );
         }
 
         _validateAddLiquidityMinAmounts(context, params);
@@ -149,15 +157,6 @@ library UniswapV3Lib {
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
-
-        context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
-            _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
-        );
-        context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
-            _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
-        );
     }
 
     /**********************************************************************************************/
