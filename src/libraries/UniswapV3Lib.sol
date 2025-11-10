@@ -4,17 +4,16 @@ pragma solidity ^0.8.21;
 import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import { IALMProxy }   from "../interfaces/IALMProxy.sol";
-import { IRateLimits } from "../interfaces/IRateLimits.sol";
+import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
+import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
+import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
+
+import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
+import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
+import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
-import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
-
-import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
-
-import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 import { UniswapV3OracleLib } from "./UniswapV3OracleLib.sol";
 
 library UniswapV3Lib {
@@ -47,8 +46,9 @@ library UniswapV3Lib {
     }
 
     struct SwapCache {
-        uint160            sqrtPriceLimitX96;
-        uint256            twapExpectedOut;
+        address tokenOut;
+        uint160 sqrtPriceLimitX96;
+        uint256 twapExpectedOut;
     }
 
     /**********************************************************************************************/
@@ -59,7 +59,7 @@ library UniswapV3Lib {
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         SwapCache memory cache = _populateSwapCache(context, params);
 
-        require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
         uint256 minOutBySlippage = cache.twapExpectedOut * params.maxSlippage / 1e18;
@@ -82,9 +82,9 @@ library UniswapV3Lib {
     
     //-- Swap helper functions
     function _populateSwapCache(UniV3Context calldata context, SwapParams calldata params) internal view returns (SwapCache memory cache) {
-        IUniswapV3PoolLike pool         = IUniswapV3PoolLike(context.pool);
-        address token0       = pool.token0();
-        address token1       = pool.token1();
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+        address token0          = pool.token0();
+        address token1          = pool.token1();
 
         require(
             params.tokenIn == token0 || params.tokenIn == token1,
@@ -93,11 +93,11 @@ library UniswapV3Lib {
 
         (, int24 currentTick, , , , , ) = pool.slot0();
 
-        address tokenOut = params.tokenIn == token0 ? token1 : token0;
+        cache.tokenOut = params.tokenIn == token0 ? token1 : token0;
         
         // Expected out is calculated by by converting amountIn to amountOut using the TWAP tick since some time ago
         (int24 twapExpectedOutTick, ) = UniswapV3OracleLib.consult(context.pool, params.poolParams.swapTwapSecondsAgo); 
-        cache.twapExpectedOut       = UniswapV3OracleLib.getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, tokenOut);
+        cache.twapExpectedOut         = UniswapV3OracleLib.getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, cache.tokenOut);
         
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
@@ -115,8 +115,7 @@ library UniswapV3Lib {
     }
 
     function _callSwap(UniV3Context calldata context, SwapParams calldata params, SwapCache memory cache) internal returns (uint256 amountOut) {
-        IUniswapV3PoolLike pool         = IUniswapV3PoolLike(context.pool);
-        address tokenOut = params.tokenIn == pool.token0() ? pool.token1() : pool.token0();
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         bytes memory result = context.proxy.doCall(
             params.router,
@@ -124,7 +123,7 @@ library UniswapV3Lib {
                 ISwapRouter.exactInputSingle.selector,
                 ISwapRouter.ExactInputSingleParams({
                     tokenIn          : params.tokenIn,
-                    tokenOut         : tokenOut,
+                    tokenOut         : cache.tokenOut,
                     fee              : pool.fee(),
                     recipient        : address(context.proxy),
                     deadline         : context.deadline,
