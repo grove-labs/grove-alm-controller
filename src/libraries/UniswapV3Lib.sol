@@ -64,14 +64,14 @@ library UniswapV3Lib {
     }
 
     struct AddLiquidityParams {
-        uint256     tokenId; // 0 for a new position
-        address     positionManager;
-        Tick        tick;
-        LiquidityPosition amountDesired;
-        LiquidityPosition amountMin;
-        Tick        tickBounds;
-        uint32      twapSecondsAgo;
-        uint256     maxSlippage;
+        uint256                     tokenId; // 0 for a new position
+        INonfungiblePositionManager positionManager;
+        Tick                        tick;
+        LiquidityPosition           amountDesired;
+        LiquidityPosition           amountMin;
+        Tick                        tickBounds;
+        uint32                      twapSecondsAgo;
+        uint256                     maxSlippage;
     }
 
     struct AddLiquidityCache {
@@ -128,14 +128,14 @@ library UniswapV3Lib {
         AddLiquidityCache memory cache = _populateAddLiquidityCache(pool);
 
         if (params.amountDesired.amount0 > 0) {
-            _approve(context.proxy, cache.token0, params.positionManager, params.amountDesired.amount0);
+            _approve(context.proxy, cache.token0, address(params.positionManager), params.amountDesired.amount0);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
                 _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
             );
         }
         if (params.amountDesired.amount1 > 0) {
-            _approve(context.proxy, cache.token1, params.positionManager, params.amountDesired.amount1);
+            _approve(context.proxy, cache.token1, address(params.positionManager), params.amountDesired.amount1);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
                 _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
@@ -150,7 +150,7 @@ library UniswapV3Lib {
 
             (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params, cache);
         } else {
-            require(INonfungiblePositionManager(params.positionManager).ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+            require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
             (liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
             tokenId = params.tokenId;
@@ -251,7 +251,7 @@ library UniswapV3Lib {
             });
 
         bytes memory result = context.proxy.doCall(
-            params.positionManager,
+            address(params.positionManager),
             abi.encodeCall(
                 INonfungiblePositionManager.mint,
                 (mintParams)
@@ -276,7 +276,7 @@ library UniswapV3Lib {
             });
 
         bytes memory result = context.proxy.doCall(
-            params.positionManager,
+            address(params.positionManager),
             abi.encodeCall(
                 INonfungiblePositionManager.increaseLiquidity,
                 (increaseLiquidityParams)
