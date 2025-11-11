@@ -74,7 +74,7 @@ library UniswapV3Lib {
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
-            _scaleTo1e18(params.amountIn, IERC20Metadata(params.tokenIn).decimals())
+            params.amountIn
         );
     }
 
@@ -128,7 +128,6 @@ library UniswapV3Lib {
                     tokenOut         : cache.tokenOut,
                     fee              : pool.fee(),
                     recipient        : address(context.proxy),
-                    deadline         : context.deadline,
                     amountIn         : params.amountIn,
                     amountOutMinimum : params.minAmountOut,
                     sqrtPriceLimitX96: cache.sqrtPriceLimitX96
@@ -137,16 +136,5 @@ library UniswapV3Lib {
         );
 
         amountOut = abi.decode(result, (uint256));
-    }
-
-    //-- General helper functions
-    function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
-        if (decimals_ == 18) {
-            return amount;
-        } else if (decimals_ < 18) {
-            return amount * 10 ** (18 - decimals_);
-        } else {
-            return amount / 10 ** (decimals_ - 18);
-        }
     }
 }
