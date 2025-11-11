@@ -64,7 +64,9 @@ contract ForeignController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
 
     event UniswapV3PositionManagerSet(address indexed positionManager);
-    event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
+    event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
+    event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
+    event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 swapTwapSecondsAgo);
 
 
     /**********************************************************************************************/
@@ -95,14 +97,14 @@ contract ForeignController is AccessControl {
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
     // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
-    int24 internal constant MIN_TICK = -887272;
-    int24 internal constant MAX_TICK = -MIN_TICK;
+    int24 internal constant MIN_TICK = -887_272;
+    int24 internal constant MAX_TICK = -887_272;
 
     IALMProxy   public immutable proxy;
     ICCTPLike   public immutable cctp;
     IPSM3       public immutable psm;
     IRateLimits public immutable rateLimits;
-    
+
     // Uniswap V3 NonfungiblePositionManager used for LP ops
     INonfungiblePositionManager public uniswapV3PositionManager;
 
@@ -111,7 +113,7 @@ contract ForeignController is AccessControl {
     address public immutable pendleRouter;
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
-    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;    
+    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -206,23 +208,25 @@ contract ForeignController is AccessControl {
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+        require(lowerTickBound < 0, "ForeignController/lower-tick-must-be-negative");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
-        emit UniswapV3PoolParamsUpdated(pool, params);
+        emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
     }
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+        require(upperTickBound > 0, "ForeignController/upper-tick-must-be-positive");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
-        emit UniswapV3PoolParamsUpdated(pool, params);
+        emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
     }
 
     function setUniswapV3SwapTwapSecondsAgo(address pool, uint32 swapTwapSecondsAgo) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         params.swapTwapSecondsAgo = swapTwapSecondsAgo;
-        emit UniswapV3PoolParamsUpdated(pool, params);
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, swapTwapSecondsAgo);
     }
 
     /**********************************************************************************************/
@@ -726,14 +730,14 @@ contract ForeignController is AccessControl {
     /**********************************************************************************************/
     function addLiquidityUniswapV3(
         address                                 pool,
-        uint256                                 _tokenId,
+        uint256                                 tokenId,
         UniswapV3Lib.Tick calldata              tick,
         UniswapV3Lib.LiquidityPosition calldata desired,
         UniswapV3Lib.LiquidityPosition calldata min,
         uint256                                 deadline
     )
         external
-        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+        returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_)
     {
         _checkRole(RELAYER);
         require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
@@ -750,14 +754,14 @@ contract ForeignController is AccessControl {
                 deadline    : deadline
             }),
             UniswapV3Lib.AddLiquidityParams({
-                positionManager         : uniswapV3PositionManager,
-                tokenId                 : _tokenId,
-                tick                    : tick,
-                amountDesired           : desired,
-                amountMin               : min,
-                tickBounds              : poolParams.addLiquidityTickBounds,
-                twapSecondsAgo          : poolParams.swapTwapSecondsAgo,
-                maxSlippage             : poolMaxSlippage
+                positionManager : uniswapV3PositionManager,
+                tokenId         : _tokenId,
+                tick            : tick,
+                amountDesired   : desired,
+                amountMin       : min,
+                tickBounds      : poolParams.addLiquidityTickBounds,
+                twapSecondsAgo  : poolParams.swapTwapSecondsAgo,
+                maxSlippage     : poolMaxSlippage
             })
         );
     }
