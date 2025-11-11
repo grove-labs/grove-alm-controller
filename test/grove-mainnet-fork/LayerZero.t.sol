@@ -94,10 +94,10 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         destination = getChain("plasma").createSelectFork(_getDestinationBlock());
 
-        usdsPlasma      = IERC20(address(new ERC20Mock()));
-        susdsPlasma     = IERC20(address(new ERC20Mock()));
-        usdt0Plasma     = IERC20(USDT0_PLASMA_ADDRESS);
-        usdt0OftPlasma  = IERC20(USDT0_OFT_PLASMA_ADDRESS);
+        usdsPlasma     = IERC20(address(new ERC20Mock()));
+        susdsPlasma    = IERC20(address(new ERC20Mock()));
+        usdt0Plasma    = IERC20(USDT0_PLASMA_ADDRESS);
+        usdt0OftPlasma = IERC20(USDT0_OFT_PLASMA_ADDRESS);
 
         USDT0_PLASMA_SUPPLY = usdt0Plasma.totalSupply();
 
@@ -131,11 +131,10 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
          * Step 3: Deploy and configure ALM system **
          */
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : Ethereum.GROVE_PROXY,
-            psm          : address(psmPlasma),
-            usdc         : address(usdt0Plasma),
-            cctp         : address(0xDeadBeef), // unused
-            pendleRouter : address(0xDeadBeef) // unused
+            admin : Ethereum.GROVE_PROXY,
+            psm   : address(psmPlasma),
+            usdc  : address(usdt0Plasma),
+            cctp  : address(0xDeadBeef) // unused
         });
 
         foreignAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -151,11 +150,10 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             ForeignControllerInit.ConfigAddressParams({freezer: freezer, relayers: relayers, oldController: address(0)});
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin        : Ethereum.GROVE_PROXY,
-            psm          : address(psmPlasma),
-            cctp         : address(0xDeadBeef), // unused
-            usdc         : address(usdt0Plasma),
-            pendleRouter : address(0xDeadBeef) // unused
+            admin : Ethereum.GROVE_PROXY,
+            psm   : address(psmPlasma),
+            cctp  : address(0xDeadBeef), // unused
+            usdc  : address(usdt0Plasma)
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);

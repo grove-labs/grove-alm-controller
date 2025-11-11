@@ -195,8 +195,7 @@ contract ForeignControllerAdminTests is UnitTestBase {
             makeAddr("rateLimits"),
             makeAddr("psm"),
             makeAddr("usdc"),
-            makeAddr("cctp"),
-            makeAddr("pendleRouter")
+            makeAddr("cctp")
         );
     }
 

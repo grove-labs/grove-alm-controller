@@ -27,7 +27,6 @@ library ForeignControllerInit {
         address psm;
         address cctp;
         address usdc;
-        address pendleRouter;
         // address susds;
         // address usds;
     }
@@ -129,7 +128,6 @@ library ForeignControllerInit {
         require(address(newController.psm())          == checkAddresses.psm,  "ForeignControllerInit/incorrect-psm");
         require(address(newController.usdc())         == checkAddresses.usdc, "ForeignControllerInit/incorrect-usdc");
         require(address(newController.cctp())         == checkAddresses.cctp, "ForeignControllerInit/incorrect-cctp");
-        require(address(newController.pendleRouter()) == checkAddresses.pendleRouter, "ForeignControllerInit/incorrect-pendleRouter");
 
         require(configAddresses.oldController != address(newController), "ForeignControllerInit/old-controller-is-new-controller");
 

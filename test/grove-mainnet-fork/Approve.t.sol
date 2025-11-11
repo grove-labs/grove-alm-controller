@@ -50,9 +50,8 @@ contract ForeignControllerHarness is ForeignController {
         address rateLimits_,
         address psm_,
         address usdc_,
-        address cctp_,
-        address pendleRouter_
-    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, pendleRouter_) {}
+        address cctp_
+    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_) {}
 
     function approve(address token, address spender, uint256 amount) external {
         ERC20Lib.approve(proxy, token, spender, amount);
@@ -176,8 +175,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("rateLimits"),
             makeAddr("psm"),
             makeAddr("usdc"),
-            makeAddr("cctp"),
-            makeAddr("pendleRouter")
+            makeAddr("cctp")
         );
 
         ForeignControllerHarness harnessCode = new ForeignControllerHarness(
@@ -186,8 +184,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("rateLimits"),
             makeAddr("psm"),
             makeAddr("usdc"),
-            makeAddr("cctp"),
-            makeAddr("pendleRouter")
+            makeAddr("cctp")
         );
 
         // Allow the foreign controller to call the ALMProxy

@@ -65,13 +65,10 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
         });
 
         checkAddresses = Init.CheckAddressParams({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            usdc         : address(usdcBase),
-            pendleRouter : PENDLE_ROUTER_BASE
-            // susds : address(susdsBase),
-            // usds  : address(usdsBase)
+            admin : Base.SPARK_EXECUTOR,
+            psm   : address(psmBase),
+            cctp  : Base.CCTP_TOKEN_MESSENGER,
+            usdc  : address(usdcBase)
         });
 
         mintRecipients = new Init.MintRecipient[](1);
@@ -132,8 +129,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             rateLimits   : address(rateLimits),
             psm          : address(psmBase),
             usdc         : address(usdcBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            pendleRouter : PENDLE_ROUTER_BASE
+            cctp         : Base.CCTP_TOKEN_MESSENGER
         }));
 
         Init.MintRecipient[] memory mintRecipients_ = new Init.MintRecipient[](1);
@@ -308,8 +304,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             SPARK_EXECUTOR,
             address(psmBase),
             USDC_BASE,
-            CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            CCTP_MESSENGER_BASE
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -335,8 +330,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             SPARK_EXECUTOR,
             address(psmBase),
             USDC_BASE,
-            CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            CCTP_MESSENGER_BASE
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -362,8 +356,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             SPARK_EXECUTOR,
             address(psmBase),
             USDC_BASE,
-            CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            CCTP_MESSENGER_BASE
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -502,8 +495,7 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             Base.SPARK_EXECUTOR,
             address(psmBase),
             address(usdcBase),
-            Base.CCTP_TOKEN_MESSENGER,
-            PENDLE_ROUTER_BASE
+            Base.CCTP_TOKEN_MESSENGER
         );
 
         // Overwrite storage for all previous deployments in setUp and assert brand new deployment
@@ -617,8 +609,7 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
             rateLimits   : address(rateLimits),
             psm          : address(psmBase),
             usdc         : address(usdcBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            pendleRouter : PENDLE_ROUTER_BASE
+            cctp         : Base.CCTP_TOKEN_MESSENGER
         }));
 
         controllerInst = ControllerInstance({

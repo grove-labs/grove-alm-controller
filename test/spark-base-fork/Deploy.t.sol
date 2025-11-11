@@ -8,9 +8,6 @@ import "./ForkTestBase.t.sol";
 
 contract ForeignControllerDeploySuccessTests is ForkTestBase {
 
-    // TODO: Get this from the registry after added there
-    address constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
-
     function test_deployFull() external {
         // Perform new deployments against existing fork environment
 
@@ -18,8 +15,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             admin        : Base.SPARK_EXECUTOR,
             psm          : Base.PSM3,
             usdc         : Base.USDC,
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            pendleRouter : PENDLE_ROUTER
+            cctp         : Base.CCTP_TOKEN_MESSENGER
         });
 
         ALMProxy          newAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -39,13 +35,12 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
         // Perform new deployments against existing fork environment
 
         ForeignController newController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : Base.PSM3,
-            usdc         : Base.USDC,
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            pendleRouter : PENDLE_ROUTER
+            admin      : Base.SPARK_EXECUTOR,
+            almProxy   : address(almProxy),
+            rateLimits : address(rateLimits),
+            psm        : Base.PSM3,
+            usdc       : Base.USDC,
+            cctp       : Base.CCTP_TOKEN_MESSENGER
         }));
 
         _assertControllerInitState(newController, address(almProxy), address(rateLimits));

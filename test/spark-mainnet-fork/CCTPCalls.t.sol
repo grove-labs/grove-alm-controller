@@ -170,7 +170,6 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
     address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
     address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
     address constant USDC_BASE           = Base.USDC;
-    address constant PENDLE_ROUTER_BASE  = 0x888888888889758F76e7103c6CbF23ABbF58F946;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -222,11 +221,10 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
         /*** Step 3: Deploy and configure ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            usdc         : USDC_BASE,
-            cctp         : CCTP_MESSENGER_BASE,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin : SPARK_EXECUTOR,
+            psm   : address(psmBase),
+            usdc  : USDC_BASE,
+            cctp  : CCTP_MESSENGER_BASE
         });
 
         foreignAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -243,13 +241,10 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
-            usdc         : address(usdcBase),
-            pendleRouter : PENDLE_ROUTER_BASE
-            // susds : address(susdsBase),
-            // usds  : address(usdsBase)
+            admin : Base.SPARK_EXECUTOR,
+            psm   : address(psmBase),
+            cctp  : Base.CCTP_TOKEN_MESSENGER,
+            usdc  : address(usdcBase)
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);

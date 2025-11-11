@@ -105,8 +105,7 @@ contract ForeignControllerRemoveRelayerTests is UnitTestBase {
             makeAddr("rateLimits"),
             address(psm3),
             usdc,
-            makeAddr("cctp"),
-            makeAddr("pendleRouter")
+            makeAddr("cctp")
         );
 
         vm.startPrank(admin);

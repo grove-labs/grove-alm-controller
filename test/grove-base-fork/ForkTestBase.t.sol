@@ -56,7 +56,6 @@ contract ForkTestBase is Test {
     address constant ALM_RELAYER          = 0x0eEC86649E756a23CBc68d9EFEd756f16aD5F85f;
     address constant CCTP_TOKEN_MESSENGER = 0x1682Ae6375C4E4A97e4B583BC394c861A46D8962;
     address constant USDC_BASE            = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant PENDLE_ROUTER_BASE   = 0x888888888889758F76e7103c6CbF23ABbF58F946;
     address constant GROVE_EXECUTOR       = Base.GROVE_EXECUTOR;
 
     address relayer = Base.ALM_RELAYER;
@@ -113,11 +112,10 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : GROVE_EXECUTOR,
-            psm          : address(psmBase),
-            usdc         : USDC_BASE,
-            cctp         : CCTP_TOKEN_MESSENGER,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin : GROVE_EXECUTOR,
+            psm   : address(psmBase),
+            usdc  : USDC_BASE,
+            cctp  : CCTP_TOKEN_MESSENGER
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -140,13 +138,10 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
-            admin        : GROVE_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : CCTP_TOKEN_MESSENGER,
-            usdc         : USDC_BASE,
-            pendleRouter : PENDLE_ROUTER_BASE
-            // susds : address(susdsBase),
-            // usds  : address(usdsBase)
+            admin : GROVE_EXECUTOR,
+            psm   : address(psmBase),
+            cctp  : CCTP_TOKEN_MESSENGER,
+            usdc  : USDC_BASE
         });
 
         Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);

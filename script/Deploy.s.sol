@@ -110,8 +110,7 @@ contract DeployForeignFull is Script {
             admin        : config.readAddress(".admin"),
             psm          : config.readAddress(".psm"),
             usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            cctp         : config.readAddress(".cctpTokenMessenger")
         });
 
         vm.stopBroadcast();
@@ -152,8 +151,7 @@ contract DeployForeignController is Script {
             rateLimits   : config.readAddress(".rateLimits"),
             psm          : config.readAddress(".psm"),
             usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            cctp         : config.readAddress(".cctpTokenMessenger")
         });
 
         vm.stopBroadcast();

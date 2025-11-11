@@ -16,8 +16,7 @@ library ForeignControllerDeploy {
         address rateLimits,
         address psm,
         address usdc,
-        address cctp,
-        address pendleRouter
+        address cctp
     )
         internal returns (address controller)
     {
@@ -27,8 +26,7 @@ library ForeignControllerDeploy {
             rateLimits_   : rateLimits,
             psm_          : psm,
             usdc_         : usdc,
-            cctp_         : cctp,
-            pendleRouter_ : pendleRouter
+            cctp_         : cctp
         }));
     }
 
@@ -36,8 +34,7 @@ library ForeignControllerDeploy {
         address admin,
         address psm,
         address usdc,
-        address cctp,
-        address pendleRouter
+        address cctp
     )
         internal returns (ControllerInstance memory instance)
     {
@@ -50,8 +47,7 @@ library ForeignControllerDeploy {
             rateLimits_   : instance.rateLimits,
             psm_          : psm,
             usdc_         : usdc,
-            cctp_         : cctp,
-            pendleRouter_ : pendleRouter
+            cctp_         : cctp
         }));
     }
 

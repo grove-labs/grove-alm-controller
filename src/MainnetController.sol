@@ -13,10 +13,9 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
-import { IALMProxy }     from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
-import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
-import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+import { IALMProxy }   from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
+import { IRateLimits } from "./interfaces/IRateLimits.sol";
 
 import "./interfaces/ILayerZero.sol";
 
@@ -24,7 +23,6 @@ import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
-import { PendleLib }                      from "./libraries/PendleLib.sol";
 import { ERC20Lib }                       from "./libraries/ERC20Lib.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
@@ -85,7 +83,6 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_PENDLE_PT_REDEEM     = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
     bytes32 public LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
@@ -602,28 +599,6 @@ contract MainnetController is AccessControl {
             address(susde),
             abi.encodeCall(susde.unstake, (address(proxy)))
         );
-    }
-
-    /**********************************************************************************************/
-    /*** Relayer Pendle functions                                                               ***/
-    /**********************************************************************************************/
-
-    function redeemPendlePT(
-        address pendleMarket,
-        uint256 pyAmountIn,
-        uint256 minAmountOut
-    ) external {
-        _checkRole(RELAYER);
-
-        PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
-            proxy        : proxy,
-            rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
-            pendleMarket : IPendleMarket(pendleMarket),
-            pendleRouter : Ethereum.PENDLE_ROUTER,
-            pyAmountIn   : pyAmountIn,
-            minAmountOut : minAmountOut
-        }));
     }
 
     /**********************************************************************************************/

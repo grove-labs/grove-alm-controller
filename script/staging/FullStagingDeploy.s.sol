@@ -312,8 +312,7 @@ contract FullStagingDeploy is Script {
             admin        : domain.admin,
             psm          : domain.input.readAddress(".psm"),
             usdc         : domain.input.readAddress(".usdc"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
+            cctp         : domain.input.readAddress(".cctpTokenMessenger")
         });
 
         // Step 2: Initialize ALM system
@@ -328,13 +327,10 @@ contract FullStagingDeploy is Script {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin        : domain.admin,
-            psm          : domain.input.readAddress(".psm"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            usdc         : domain.input.readAddress(".usdc"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
-            // susds : domain.input.readAddress(".susds"),
-            // usds  : domain.input.readAddress(".usds")
+            admin : domain.admin,
+            psm   : domain.input.readAddress(".psm"),
+            cctp  : domain.input.readAddress(".cctpTokenMessenger"),
+            usdc  : domain.input.readAddress(".usdc")
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);
