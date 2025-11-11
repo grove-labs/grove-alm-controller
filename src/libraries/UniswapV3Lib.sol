@@ -4,6 +4,8 @@ pragma solidity ^0.8.21;
 import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
+import { ERC20Lib } from "./ERC20Lib.sol";
+
 import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
 import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
@@ -66,7 +68,7 @@ library UniswapV3Lib {
 
         require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
-        _approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
+        ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
 
         amountOut = _callSwap(context, params, cache);
 
@@ -138,40 +140,6 @@ library UniswapV3Lib {
     }
 
     //-- General helper functions
-    function _approve(
-        IALMProxy proxy,
-        address   token,
-        address   spender,
-        uint256   amount
-    )
-        internal
-    {
-        bytes memory approveData = abi.encodeWithSelector(IERC20.approve.selector, spender, amount);
-
-        ( bool success, bytes memory data )
-            = address(proxy).call(
-                abi.encodeWithSelector(IALMProxy.doCall.selector, token, approveData)
-            );
-
-        bytes memory approveCallReturnData;
-
-        if (success) {
-            approveCallReturnData = abi.decode(data, (bytes));
-            if (approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool))) {
-                return;
-            }
-        }
-
-        proxy.doCall(token, abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
-
-        approveCallReturnData = proxy.doCall(token, approveData);
-
-        require(
-            approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool)),
-            "UniswapV3Lib/approve-failed"
-        );
-    }
-
     function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
         if (decimals_ == 18) {
             return amount;
