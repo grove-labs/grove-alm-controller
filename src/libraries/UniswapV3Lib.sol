@@ -18,8 +18,6 @@ import { LiquidityAmounts } from "lib/dss-allocator/src/funnels/uniV3/LiquidityA
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 
-import { console } from "forge-std/console.sol";
-
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
 
@@ -120,7 +118,7 @@ library UniswapV3Lib {
             "UniswapV3Lib/zero-amount"
         );
 
-        require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage > 0,     "UniswapV3Lib/max-slippage-not-set");
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
@@ -128,14 +126,14 @@ library UniswapV3Lib {
         AddLiquidityCache memory cache = _populateAddLiquidityCache(pool);
 
         if (params.amountDesired.amount0 > 0) {
-            _approve(context.proxy, cache.token0, address(params.positionManager), params.amountDesired.amount0);
+            ERC20Lib.approve(context.proxy, cache.token0, address(params.positionManager), params.amountDesired.amount0);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
                 _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
             );
         }
         if (params.amountDesired.amount1 > 0) {
-            _approve(context.proxy, cache.token1, address(params.positionManager), params.amountDesired.amount1);
+            ERC20Lib.approve(context.proxy, cache.token1, address(params.positionManager), params.amountDesired.amount1);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
                 _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
@@ -225,7 +223,10 @@ library UniswapV3Lib {
     function _populateAddLiquidityCache(IUniswapV3PoolLike pool) internal view returns (AddLiquidityCache memory cache) {
         cache.token0 = pool.token0();
         cache.token1 = pool.token1();
-        cache.fee = pool.fee();
+        cache.fee    = pool.fee();
+
+        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
+        cache.priceX192 = FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, 1e18);
 
         cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
         cache.token1Decimals = IERC20Metadata(cache.token1).decimals();
@@ -237,17 +238,17 @@ library UniswapV3Lib {
     {
         INonfungiblePositionManager.MintParams memory mintParams
             = INonfungiblePositionManager.MintParams({
-                token0: cache.token0,
-                token1: cache.token1,
-                fee: cache.fee,
-                tickLower: params.tick.lower,
-                tickUpper: params.tick.upper,
-                recipient: address(context.proxy),
-                amount0Desired: params.amountDesired.amount0,
-                amount1Desired: params.amountDesired.amount1,
-                amount0Min: params.amountMin.amount0,
-                amount1Min: params.amountMin.amount1,
-                deadline: context.deadline
+                token0         : cache.token0,
+                token1         : cache.token1,
+                fee            : cache.fee,
+                tickLower      : params.tick.lower,
+                tickUpper      : params.tick.upper,
+                recipient      : address(context.proxy),
+                amount0Desired : params.amountDesired.amount0,
+                amount1Desired : params.amountDesired.amount1,
+                amount0Min     : params.amountMin.amount0,
+                amount1Min     : params.amountMin.amount1,
+                deadline       : context.deadline
             });
 
         bytes memory result = context.proxy.doCall(
@@ -267,12 +268,12 @@ library UniswapV3Lib {
     {
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
-                tokenId: params.tokenId,
-                amount0Desired: params.amountDesired.amount0,
-                amount1Desired: params.amountDesired.amount1,
-                amount0Min: params.amountMin.amount0,
-                amount1Min: params.amountMin.amount1,
-                deadline: context.deadline
+                tokenId        : params.tokenId,
+                amount0Desired : params.amountDesired.amount0,
+                amount1Desired : params.amountDesired.amount1,
+                amount0Min     : params.amountMin.amount0,
+                amount1Min     : params.amountMin.amount1,
+                deadline       : context.deadline
             });
 
         bytes memory result = context.proxy.doCall(
