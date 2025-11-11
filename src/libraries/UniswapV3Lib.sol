@@ -29,7 +29,7 @@ library UniswapV3Lib {
         int24 upper;
     }
 
-    struct LiquidityPosition {
+    struct TokenAmounts {
         uint256 amount0;
         uint256 amount1;
     }
@@ -65,8 +65,8 @@ library UniswapV3Lib {
         uint256                     tokenId; // 0 for a new position
         INonfungiblePositionManager positionManager;
         Tick                        tick;
-        LiquidityPosition           amountDesired;
-        LiquidityPosition           amountMin;
+        TokenAmounts                amountDesired;
+        TokenAmounts                amountMin;
         Tick                        tickBounds;
         uint32                      twapSecondsAgo;
         uint256                     maxSlippage;
@@ -87,7 +87,7 @@ library UniswapV3Lib {
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
 
-    // Rate limit decreased by value of token1 
+    // Rate limit decreased by value of token1
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         require(address(params.router) != address(0), "UniswapV3Lib/router-not-set");
         SwapCache memory cache = _populateSwapCache(context, params);
@@ -118,7 +118,7 @@ library UniswapV3Lib {
             "UniswapV3Lib/zero-amount"
         );
 
-        require(params.maxSlippage > 0,     "UniswapV3Lib/max-slippage-not-set");
+        require(params.maxSlippage     > 0, "UniswapV3Lib/max-slippage-not-set");
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
@@ -160,7 +160,7 @@ library UniswapV3Lib {
     /**********************************************************************************************/
     /*** Helper functions                                                                       ***/
     /**********************************************************************************************/
-    
+
     //-- Swap helper functions
     function _populateSwapCache(UniV3Context calldata context, SwapParams calldata params) internal view returns (SwapCache memory cache) {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
@@ -334,7 +334,7 @@ library UniswapV3Lib {
                     expectedLiquidity,
                     false
                 );
-                
+
             }
         }
 
@@ -344,7 +344,7 @@ library UniswapV3Lib {
         require(params.amountMin.amount0 >= minAmount0Threshold, "UniswapV3Lib/min-amount0-below-bound");
         require(params.amountMin.amount1 >= minAmount1Threshold, "UniswapV3Lib/min-amount1-below-bound");
     }
-    
+
     //-- General helper functions
     function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
         if (decimals_ == 18) {

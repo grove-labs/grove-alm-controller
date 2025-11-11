@@ -1,21 +1,43 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
-import "./ForkTestBase.t.sol";
-import { IERC20 } from "forge-std/interfaces/IERC20.sol";
-import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
-import { IUniswapV3Factory } from "../../src/interfaces/UniswapV3Interfaces.sol";
-import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
-import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
-import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
-import { console } from "forge-std/console.sol";
+import { console }                from "forge-std/console.sol";
+import { IERC20 }                 from "forge-std/interfaces/IERC20.sol";
 import { stdStorage, StdStorage } from "forge-std/StdStorage.sol";
+
+import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
+import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
+import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
+import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
+
+import { INonfungiblePositionManager, UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
+
+import "./ForkTestBase.t.sol";
+
+/// @title An interface for a contract that is capable of deploying Uniswap V3 Pools
+/// @notice A contract that constructs a pool must implement this to pass arguments to the pool
+/// @dev This is used to avoid having constructor arguments in the pool contract, which results in the init code hash
+/// of the pool being constant allowing the CREATE2 address of the pool to be cheaply computed on-chain
+interface IUniswapV3Factory {
+    /// @notice Creates a pool for the given two tokens and fee
+    /// @param tokenA One of the two tokens in the desired pool
+    /// @param tokenB The other of the two tokens in the desired pool
+    /// @param fee The desired fee for the pool
+    /// @dev tokenA and tokenB may be passed in either order: token0/token1 or token1/token0. tickSpacing is retrieved
+    /// from the fee. The call will revert if the pool already exists, the fee is invalid, or the token arguments
+    /// are invalid.
+    /// @return pool The address of the newly created pool
+    function createPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external returns (address pool);
+}
 
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_ROUTER              = 0x2626664c2603336E57B271c5C0b26F421741e481;
-    address constant UNISWAP_V3_POSITION_MANAGER    = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1; 
+    address constant UNISWAP_V3_POSITION_MANAGER    = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
     address constant UNISWAP_V3_FACTORY             = 0x33128a8fC17869897dcE68Ed026d694621f6FDfD;
 
     int24 internal constant DEFAULT_TICK_LOWER      = -600;
@@ -77,9 +99,9 @@ contract UniswapV3TestBase is ForkTestBase {
         foreignController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         vm.stopPrank();
 
-        
+
         token0         = IERC20(IUniswapV3PoolLike(_getPool()).token0());
-        token1         = IERC20(IUniswapV3PoolLike(_getPool()).token1());        
+        token1         = IERC20(IUniswapV3PoolLike(_getPool()).token1());
         poolFee        = IUniswapV3PoolLike(_getPool()).fee();
         token0Decimals = IERC20Metadata(address(token0)).decimals();
         initTick       = TickMath.getTickAtSqrtRatio(_getInitialSqrtPriceX96(address(token0), address(token1)));
@@ -108,8 +130,8 @@ contract UniswapV3TestBase is ForkTestBase {
 
     // @dev According to Uniswap V3 docs, token0/token1 ordering is not enforced when creating a pool.
     function _createPool(
-        address _tokenA, 
-        address _tokenB, 
+        address _tokenA,
+        address _tokenB,
         uint24 _fee
     ) internal returns (address poolAddress) {
         IUniswapV3Factory factory = IUniswapV3Factory(UNISWAP_V3_FACTORY);
@@ -119,11 +141,11 @@ contract UniswapV3TestBase is ForkTestBase {
         IUniswapV3PoolLike(poolAddress).initialize(sqrtPriceX96);
     }
 
-    
+
     function _getSwapKey(address tokenIn) internal view returns (bytes32) {
         return RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
     }
-    
+
     function _label() internal {
         vm.label(UNISWAP_V3_ROUTER,            'UniswapV3Router');
         vm.label(UNISWAP_V3_POSITION_MANAGER,  'UniswapV3PositionManager');
@@ -135,7 +157,7 @@ contract UniswapV3TestBase is ForkTestBase {
     function _getPool() internal view virtual returns (address) {
         return usdsUsdcPool;
     }
-    
+
     function _getBlock() internal pure override returns (uint256) {
         return 37973959;  // Nov 9, 2025
     }
@@ -618,7 +640,7 @@ contract ForeignControllerAddLiquidityE2EUniswapV3AusdUsdsTest is ForeignControl
     function _getPool() internal view override returns (address) {
         return usdsAusdPool;
     }
-    
+
     function test_e2e_addLiquidityUniswapV3_equalParts(uint256 addAmount) public {
         addAmount = bound(addAmount, 1e18, 100_000e18);
 
@@ -630,7 +652,7 @@ contract ForeignControllerAddLiquidityE2EUniswapV3AusdUsdsTest is ForeignControl
 
     function test_e2e_addLiquidityUniswapV3_token0Only(uint256 addAmount) public {
         addAmount = bound(addAmount, 1e18, 100_000e18);
-        
+
         addAmount *= 10**token0.decimals() / 10**18;
 
         _e2e_addLiquidityUniswapV3(addAmount, 0, 50, 100, uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey, uniswapV3_AusdUsdsPool_AusdAddLiquidityKey);
