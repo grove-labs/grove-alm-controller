@@ -5,6 +5,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
+import { ERC20Lib }    from "../libraries/ERC20Lib.sol";
 
 import {
     IPendleMarket,
@@ -55,7 +56,7 @@ library PendleLib {
         // to avoid reverts due to potential rounding errors
         uint256 minTokenOut = params.pyAmountIn * 1e18 / pyIndexCurrent - 5;
 
-        _approve(params.proxy, pt, params.pendleRouter, params.pyAmountIn);
+        ERC20Lib.approve(params.proxy, pt, params.pendleRouter, params.pyAmountIn);
 
         uint256 tokenOutAmountBefore = IERC20(tokenOut).balanceOf(address(params.proxy));
 
@@ -80,44 +81,6 @@ library PendleLib {
             totalTokenOutAmount
         );
 
-    }
-
-    function _approve(
-        IALMProxy proxy,
-        address   token,
-        address   spender,
-        uint256   amount
-    )
-        internal
-    {
-        bytes memory approveData = abi.encodeCall(IERC20.approve, (spender, amount));
-
-        // Call doCall on proxy to approve the token
-        ( bool success, bytes memory data )
-            = address(proxy).call(abi.encodeCall(IALMProxy.doCall, (token, approveData)));
-
-        bytes memory approveCallReturnData;
-
-        if (success) {
-            // Data is the ABI-encoding of the approve call bytes return data, need to
-            // decode it first
-            approveCallReturnData = abi.decode(data, (bytes));
-            // Approve was successful if 1) no return value or 2) true return value
-            if (approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool))) {
-                return;
-            }
-        }
-
-        // If call was unsuccessful, set to zero and try again
-        proxy.doCall(token, abi.encodeCall(IERC20.approve, (spender, 0)));
-
-        approveCallReturnData = proxy.doCall(token, approveData);
-
-        // Revert if approve returns false
-        require(
-            approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool)),
-            "PendleLib/approve-failed"
-        );
     }
 
 }
