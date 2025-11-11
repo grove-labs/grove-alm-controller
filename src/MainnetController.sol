@@ -128,12 +128,6 @@ contract MainnetController is AccessControl {
 
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
-    // Uniswap V3 router used for swaps
-    address public uniswapV3Router;
-
-    // Uniswap V3 NonfungiblePositionManager used for LP ops
-    address public uniswapV3PositionManager;
-
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
     mapping(uint16 centrifugeId          => bytes32 recipient)          public centrifugeRecipients;
@@ -201,13 +195,13 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3Router(address router) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3Router = router;
+        uniswapV3Router = ISwapRouter(router);
         emit UniswapV3RouterSet(router);
     }
 
     function setUniswapV3PositionManager(address positionManager) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3PositionManager = positionManager;
+        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
         emit UniswapV3PositionManagerSet(positionManager);
     }
 
@@ -599,7 +593,7 @@ contract MainnetController is AccessControl {
         external returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
-        require(uniswapV3Router != address(0), "MainnetController/router-not-set");
+        require(address(uniswapV3Router) != address(0), "MainnetController/router-not-set");
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
