@@ -43,7 +43,7 @@ library UniswapV3Lib {
         address             tokenIn;
         uint256             amountIn;
         uint256             minAmountOut;
-        uint24              tickDelta; // The maximum that the tick can move by after completing the swap; type(uint24).max for no limit
+        uint24              tickDelta; // The maximum that the tick can move by after completing the swap; cannot exceed MAX_TICK_DELTA
         uint256             maxSlippage;
     }
 
