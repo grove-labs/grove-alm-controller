@@ -89,7 +89,7 @@ contract DeployMainnetController is Script {
 
 contract ForeignScript is Script {
 
-    function registerChains() internal {
+    function setUpNonStandardChains() internal {
         setChain("monad", ChainData({
             name    : "Monad",
             rpcUrl  : vm.envString("MONAD_RPC_URL"),
@@ -117,7 +117,7 @@ contract DeployForeignFull is ForeignScript {
     using ScriptTools for string;
 
     function run() external {
-        registerChains();
+        setUpNonStandardChains();
 
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
@@ -159,7 +159,7 @@ contract DeployForeignController is ForeignScript {
     using ScriptTools for string;
 
     function run() external {
-        registerChains();
+        setUpNonStandardChains();
 
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
