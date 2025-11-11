@@ -743,7 +743,6 @@ contract ForeignController is AccessControl {
         require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
 
         UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
-        uint256 poolMaxSlippage                            = maxSlippages[pool];
 
         (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
@@ -761,7 +760,7 @@ contract ForeignController is AccessControl {
                 amountMin       : min,
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 twapSecondsAgo  : poolParams.swapTwapSecondsAgo,
-                maxSlippage     : poolMaxSlippage
+                maxSlippage     : maxSlippages[pool]
             })
         );
     }
