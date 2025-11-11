@@ -102,16 +102,16 @@ contract ForeignController is AccessControl {
     ICCTPLike   public immutable cctp;
     IPSM3       public immutable psm;
     IRateLimits public immutable rateLimits;
+    
+    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    INonfungiblePositionManager public uniswapV3PositionManager;
 
     IERC20 public immutable usdc;
 
     address public immutable pendleRouter;
 
-    mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
-    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
-
-    // Uniswap V3 NonfungiblePositionManager used for LP ops
-    INonfungiblePositionManager public uniswapV3PositionManager;
+    mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
+    mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;    
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -725,12 +725,12 @@ contract ForeignController is AccessControl {
     /*** Relayer UniswapV3 functions                                                            ***/
     /**********************************************************************************************/
     function addLiquidityUniswapV3(
-        address pool,
-        uint256 _tokenId,
-        UniswapV3Lib.Tick calldata tick,
+        address                                 pool,
+        uint256                                 _tokenId,
+        UniswapV3Lib.Tick calldata              tick,
         UniswapV3Lib.LiquidityPosition calldata desired,
         UniswapV3Lib.LiquidityPosition calldata min,
-        uint256 deadline
+        uint256                                 deadline
     )
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
@@ -739,7 +739,7 @@ contract ForeignController is AccessControl {
         require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
 
         UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
-        uint256 poolMaxSlippage = maxSlippages[pool];
+        uint256 poolMaxSlippage                            = maxSlippages[pool];
 
         (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
