@@ -5,6 +5,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
+import { ERC20Lib }  from "../libraries/ERC20Lib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 interface ICurvePoolLike is IERC20 {
@@ -113,12 +114,7 @@ library CurveLib {
             params.amountIn * rates[params.inputIndex] / 1e18
         );
 
-        _approve(
-            params.proxy,
-            curvePool.coins(params.inputIndex),
-            params.pool,
-            params.amountIn
-        );
+        ERC20Lib.approve(params.proxy, curvePool.coins(params.inputIndex), params.pool, params.amountIn);
 
         amountOut = abi.decode(
             params.proxy.doCall(
@@ -154,12 +150,7 @@ library CurveLib {
         // Aggregate the value of the deposited assets (e.g. USD)
         uint256 valueDeposited;
         for (uint256 i = 0; i < params.depositAmounts.length; i++) {
-            _approve(
-                params.proxy,
-                curvePool.coins(i),
-                params.pool,
-                params.depositAmounts[i]
-            );
+            ERC20Lib.approve(params.proxy, curvePool.coins(i), params.pool, params.depositAmounts[i]);
             valueDeposited += params.depositAmounts[i] * rates[i];
         }
         valueDeposited /= 1e18;
@@ -267,44 +258,6 @@ library CurveLib {
     /**********************************************************************************************/
     /*** Helper functions                                                                       ***/
     /**********************************************************************************************/
-
-    function _approve(
-        IALMProxy proxy,
-        address   token,
-        address   spender,
-        uint256   amount
-    )
-        internal
-    {
-        bytes memory approveData = abi.encodeCall(IERC20.approve, (spender, amount));
-
-        // Call doCall on proxy to approve the token
-        ( bool success, bytes memory data )
-            = address(proxy).call(abi.encodeCall(IALMProxy.doCall, (token, approveData)));
-
-        bytes memory approveCallReturnData;
-
-        if (success) {
-            // Data is the ABI-encoding of the approve call bytes return data, need to
-            // decode it first
-            approveCallReturnData = abi.decode(data, (bytes));
-            // Approve was successful if 1) no return value or 2) true return value
-            if (approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool))) {
-                return;
-            }
-        }
-
-        // If call was unsuccessful, set to zero and try again
-        proxy.doCall(token, abi.encodeCall(IERC20.approve, (spender, 0)));
-
-        approveCallReturnData = proxy.doCall(token, approveData);
-
-        // Revert if approve returns false
-        require(
-            approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool)),
-            "CurveLib/approve-failed"
-        );
-    }
 
     function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {
         return a > b ? a - b : b - a;

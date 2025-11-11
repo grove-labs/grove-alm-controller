@@ -57,6 +57,9 @@ contract ForkTestBase is Test {
     address constant USDC_BASE            = Base.USDC;
     // TODO: Update these to use the correct addresses from the registry
     address constant PENDLE_ROUTER_BASE   = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant GROVE_EXECUTOR       = Base.GROVE_EXECUTOR;
+
+    address relayer = Base.ALM_RELAYER;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/

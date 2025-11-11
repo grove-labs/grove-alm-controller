@@ -22,6 +22,7 @@ import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { CurveLib }  from "./libraries/CurveLib.sol";
 import { PendleLib } from "./libraries/PendleLib.sol";
+import { ERC20Lib }  from "./libraries/ERC20Lib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
@@ -69,6 +70,7 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
     bytes32 public constant LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public constant LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
+    bytes32 public constant LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
     bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
     bytes32 public constant LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
     bytes32 public constant LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
@@ -195,7 +197,7 @@ contract ForeignController is AccessControl {
         returns (uint256 shares)
     {
         // Approve `asset` to PSM from the proxy (assumes the proxy has enough `asset`).
-        _approve(asset, address(psm), amount);
+        ERC20Lib.approve(proxy, asset, address(psm), amount);
 
         // Deposit `amount` of `asset` in the PSM, decode the result to get `shares`.
         shares = abi.decode(
@@ -253,7 +255,7 @@ contract ForeignController is AccessControl {
         require(mintRecipient != 0, "ForeignController/domain-not-configured");
 
         // Approve USDC to CCTP from the proxy (assumes the proxy has enough USDC).
-        _approve(address(usdc), address(cctp), usdcAmount);
+        ERC20Lib.approve(proxy, address(usdc), address(cctp), usdcAmount);
 
         // If amount is larger than limit it must be split into multiple calls.
         uint256 burnLimit = cctp.localMinter().burnLimitsPerMessage(address(usdc));
@@ -289,7 +291,7 @@ contract ForeignController is AccessControl {
         //       approvalRequired == true. Add integration testing for this case before
         //       using in production.
         if (ILayerZero(oftAddress).approvalRequired()) {
-            _approve(ILayerZero(oftAddress).token(), oftAddress, amount);
+            ERC20Lib.approve(proxy, ILayerZero(oftAddress).token(), oftAddress, amount);
         }
 
         bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
@@ -318,6 +320,21 @@ contract ForeignController is AccessControl {
     }
 
     /**********************************************************************************************/
+    /*** Relayer ERC20 functions                                                                ***/
+    /**********************************************************************************************/
+
+    function transferAsset(address asset, address destination, uint256 amount) external {
+        _checkRole(RELAYER);
+        _rateLimited(
+            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
+            amount
+        );
+
+        ERC20Lib.transfer(proxy, asset, destination, amount);
+    }
+
+
+    /**********************************************************************************************/
     /*** Relayer ERC4626 functions                                                              ***/
     /**********************************************************************************************/
 
@@ -331,7 +348,7 @@ contract ForeignController is AccessControl {
         IERC20 asset = IERC20(IERC4626(token).asset());
 
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
-        _approve(address(asset), token, amount);
+        ERC20Lib.approve(proxy, address(asset), token, amount);
 
         // Deposit asset into the token, proxy receives token shares, decode the resulting shares.
         shares = abi.decode(
@@ -396,7 +413,7 @@ contract ForeignController is AccessControl {
         IERC20 asset = IERC20(IERC7540(token).asset());
 
         // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
-        _approve(address(asset), token, amount);
+        ERC20Lib.approve(proxy, address(asset), token, amount);
 
         // Submit deposit request by transferring assets
         proxy.doCall(
@@ -561,7 +578,7 @@ contract ForeignController is AccessControl {
         IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
 
         // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        _approve(address(underlying), address(pool), amount);
+        ERC20Lib.approve(proxy, address(underlying), address(pool), amount);
 
         // Deposit underlying into Aave pool, proxy receives aTokens.
         proxy.doCall(
@@ -729,38 +746,6 @@ contract ForeignController is AccessControl {
     /**********************************************************************************************/
     /*** Internal helper functions                                                              ***/
     /**********************************************************************************************/
-
-    // NOTE: This logic was inspired by OpenZeppelin's forceApprove in SafeERC20 library
-    function _approve(address token, address spender, uint256 amount) internal {
-        bytes memory approveData = abi.encodeCall(IERC20.approve, (spender, amount));
-
-        // Call doCall on proxy to approve the token
-        ( bool success, bytes memory data )
-            = address(proxy).call(abi.encodeCall(IALMProxy.doCall, (token, approveData)));
-
-        bytes memory approveCallReturnData;
-
-        if (success) {
-            // Data is the ABI-encoding of the approve call bytes return data, need to
-            // decode it first
-            approveCallReturnData = abi.decode(data, (bytes));
-            // Approve was successful if 1) no return value or 2) true return value
-            if (approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool))) {
-                return;
-            }
-        }
-
-        // If call was unsuccessful, set to zero and try again
-        proxy.doCall(token, abi.encodeCall(IERC20.approve, (spender, 0)));
-
-        approveCallReturnData = proxy.doCall(token, approveData);
-
-        // Revert if approve returns false
-        require(
-            approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool)),
-            "ForeignController/approve-failed"
-        );
-    }
 
     function _initiateCCTPTransfer(
         uint256 usdcAmount,
