@@ -87,10 +87,10 @@ contract UniswapV3TestBase is ForkTestBase {
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcSwapKey,   1_000_000e6,  uint256(1_000_000e6) / 1 days);
 
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey,   1_000_000e6,  uint256(1_000_000e6)  / 1 days);
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_AusdAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
 
@@ -174,17 +174,6 @@ contract UniswapV3TestBase is ForkTestBase {
 
     function _priceX192(uint160 sqrtPriceX96) internal pure returns (uint256) {
         return FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1);
-    }
-
-
-    function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
-        if (decimals_ == 18) {
-            return amount;
-        } else if (decimals_ < 18) {
-            return amount * 10 ** (18 - decimals_);
-        } else {
-            return amount / 10 ** (decimals_ - 18);
-        }
     }
 }
 
@@ -555,8 +544,8 @@ contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(token1RateLimitKey);
 
-        assertEq(token0RateLimitBefore - token0RateLimitAfter, _scaleTo1e18(amount0, token0.decimals()), "token0 rate limit delta mismatch");
-        assertEq(token1RateLimitBefore - token1RateLimitAfter, _scaleTo1e18(amount1, token1.decimals()), "token1 rate limit delta mismatch");
+        assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0, "token0 rate limit delta mismatch");
+        assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1, "token1 rate limit delta mismatch");
     }
 
     function _e2e_addLiquidityUniswapV3(uint256 addAmount0, uint256 addAmount1, int24 lowerTickDelta, int24 upperTickDelta, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {

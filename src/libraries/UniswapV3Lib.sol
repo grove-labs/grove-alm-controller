@@ -129,14 +129,14 @@ library UniswapV3Lib {
             ERC20Lib.approve(context.proxy, cache.token0, address(params.positionManager), params.amountDesired.amount0);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
-                _scaleTo1e18(params.amountDesired.amount0, cache.token0Decimals)
+                params.amountDesired.amount0
             );
         }
         if (params.amountDesired.amount1 > 0) {
             ERC20Lib.approve(context.proxy, cache.token1, address(params.positionManager), params.amountDesired.amount1);
             context.rateLimits.triggerRateLimitDecrease(
                 RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
-                _scaleTo1e18(params.amountDesired.amount1, cache.token1Decimals)
+                params.amountDesired.amount1
             );
         }
 
@@ -343,16 +343,5 @@ library UniswapV3Lib {
 
         require(params.amountMin.amount0 >= minAmount0Threshold, "UniswapV3Lib/min-amount0-below-bound");
         require(params.amountMin.amount1 >= minAmount1Threshold, "UniswapV3Lib/min-amount1-below-bound");
-    }
-
-    //-- General helper functions
-    function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
-        if (decimals_ == 18) {
-            return amount;
-        } else if (decimals_ < 18) {
-            return amount * 10 ** (18 - decimals_);
-        } else {
-            return amount / 10 ** (decimals_ - 18);
-        }
     }
 }
