@@ -90,15 +90,22 @@ contract DeployMainnetController is Script {
 contract ForeignScript is Script {
 
     function registerChains() internal {
-        setChain("plume", ChainData({
-            name: "Plume",
-            rpcUrl: vm.envString("PLUME_RPC_URL"),
-            chainId: 98866
+        setChain("monad", ChainData({
+            name    : "Monad",
+            rpcUrl  : vm.envString("MONAD_RPC_URL"),
+            chainId : 143
         }));
+
+        setChain("plume", ChainData({
+            name    : "Plume",
+            rpcUrl  : vm.envString("PLUME_RPC_URL"),
+            chainId : 98866
+        }));
+
         setChain("plasma", ChainData({
-            name: "Plasma",
-            rpcUrl: vm.envString("PLASMA_RPC_URL"),
-            chainId: 9745
+            name    : "Plasma",
+            rpcUrl  : vm.envString("PLASMA_RPC_URL"),
+            chainId : 9745
         }));
     }
 

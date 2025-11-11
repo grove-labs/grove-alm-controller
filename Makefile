@@ -29,3 +29,6 @@ deploy-plume-production-controller :; CHAIN=plume ENV=production forge script sc
 
 deploy-plasma-production-full       :; CHAIN=plasma ENV=production forge script script/Deploy.s.sol:DeployForeignFull --sender ${ETH_FROM} --broadcast --verify
 deploy-plasma-production-controller :; CHAIN=plasma ENV=production forge script script/Deploy.s.sol:DeployForeignController --sender ${ETH_FROM} --broadcast --verify
+
+deploy-monad-production-full       :; CHAIN=monad ENV=production forge script script/Deploy.s.sol:DeployForeignFull --sender ${ETH_FROM} --broadcast --verify
+deploy-monad-production-controller :; CHAIN=monad ENV=production forge script script/Deploy.s.sol:DeployForeignController --sender ${ETH_FROM} --broadcast --verify
