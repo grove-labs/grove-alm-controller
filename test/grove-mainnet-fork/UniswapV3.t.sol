@@ -10,7 +10,7 @@ import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
 
 contract UniswapV3TestBase is ForkTestBase {
-    address constant UNISWAP_V3_ROUTER              = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address constant UNISWAP_V3_ROUTER              = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
     address constant UNISWAP_V3_POSITION_MANAGER    = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     address constant UNISWAP_V3_USDC_USDT_POOL      = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
     address constant UNISWAP_V3_DAI_USDC_POOL       = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
@@ -44,10 +44,10 @@ contract UniswapV3TestBase is ForkTestBase {
         uniswapV3RemoveLiquidityKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), _getPool());
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e6, uint256(1_000_000e6) / 1 days);
 
         vm.stopPrank();
 
@@ -120,17 +120,6 @@ contract UniswapV3TestBase is ForkTestBase {
 
     function _priceX192(uint160 sqrtPriceX96) internal pure returns (uint256) {
         return FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1);
-    }
-
-
-    function _scaleTo1e18(uint256 amount, uint8 decimals_) internal pure returns (uint256) {
-        if (decimals_ == 18) {
-            return amount;
-        } else if (decimals_ < 18) {
-            return amount * 10 ** (18 - decimals_);
-        } else {
-            return amount / 10 ** (decimals_ - 18);
-        }
     }
 }
 
@@ -296,7 +285,6 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         uint256 amountOut = _swap(address(token0), amountIn, amountIn * 999/1000);
 
         uint256 swapLimitAfter  = rateLimits.getCurrentRateLimit(_getSwapKey(address(token0)));
-        uint256 normalizedValue = _scaleTo1e18(amountIn, token0Decimals);
 
         assertApproxEqAbs(amountIn, amountOut, .0001e18, "swap output should be within 0.01% of amountIn");
         assertEq(
@@ -311,7 +299,7 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         );
         assertEq(
             swapLimitBefore - swapLimitAfter,
-            normalizedValue,
+            amountIn,
             "swap rate limit should decrease by normalized token0 value"
         );
     }
@@ -341,7 +329,7 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
         );
         assertEq(
             swapLimitBefore - swapLimitAfter,
-            _scaleTo1e18(amountIn, token1.decimals()),
+            amountIn,
             "swap rate limit should decrease by normalized value"
         );
     }
@@ -378,7 +366,7 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
         assertApproxEqRel(normalizedAmountOut, swapAmount, .005e18, "normalizedAmountOut should be within 0.05% of swapAmount");
         assertEq(tokenIn.balanceOf(address(almProxy)), 0, "tokenIn balance of almProxy should be 0");
         assertEq(tokenOut.balanceOf(address(almProxy)), tokenOutBalanceBeforeSwap + amountOut, "tokenOut balance of almProxy should be equal to tokenOutBalanceBeforeSwap + amountOut");
-        assertEq(rateLimits.getCurrentRateLimit(swapKey), swapRateLimitBefore - _scaleTo1e18(swapAmount, tokenIn.decimals()), "swap rate limit should be equal to swapRateLimitBefore - swapAmount");
+        assertEq(rateLimits.getCurrentRateLimit(swapKey), swapRateLimitBefore - swapAmount, "swap rate limit should be equal to swapRateLimitBefore - swapAmount");
     }
 }
 
@@ -414,7 +402,7 @@ contract MainnetControllerE2EUniswapV3DaiUsdcTest is MainnetControllerE2EUniswap
         swapAmount = bound(swapAmount, 1_000_000e6, 2_000_000e6);
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(_getSwapKey(address(usdc)), 2_000_000e18, uint256(2_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(_getSwapKey(address(usdc)), 2_000_000e6, uint256(2_000_000e6) / 1 days);
         vm.stopPrank();
 
         _e2e_swapUniswapV3(swapAmount, usdc, dai, _getSwapKey(address(usdc)));
@@ -436,7 +424,7 @@ contract MainnetControllerE2EUniswapV3UsdcUsdtPoolTest is MainnetControllerE2EUn
         swapAmount = bound(swapAmount, 1_000_000e6, 5_000_000e6);
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(_getSwapKey(address(usdc)), 5_000_000e18, uint256(5_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(_getSwapKey(address(usdc)), 5_000_000e6, uint256(5_000_000e6) / 1 days);
         vm.stopPrank();
 
         _e2e_swapUniswapV3(swapAmount, usdc, usdt, _getSwapKey(address(usdc)));
@@ -452,7 +440,7 @@ contract MainnetControllerE2EUniswapV3UsdcUsdtPoolTest is MainnetControllerE2EUn
         swapAmount = bound(swapAmount, 1_000_000e6, 5_000_000e6);
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(_getSwapKey(address(usdt)), 5_000_000e18, uint256(5_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(_getSwapKey(address(usdt)), 5_000_000e6, uint256(5_000_000e6) / 1 days);
         vm.stopPrank();
 
         _e2e_swapUniswapV3(swapAmount, usdt, usdc, _getSwapKey(address(usdt)));
