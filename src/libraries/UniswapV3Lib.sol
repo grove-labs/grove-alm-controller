@@ -37,7 +37,7 @@ library UniswapV3Lib {
 
     struct SwapParams {
         UniswapV3PoolParams poolParams;
-        address             router;
+        ISwapRouter         router;
         address             tokenIn;
         uint256             amountIn;
         uint256             minAmountOut;
@@ -66,7 +66,7 @@ library UniswapV3Lib {
 
         require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
 
-        _approve(context.proxy, params.tokenIn, params.router, params.amountIn);
+        _approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
 
         amountOut = _callSwap(context, params, cache);
 
@@ -118,7 +118,7 @@ library UniswapV3Lib {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         bytes memory result = context.proxy.doCall(
-            params.router,
+            address(params.router),
             abi.encodeWithSelector(
                 ISwapRouter.exactInputSingle.selector,
                 ISwapRouter.ExactInputSingleParams({

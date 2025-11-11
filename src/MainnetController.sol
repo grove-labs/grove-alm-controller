@@ -13,10 +13,11 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
-import { IALMProxy }     from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
-import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
-import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+import { IALMProxy }                                from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }                                from "./interfaces/CCTPInterfaces.sol";
+import { IPendleMarket }                            from "./interfaces/PendleInterfaces.sol";
+import { IRateLimits }                              from "./interfaces/IRateLimits.sol";
+import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
 import "./interfaces/ILayerZero.sol";
 
@@ -105,13 +106,15 @@ contract MainnetController is AccessControl {
 
     address public buffer;
 
-    IALMProxy         public proxy;
-    ICCTPLike         public cctp;
-    IDaiUsdsLike      public daiUsds;
-    IEthenaMinterLike public ethenaMinter;
-    IPSMLike          public psm;
-    IRateLimits       public rateLimits;
-    IVaultLike        public vault;
+    IALMProxy                   public proxy;
+    ICCTPLike                   public cctp;
+    IDaiUsdsLike                public daiUsds;
+    IEthenaMinterLike           public ethenaMinter;
+    IPSMLike                    public psm;
+    IRateLimits                 public rateLimits;
+    IVaultLike                  public vault;
+    ISwapRouter                 public uniswapV3Router;
+    INonfungiblePositionManager public uniswapV3PositionManager;
 
     IERC20     public dai;
     IERC20     public usds;
@@ -124,12 +127,6 @@ contract MainnetController is AccessControl {
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
 
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
-
-    // Uniswap V3 router used for swaps
-    address public uniswapV3Router;
-
-    // Uniswap V3 NonfungiblePositionManager used for LP ops
-    address public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -198,13 +195,13 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3Router(address router) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3Router = router;
+        uniswapV3Router = ISwapRouter(router);
         emit UniswapV3RouterSet(router);
     }
 
     function setUniswapV3PositionManager(address positionManager) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3PositionManager = positionManager;
+        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
         emit UniswapV3PositionManagerSet(positionManager);
     }
 
@@ -596,7 +593,7 @@ contract MainnetController is AccessControl {
         external returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
-        require(uniswapV3Router != address(0), "MainnetController/router-not-set");
+        require(address(uniswapV3Router) != address(0), "MainnetController/router-not-set");
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
