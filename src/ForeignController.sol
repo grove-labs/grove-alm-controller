@@ -24,6 +24,7 @@ import { PendleLib }    from "./libraries/PendleLib.sol";
 import { ERC20Lib }     from "./libraries/ERC20Lib.sol";
 import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 
+import { INonfungiblePositionManager }                                 from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
 import "./interfaces/ILayerZero.sol";
@@ -87,9 +88,9 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
     bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
-    bytes32 public constant LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public constant LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public constant LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
+    bytes32 public constant LIMIT_UNISWAP_V3_DEPOSIT  = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public constant LIMIT_UNISWAP_V3_SWAP     = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public constant LIMIT_UNISWAP_V3_WITHDRAW = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
@@ -110,7 +111,7 @@ contract ForeignController is AccessControl {
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     // Uniswap V3 NonfungiblePositionManager used for LP ops
-    address public uniswapV3PositionManager;
+    INonfungiblePositionManager public uniswapV3PositionManager;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -198,7 +199,7 @@ contract ForeignController is AccessControl {
     function setUniswapV3PositionManager(address positionManager) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(positionManager != address(0), "ForeignController/invalid-position-manager");
 
-        uniswapV3PositionManager = positionManager;
+        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
         emit UniswapV3PositionManagerSet(positionManager);
     }
 
@@ -735,7 +736,7 @@ contract ForeignController is AccessControl {
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         _checkRole(RELAYER);
-        require(uniswapV3PositionManager != address(0), "MainnetController/position-manager-not-set");
+        require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
 
         UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
         uint256 poolMaxSlippage = maxSlippages[pool];
