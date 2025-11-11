@@ -729,12 +729,12 @@ contract ForeignController is AccessControl {
     /*** Relayer UniswapV3 functions                                                            ***/
     /**********************************************************************************************/
     function addLiquidityUniswapV3(
-        address                                 pool,
-        uint256                                 tokenId,
-        UniswapV3Lib.Tick calldata              tick,
-        UniswapV3Lib.LiquidityPosition calldata desired,
-        UniswapV3Lib.LiquidityPosition calldata min,
-        uint256                                 deadline
+        address                            pool,
+        uint256                            tokenId,
+        UniswapV3Lib.Tick calldata         tick,
+        UniswapV3Lib.TokenAmounts calldata desired,
+        UniswapV3Lib.TokenAmounts calldata min,
+        uint256                            deadline
     )
         external
         returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_)
@@ -743,8 +743,9 @@ contract ForeignController is AccessControl {
         require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
 
         UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
+        uint256 maxSlippage                                = maxSlippages[pool];
 
-        (tokenId, liquidity, amount0, amount1) = UniswapV3Lib.addLiquidity(
+        (tokenId_, liquidity_, amount0_, amount1_) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
@@ -754,13 +755,13 @@ contract ForeignController is AccessControl {
             }),
             UniswapV3Lib.AddLiquidityParams({
                 positionManager : uniswapV3PositionManager,
-                tokenId         : _tokenId,
+                tokenId         : tokenId,
                 tick            : tick,
                 amountDesired   : desired,
                 amountMin       : min,
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 twapSecondsAgo  : poolParams.swapTwapSecondsAgo,
-                maxSlippage     : maxSlippages[pool]
+                maxSlippage     : maxSlippage
             })
         );
     }
