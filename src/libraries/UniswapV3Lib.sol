@@ -72,17 +72,6 @@ library UniswapV3Lib {
         uint256                     maxSlippage;
     }
 
-    struct AddLiquidityCache {
-        address token0;
-        address token1;
-        uint24  fee;
-        uint160 sqrtPriceX96;
-        uint256 priceX192;
-        uint8   token0Decimals;
-        uint8   token1Decimals;
-        uint256 normalizedDesiredValue;
-    }
-
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
@@ -123,19 +112,20 @@ library UniswapV3Lib {
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
-        AddLiquidityCache memory cache = _populateAddLiquidityCache(pool);
+        address token0 = pool.token0();
+        address token1 = pool.token1();
 
         if (params.amountDesired.amount0 > 0) {
-            ERC20Lib.approve(context.proxy, cache.token0, address(params.positionManager), params.amountDesired.amount0);
+            ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
             context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
                 params.amountDesired.amount0
             );
         }
         if (params.amountDesired.amount1 > 0) {
-            ERC20Lib.approve(context.proxy, cache.token1, address(params.positionManager), params.amountDesired.amount1);
+            ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
             context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
                 params.amountDesired.amount1
             );
         }
@@ -146,7 +136,7 @@ library UniswapV3Lib {
             require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
             require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
 
-            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params, cache);
+            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
         } else {
             require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
@@ -220,27 +210,20 @@ library UniswapV3Lib {
     }
 
     //-- Add liquidity functions
-    function _populateAddLiquidityCache(IUniswapV3PoolLike pool) internal view returns (AddLiquidityCache memory cache) {
-        cache.token0 = pool.token0();
-        cache.token1 = pool.token1();
-        cache.fee    = pool.fee();
-
-        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
-        cache.priceX192 = FullMath.mulDiv(cache.sqrtPriceX96, cache.sqrtPriceX96, 1e18);
-
-        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
-        cache.token1Decimals = IERC20Metadata(cache.token1).decimals();
-    }
-
-    function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params, AddLiquidityCache memory cache)
+    function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+
         INonfungiblePositionManager.MintParams memory mintParams
             = INonfungiblePositionManager.MintParams({
-                token0         : cache.token0,
-                token1         : cache.token1,
-                fee            : cache.fee,
+                token0         : token0,
+                token1         : token1,
+                fee            : pool.fee(),
                 tickLower      : params.tick.lower,
                 tickUpper      : params.tick.upper,
                 recipient      : address(context.proxy),
