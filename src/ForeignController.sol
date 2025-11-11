@@ -98,7 +98,7 @@ contract ForeignController is AccessControl {
 
     // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
     int24 internal constant MIN_TICK = -887_272;
-    int24 internal constant MAX_TICK = -887_272;
+    int24 internal constant MAX_TICK = 887_272;
 
     IALMProxy   public immutable proxy;
     ICCTPLike   public immutable cctp;
@@ -208,7 +208,6 @@ contract ForeignController is AccessControl {
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
-        require(lowerTickBound < 0, "ForeignController/lower-tick-must-be-negative");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -217,7 +216,6 @@ contract ForeignController is AccessControl {
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
-        require(upperTickBound > 0, "ForeignController/upper-tick-must-be-positive");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
