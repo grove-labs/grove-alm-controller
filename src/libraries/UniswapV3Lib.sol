@@ -141,12 +141,17 @@ library UniswapV3Lib {
         } else {
             require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
+            (,,,,, int24 tickLower, int24 tickUpper,,,,,) = params.positionManager.positions(params.tokenId);
+
+            require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
+            require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+
             (liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
             tokenId = params.tokenId;
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
-        require(amount0 > params.amountMin.amount0 && amount1 > params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
+        require(amount0 >= params.amountMin.amount0 && amount1 >= params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
     }
 
     /**********************************************************************************************/
