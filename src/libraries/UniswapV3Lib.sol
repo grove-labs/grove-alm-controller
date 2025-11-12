@@ -304,6 +304,8 @@ library UniswapV3Lib {
                     expectedLiquidity,
                     false
                 );
+                
+                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
             } else if (twapTick >= params.tick.upper) {
                 expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                     sqrtRatioLowerX96,
@@ -311,6 +313,8 @@ library UniswapV3Lib {
                     expectedLiquidity,
                     false
                 );
+
+                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
             } else {
                 expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
                     sqrtTwapPriceX96,
@@ -318,20 +322,22 @@ library UniswapV3Lib {
                     expectedLiquidity,
                     false
                 );
+                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
+                
                 expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                     sqrtRatioLowerX96,
                     sqrtTwapPriceX96,
                     expectedLiquidity,
                     false
                 );
-
+                
+                _validateMinAmount(params.amountMin.amount1, expectedAmount1, params.maxSlippage);
             }
         }
+    }
 
-        uint256 minAmount0Threshold = FullMath.mulDiv(expectedAmount0, params.maxSlippage, 1e18);
-        uint256 minAmount1Threshold = FullMath.mulDiv(expectedAmount1, params.maxSlippage, 1e18);
-
-        require(params.amountMin.amount0 >= minAmount0Threshold, "UniswapV3Lib/min-amount0-below-bound");
-        require(params.amountMin.amount1 >= minAmount1Threshold, "UniswapV3Lib/min-amount1-below-bound");
+    function _validateMinAmount(uint256 minAmount, uint256 expectedAmount, uint256 maxSlippage) internal pure {
+        uint256 minAmountThreshold = FullMath.mulDiv(expectedAmount, maxSlippage, 1e18);
+        require(minAmount >= minAmountThreshold, "UniswapV3Lib/min-amount-below-bound");
     }
 }

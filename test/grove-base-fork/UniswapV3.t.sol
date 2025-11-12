@@ -389,7 +389,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         });
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/min-amount0-below-bound");
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
@@ -409,7 +409,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         });
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/min-amount1-below-bound");
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
