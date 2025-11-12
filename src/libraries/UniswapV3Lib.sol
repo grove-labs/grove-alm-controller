@@ -11,12 +11,13 @@ import { IRateLimits }                                                  from "..
 import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
 
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 import { LiquidityAmounts } from "lib/dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
+import { UniswapV3OracleLib } from "./UniswapV3OracleLib.sol";
+import { UniV3UtilsLib }      from "./UniV3UtilsLib.sol";
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
@@ -291,27 +292,27 @@ library UniswapV3Lib {
 
         if (expectedLiquidity > 0) {
             if (twapTick <= params.tick.lower) {
-                expectedAmount0 = UniV3Utils.getAmount0Delta(
+                expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
                     sqrtRatioLowerX96,
                     sqrtRatioUpperX96,
                     expectedLiquidity,
                     false
                 );
             } else if (twapTick >= params.tick.upper) {
-                expectedAmount1 = UniV3Utils.getAmount1Delta(
+                expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                     sqrtRatioLowerX96,
                     sqrtRatioUpperX96,
                     expectedLiquidity,
                     false
                 );
             } else {
-                expectedAmount0 = UniV3Utils.getAmount0Delta(
+                expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
                     sqrtTwapPriceX96,
                     sqrtRatioUpperX96,
                     expectedLiquidity,
                     false
                 );
-                expectedAmount1 = UniV3Utils.getAmount1Delta(
+                expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                     sqrtRatioLowerX96,
                     sqrtTwapPriceX96,
                     expectedLiquidity,
