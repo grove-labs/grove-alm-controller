@@ -453,8 +453,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             0,
             UniswapV3Lib.Tick({
-                lower: -100,
-                upper: 100
+                lower: initTick+50,
+                upper: initTick+100
             }),
             UniswapV3Lib.TokenAmounts({
                 amount0: amount0,
@@ -481,8 +481,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             0,
             UniswapV3Lib.Tick({
-                lower: -100,
-                upper: 100
+                lower: initTick-100,
+                upper: initTick-50
             }),
             UniswapV3Lib.TokenAmounts({
                 amount0: amount0,
@@ -544,8 +544,8 @@ contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(token1RateLimitKey);
 
-        assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0, "token0 rate limit delta mismatch");
-        assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1, "token1 rate limit delta mismatch");
+        assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0Used, "token0 rate limit delta mismatch");
+        assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1Used, "token1 rate limit delta mismatch");
     }
 
     function _e2e_addLiquidityUniswapV3(uint256 addAmount0, uint256 addAmount1, int24 lowerTickDelta, int24 upperTickDelta, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {

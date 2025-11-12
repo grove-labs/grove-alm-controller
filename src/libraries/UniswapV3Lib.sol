@@ -118,17 +118,9 @@ library UniswapV3Lib {
 
         if (params.amountDesired.amount0 > 0) {
             ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
-                params.amountDesired.amount0
-            );
         }
         if (params.amountDesired.amount1 > 0) {
             ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
-                params.amountDesired.amount1
-            );
         }
 
         _validateAddLiquidityMinAmounts(context, params);
@@ -152,6 +144,19 @@ library UniswapV3Lib {
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
         require(amount0 >= params.amountMin.amount0 && amount1 >= params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
+
+        if (amount0 > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+                amount0
+            );
+        }
+        if (amount1 > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+                amount1
+            );
+        }
     }
 
     /**********************************************************************************************/
