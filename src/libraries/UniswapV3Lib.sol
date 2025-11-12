@@ -296,43 +296,41 @@ library UniswapV3Lib {
         uint256 expectedAmount0;
         uint256 expectedAmount1;
 
-        if (expectedLiquidity > 0) {
-            if (twapTick <= params.tick.lower) {
-                expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                    sqrtRatioLowerX96,
-                    sqrtRatioUpperX96,
-                    expectedLiquidity,
-                    false
-                );
-                
-                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-            } else if (twapTick >= params.tick.upper) {
-                expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                    sqrtRatioLowerX96,
-                    sqrtRatioUpperX96,
-                    expectedLiquidity,
-                    false
-                );
+        if (twapTick <= params.tick.lower) {
+            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
+                sqrtRatioLowerX96,
+                sqrtRatioUpperX96,
+                expectedLiquidity,
+                false
+            );
+            
+            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
+        } else if (twapTick >= params.tick.upper) {
+            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
+                sqrtRatioLowerX96,
+                sqrtRatioUpperX96,
+                expectedLiquidity,
+                false
+            );
 
-                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-            } else {
-                expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                    sqrtTwapPriceX96,
-                    sqrtRatioUpperX96,
-                    expectedLiquidity,
-                    false
-                );
-                _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-                
-                expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                    sqrtRatioLowerX96,
-                    sqrtTwapPriceX96,
-                    expectedLiquidity,
-                    false
-                );
-                
-                _validateMinAmount(params.amountMin.amount1, expectedAmount1, params.maxSlippage);
-            }
+            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
+        } else {
+            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
+                sqrtTwapPriceX96,
+                sqrtRatioUpperX96,
+                expectedLiquidity,
+                false
+            );
+            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
+            
+            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
+                sqrtRatioLowerX96,
+                sqrtTwapPriceX96,
+                expectedLiquidity,
+                false
+            );
+            
+            _validateMinAmount(params.amountMin.amount1, expectedAmount1, params.maxSlippage);
         }
     }
 
