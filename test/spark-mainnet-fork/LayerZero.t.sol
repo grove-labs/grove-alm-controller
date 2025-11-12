@@ -216,13 +216,14 @@ contract ArbitrumChainLayerZeroTestBase is ForkTestBase {
     /*** Arbtirum addresses                                                                     ***/
     /**********************************************************************************************/
 
-    address constant CCTP_MESSENGER_ARB = Arbitrum.CCTP_TOKEN_MESSENGER;
-    address constant SPARK_EXECUTOR     = Arbitrum.SPARK_EXECUTOR;
-    address constant SSR_ORACLE         = Arbitrum.SSR_AUTH_ORACLE;
-    address constant USDC_ARB           = Arbitrum.USDC;
-    address constant USDT_OFT           = 0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92;
-    address constant USDT0              = 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9;
-    address constant PENDLE_ROUTER_ARB  = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant CCTP_MESSENGER_ARB    = Arbitrum.CCTP_TOKEN_MESSENGER;
+    address constant SPARK_EXECUTOR        = Arbitrum.SPARK_EXECUTOR;
+    address constant SSR_ORACLE            = Arbitrum.SSR_AUTH_ORACLE;
+    address constant USDC_ARB              = Arbitrum.USDC;
+    address constant USDT_OFT              = 0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92;
+    address constant USDT0                 = 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9;
+    address constant PENDLE_ROUTER_ARB     = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant CCTP_MESSENGER_V2_ARB = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -276,6 +277,7 @@ contract ArbitrumChainLayerZeroTestBase is ForkTestBase {
             psm          : address(psmArb),
             usdc         : USDC_ARB,
             cctp         : CCTP_MESSENGER_ARB,
+            cctpV2       : CCTP_MESSENGER_V2_ARB,
             pendleRouter : PENDLE_ROUTER_ARB
         });
 

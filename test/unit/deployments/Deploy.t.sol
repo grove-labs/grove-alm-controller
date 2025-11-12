@@ -16,6 +16,7 @@ contract ForeignControllerDeployTests is UnitTestBase {
         address psm          = makeAddr("psm");
         address usdc         = makeAddr("usdc");
         address cctp         = makeAddr("cctp");
+        address cctpV2       = makeAddr("cctpV2");
         address pendleRouter = makeAddr("pendleRouter");
 
         address almProxy   = address(new ALMProxy(admin));
@@ -29,6 +30,7 @@ contract ForeignControllerDeployTests is UnitTestBase {
                 psm,
                 usdc,
                 cctp,
+                cctpV2,
                 pendleRouter
             )
         );
@@ -48,10 +50,11 @@ contract ForeignControllerDeployTests is UnitTestBase {
         address psm          = makeAddr("psm");
         address usdc         = makeAddr("usdc");
         address cctp         = makeAddr("cctp");
+        address cctpV2       = makeAddr("cctpV2");
         address pendleRouter = makeAddr("pendleRouter");
 
         ControllerInstance memory instance
-            = ForeignControllerDeploy.deployFull(admin, psm, usdc, cctp, pendleRouter);
+            = ForeignControllerDeploy.deployFull(admin, psm, usdc, cctp, cctpV2, pendleRouter);
 
         ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));
         ForeignController controller = ForeignController(instance.controller);
@@ -79,6 +82,7 @@ contract MainnetControllerDeployTests is UnitTestBase {
         address admin;
         address vault;
         address cctp;
+        address cctpV2;
     }
 
     function test_deployController() public {
@@ -88,8 +92,9 @@ contract MainnetControllerDeployTests is UnitTestBase {
         vars.psm     = address(new MockPSM(makeAddr("usdc")));
         vars.vault   = address(new MockVault(makeAddr("buffer")));
 
-        vars.admin = makeAddr("admin");
-        vars.cctp  = makeAddr("cctp");
+        vars.admin  = makeAddr("admin");
+        vars.cctp   = makeAddr("cctp");
+        vars.cctpV2 = makeAddr("cctpV2");
 
         address almProxy   = address(new ALMProxy(admin));
         address rateLimits = address(new RateLimits(admin));
@@ -102,7 +107,8 @@ contract MainnetControllerDeployTests is UnitTestBase {
                 vars.vault,
                 vars.psm,
                 vars.daiUsds,
-                vars.cctp
+                vars.cctp,
+                vars.cctpV2
             )
         );
 
@@ -130,13 +136,15 @@ contract MainnetControllerDeployTests is UnitTestBase {
 
         vars.admin  = makeAddr("admin");
         vars.cctp   = makeAddr("cctp");
+        vars.cctpV2 = makeAddr("cctpV2");
 
         ControllerInstance memory instance = MainnetControllerDeploy.deployFull(
             admin,
             vars.vault,
             vars.psm,
             vars.daiUsds,
-            vars.cctp
+            vars.cctp,
+            vars.cctpV2
         );
 
         ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));

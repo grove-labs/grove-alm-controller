@@ -25,7 +25,8 @@ contract MainnetControllerConstructorTests is UnitTestBase {
             address(vault),
             address(psm),
             address(daiUsds),
-            makeAddr("cctp")
+            makeAddr("cctp"),
+            makeAddr("cctpV2")
         );
 
         assertEq(mainnetController.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
@@ -37,6 +38,7 @@ contract MainnetControllerConstructorTests is UnitTestBase {
         assertEq(address(mainnetController.psm()),        address(psm));
         assertEq(address(mainnetController.daiUsds()),    address(daiUsds));
         assertEq(address(mainnetController.cctp()),       makeAddr("cctp"));
+        assertEq(address(mainnetController.cctpV2()),     makeAddr("cctpV2"));
         assertEq(address(mainnetController.dai()),        makeAddr("dai"));   // Dai param in MockDaiUsds
         assertEq(address(mainnetController.usdc()),       makeAddr("usdc"));  // Gem param in MockPSM
 
@@ -51,6 +53,7 @@ contract ForeignControllerConstructorTests is UnitTestBase {
     address almProxy     = makeAddr("almProxy");
     address rateLimits   = makeAddr("rateLimits");
     address cctp         = makeAddr("cctp");
+    address cctpV2       = makeAddr("cctpV2");
     address psm          = makeAddr("psm");
     address usdc         = makeAddr("usdc");
     address pendleRouter = makeAddr("pendleRouter");
@@ -63,6 +66,7 @@ contract ForeignControllerConstructorTests is UnitTestBase {
             psm,
             usdc,
             cctp,
+            cctpV2,
             pendleRouter
         );
 
@@ -73,6 +77,7 @@ contract ForeignControllerConstructorTests is UnitTestBase {
         assertEq(address(foreignController.psm()),          psm);
         assertEq(address(foreignController.usdc()),         usdc);   // asset1 param in MockPSM3
         assertEq(address(foreignController.cctp()),         cctp);
+        assertEq(address(foreignController.cctpV2()),       cctpV2);
         assertEq(address(foreignController.pendleRouter()), pendleRouter);
     }
 

@@ -91,7 +91,8 @@ contract ForkTestBase is DssTest {
     /*** Mainnet addresses/constants                                                            ***/
     /**********************************************************************************************/
 
-    address constant LOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
+    address constant LOG               = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
+    address constant CCTP_MESSENGER_V2 = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
 
     address constant CCTP_MESSENGER = Ethereum.CCTP_TOKEN_MESSENGER;
     address constant DAI_USDS       = Ethereum.DAI_USDS;
@@ -208,7 +209,8 @@ contract ForkTestBase is DssTest {
             vault   : ilkInst.vault,
             psm     : Ethereum.PSM,
             daiUsds : Ethereum.DAI_USDS,
-            cctp    : Ethereum.CCTP_TOKEN_MESSENGER
+            cctp    : Ethereum.CCTP_TOKEN_MESSENGER,
+            cctpV2  : CCTP_MESSENGER_V2
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));

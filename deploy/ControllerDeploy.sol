@@ -17,6 +17,7 @@ library ForeignControllerDeploy {
         address psm,
         address usdc,
         address cctp,
+        address cctpV2,
         address pendleRouter
     )
         internal returns (address controller)
@@ -28,6 +29,7 @@ library ForeignControllerDeploy {
             psm_          : psm,
             usdc_         : usdc,
             cctp_         : cctp,
+            cctpV2_       : cctpV2,
             pendleRouter_ : pendleRouter
         }));
     }
@@ -37,6 +39,7 @@ library ForeignControllerDeploy {
         address psm,
         address usdc,
         address cctp,
+        address cctpV2,
         address pendleRouter
     )
         internal returns (ControllerInstance memory instance)
@@ -51,6 +54,7 @@ library ForeignControllerDeploy {
             psm_          : psm,
             usdc_         : usdc,
             cctp_         : cctp,
+            cctpV2_       : cctpV2,
             pendleRouter_ : pendleRouter
         }));
     }
@@ -66,7 +70,8 @@ library MainnetControllerDeploy {
         address vault,
         address psm,
         address daiUsds,
-        address cctp
+        address cctp,
+        address cctpV2
     )
         internal returns (address controller)
     {
@@ -77,7 +82,8 @@ library MainnetControllerDeploy {
             vault_      : vault,
             psm_        : psm,
             daiUsds_    : daiUsds,
-            cctp_       : cctp
+            cctp_       : cctp,
+            cctpV2_     : cctpV2
         }));
     }
 
@@ -86,7 +92,8 @@ library MainnetControllerDeploy {
         address vault,
         address psm,
         address daiUsds,
-        address cctp
+        address cctp,
+        address cctpV2
     )
         internal returns (ControllerInstance memory instance)
     {
@@ -100,7 +107,8 @@ library MainnetControllerDeploy {
             vault_      : vault,
             psm_        : psm,
             daiUsds_    : daiUsds,
-            cctp_       : cctp
+            cctp_       : cctp,
+            cctpV2_     : cctpV2
         }));
     }
 

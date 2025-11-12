@@ -133,6 +133,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             psm          : address(psmBase),
             usdc         : address(usdcBase),
             cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctpV2       : CCTP_MESSENGER_V2_BASE,
             pendleRouter : PENDLE_ROUTER_BASE
         }));
 
@@ -309,6 +310,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            makeAddr("cctpV2"),
             PENDLE_ROUTER_BASE
         );
 
@@ -336,6 +338,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            makeAddr("cctpV2"),
             PENDLE_ROUTER_BASE
         );
 
@@ -363,6 +366,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            makeAddr("cctpV2"),
             PENDLE_ROUTER_BASE
         );
 
@@ -503,6 +507,7 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             address(psmBase),
             address(usdcBase),
             Base.CCTP_TOKEN_MESSENGER,
+            CCTP_MESSENGER_V2_BASE,
             PENDLE_ROUTER_BASE
         );
 
@@ -617,6 +622,7 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
             rateLimits   : address(rateLimits),
             psm          : address(psmBase),
             usdc         : address(usdcBase),
+            cctpV2       : makeAddr("cctpV2"),
             cctp         : Base.CCTP_TOKEN_MESSENGER,
             pendleRouter : PENDLE_ROUTER_BASE
         }));

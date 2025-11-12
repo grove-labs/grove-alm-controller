@@ -16,7 +16,8 @@ contract MainnetControllerDeploySuccessTests is ForkTestBase {
             vault   : vault,
             psm     : PSM,
             daiUsds : DAI_USDS,
-            cctp    : CCTP_MESSENGER
+            cctp    : CCTP_MESSENGER,
+            cctpV2  : CCTP_MESSENGER_V2
         });
 
         ALMProxy          newAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -42,7 +43,8 @@ contract MainnetControllerDeploySuccessTests is ForkTestBase {
             vault      : vault,
             psm        : PSM,
             daiUsds    : DAI_USDS,
-            cctp       : CCTP_MESSENGER
+            cctp       : CCTP_MESSENGER,
+            cctpV2     : CCTP_MESSENGER_V2
         }));
 
         _assertControllerInitState(newController, address(almProxy), address(rateLimits), vault, buffer);

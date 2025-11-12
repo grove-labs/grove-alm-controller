@@ -15,6 +15,7 @@ contract MainnetControllerAdminTestBase is UnitTestBase {
     event LayerZeroRecipientSet(uint32 indexed destinationDomain, bytes32 layerZeroRecipient);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
+    event MintRecipientV2Set(uint32 indexed destinationDomain, bytes32 mintRecipient);
 
     bytes32 layerZeroRecipient1 = bytes32(uint256(uint160(makeAddr("layerZeroRecipient1"))));
     bytes32 layerZeroRecipient2 = bytes32(uint256(uint160(makeAddr("layerZeroRecipient2"))));
@@ -35,7 +36,8 @@ contract MainnetControllerAdminTestBase is UnitTestBase {
             address(vault),
             address(psm),
             address(daiUsds),
-            makeAddr("cctp")
+            makeAddr("cctp"),
+            makeAddr("cctpV2")
         );
     }
 
@@ -84,6 +86,53 @@ contract MainnetControllerSetMintRecipientTests is MainnetControllerAdminTestBas
         mainnetController.setMintRecipient(1, mintRecipient2);
 
         assertEq(mainnetController.mintRecipients(1), mintRecipient2);
+    }
+
+}
+
+contract MainnetControllerSetMintRecipientV2Tests is MainnetControllerAdminTestBase {
+
+    function test_setMintRecipientV2_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setMintRecipientV2(1, mintRecipient1);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setMintRecipientV2(1, mintRecipient1);
+    }
+
+    function test_setMintRecipientV2() public {
+        assertEq(mainnetController.mintRecipientsV2(1), bytes32(0));
+        assertEq(mainnetController.mintRecipientsV2(2), bytes32(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MintRecipientV2Set(1, mintRecipient1);
+        mainnetController.setMintRecipientV2(1, mintRecipient1);
+
+        assertEq(mainnetController.mintRecipientsV2(1), mintRecipient1);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MintRecipientV2Set(2, mintRecipient2);
+        mainnetController.setMintRecipientV2(2, mintRecipient2);
+
+        assertEq(mainnetController.mintRecipientsV2(2), mintRecipient2);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MintRecipientV2Set(1, mintRecipient2);
+        mainnetController.setMintRecipientV2(1, mintRecipient2);
+
+        assertEq(mainnetController.mintRecipientsV2(1), mintRecipient2);
     }
 
 }
@@ -196,6 +245,7 @@ contract ForeignControllerAdminTests is UnitTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("cctpV2"),
             makeAddr("pendleRouter")
         );
     }

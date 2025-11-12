@@ -15,13 +15,14 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
-import { IALMProxy }   from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }   from "./interfaces/CCTPInterfaces.sol";
-import { IRateLimits } from "./interfaces/IRateLimits.sol";
+import { IALMProxy }     from "./interfaces/IALMProxy.sol";
+import { ICCTPLike, ICCTPv2Like } from "./interfaces/CCTPInterfaces.sol";
+import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { PendleLib } from "./libraries/PendleLib.sol";
-import { ERC20Lib }  from "./libraries/ERC20Lib.sol";
+import { PendleLib }  from "./libraries/PendleLib.sol";
+import { ERC20Lib }   from "./libraries/ERC20Lib.sol";
+import { CCTPv2Lib }  from "./libraries/CCTPv2Lib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
@@ -56,6 +57,7 @@ contract ForeignController is AccessControl {
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
 
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
+    event MintRecipientV2Set(uint32 indexed destinationDomain, bytes32 mintRecipient);
 
     event RelayerRemoved(address indexed relayer);
 
@@ -80,11 +82,14 @@ contract ForeignController is AccessControl {
     bytes32 public constant LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
     bytes32 public constant LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public constant LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public constant LIMIT_USDC_TO_CCTP_V2     = keccak256("LIMIT_USDC_TO_CCTP_V2");
+    bytes32 public constant LIMIT_USDC_TO_DOMAIN_V2    = keccak256("LIMIT_USDC_TO_DOMAIN_V2");
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
     IALMProxy   public immutable proxy;
     ICCTPLike   public immutable cctp;
+    ICCTPv2Like public immutable cctpV2;
     IPSM3       public immutable psm;
     IRateLimits public immutable rateLimits;
 
@@ -93,6 +98,7 @@ contract ForeignController is AccessControl {
     address public immutable pendleRouter;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
+    mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipientsV2;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
     mapping(uint16 destinationCentrifugeId => bytes32 recipient)          public centrifugeRecipients;
 
@@ -107,6 +113,7 @@ contract ForeignController is AccessControl {
         address psm_,
         address usdc_,
         address cctp_,
+        address cctpV2_,
         address pendleRouter_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
@@ -116,6 +123,7 @@ contract ForeignController is AccessControl {
         psm          = IPSM3(psm_);
         usdc         = IERC20(usdc_);
         cctp         = ICCTPLike(cctp_);
+        cctpV2       = ICCTPv2Like(cctpV2_);
         pendleRouter = pendleRouter_;
     }
 
@@ -151,6 +159,14 @@ contract ForeignController is AccessControl {
     {
         mintRecipients[destinationDomain] = mintRecipient;
         emit MintRecipientSet(destinationDomain, mintRecipient);
+    }
+
+    function setMintRecipientV2(uint32 destinationDomain, bytes32 mintRecipient)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        mintRecipientsV2[destinationDomain] = mintRecipient;
+        emit MintRecipientV2Set(destinationDomain, mintRecipient);
     }
 
     function setLayerZeroRecipient(uint32 destinationEndpointId, bytes32 layerZeroRecipient)
@@ -261,6 +277,23 @@ contract ForeignController is AccessControl {
         if (usdcAmount > 0) {
             _initiateCCTPTransfer(usdcAmount, destinationDomain, mintRecipient);
         }
+    }
+
+    function transferUSDCToCCTPv2(uint256 usdcAmount, uint32 destinationDomain)
+        external
+        onlyRole(RELAYER)
+    {
+        CCTPv2Lib.transferUSDCToCCTPv2(CCTPv2Lib.TransferUSDCToCCTPv2Params({
+            proxy             : proxy,
+            rateLimits        : rateLimits,
+            cctpV2            : cctpV2,
+            usdc              : usdc,
+            domainRateLimitId : LIMIT_USDC_TO_DOMAIN_V2,
+            cctpRateLimitId   : LIMIT_USDC_TO_CCTP_V2,
+            mintRecipient     : mintRecipientsV2[destinationDomain],
+            destinationDomain : destinationDomain,
+            usdcAmount        : usdcAmount
+        }));
     }
 
     // NOTE: !!! This function was deployed without integration testing !!!

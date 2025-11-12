@@ -93,12 +93,13 @@ contract ForkTestBase is DssTest {
 
     address constant LOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
 
-    address constant CCTP_MESSENGER = Ethereum.CCTP_TOKEN_MESSENGER;
-    address constant DAI_USDS       = Ethereum.DAI_USDS;
-    address constant ETHENA_MINTER  = Ethereum.ETHENA_MINTER;
-    address constant PAUSE_PROXY    = Ethereum.PAUSE_PROXY;
-    address constant PSM            = Ethereum.PSM;
-    address constant GROVE_PROXY    = Ethereum.GROVE_PROXY;
+    address constant CCTP_MESSENGER    = Ethereum.CCTP_TOKEN_MESSENGER;
+    address constant CCTP_MESSENGER_V2 = Ethereum.CCTP_TOKEN_MESSENGER_V2;
+    address constant DAI_USDS          = Ethereum.DAI_USDS;
+    address constant ETHENA_MINTER     = Ethereum.ETHENA_MINTER;
+    address constant PAUSE_PROXY       = Ethereum.PAUSE_PROXY;
+    address constant PSM               = Ethereum.PSM;
+    address constant GROVE_PROXY       = Ethereum.GROVE_PROXY;
 
     IERC20 constant dai   = IERC20(Ethereum.DAI);
     IERC20 constant usdc  = IERC20(Ethereum.USDC);
@@ -206,9 +207,10 @@ contract ForkTestBase is DssTest {
         ControllerInstance memory controllerInst = MainnetControllerDeploy.deployFull({
             admin   : Ethereum.GROVE_PROXY,
             vault   : ilkInst.vault,
-            psm     : Ethereum.PSM,
-            daiUsds : Ethereum.DAI_USDS,
-            cctp    : Ethereum.CCTP_TOKEN_MESSENGER
+            psm     : PSM,
+            daiUsds : DAI_USDS,
+            cctp    : CCTP_MESSENGER,
+            cctpV2  : CCTP_MESSENGER_V2
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));

@@ -135,6 +135,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             psm          : address(psmPlasma),
             usdc         : address(usdt0Plasma),
             cctp         : address(0xDeadBeef), // unused
+            cctpV2       : address(0xDeadBeef), // unused
             pendleRouter : address(0xDeadBeef) // unused
         });
 

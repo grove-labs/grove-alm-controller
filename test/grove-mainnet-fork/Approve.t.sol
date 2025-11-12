@@ -29,8 +29,9 @@ contract MainnetControllerHarness is MainnetController {
         address vault_,
         address psm_,
         address daiUsds_,
-        address cctp_
-    ) MainnetController(admin_, proxy_, rateLimits_, vault_, psm_, daiUsds_, cctp_) {}
+        address cctp_,
+        address cctpV2_
+    ) MainnetController(admin_, proxy_, rateLimits_, vault_, psm_, daiUsds_, cctp_, cctpV2_) {}
 
     function approve(address token, address spender, uint256 amount) external {
         ERC20Lib.approve(proxy, token, spender, amount);
@@ -51,8 +52,9 @@ contract ForeignControllerHarness is ForeignController {
         address psm_,
         address usdc_,
         address cctp_,
+        address cctpV2_,
         address pendleRouter_
-    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, pendleRouter_) {}
+    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, cctpV2_, pendleRouter_) {}
 
     function approve(address token, address spender, uint256 amount) external {
         ERC20Lib.approve(proxy, token, spender, amount);
@@ -106,7 +108,8 @@ contract MainnetControllerApproveSuccessTests is ApproveTestBase {
             address(mainnetController.vault()),
             address(mainnetController.psm()),
             address(mainnetController.daiUsds()),
-            address(mainnetController.cctp())
+            address(mainnetController.cctp()),
+            address(mainnetController.cctpV2())
         );
 
         vm.etch(address(mainnetController), address(harnessCode).code);
@@ -177,6 +180,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("cctpV2"),
             makeAddr("pendleRouter")
         );
 
@@ -187,6 +191,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("cctpV2"),
             makeAddr("pendleRouter")
         );
 

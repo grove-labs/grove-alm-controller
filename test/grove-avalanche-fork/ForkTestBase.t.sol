@@ -51,11 +51,12 @@ contract ForkTestBase is Test {
     /*** Avalanche addresses                                                                   ***/
     /**********************************************************************************************/
 
-    address constant ALM_FREEZER          = Avalanche.ALM_FREEZER;
-    address constant ALM_RELAYER          = Avalanche.ALM_RELAYER;
-    address constant CCTP_TOKEN_MESSENGER = Avalanche.CCTP_TOKEN_MESSENGER;
-    address constant GROVE_EXECUTOR       = Avalanche.GROVE_EXECUTOR;
-    address constant USDC_AVALANCHE       = Avalanche.USDC;
+    address constant ALM_FREEZER             = Avalanche.ALM_FREEZER;
+    address constant ALM_RELAYER             = Avalanche.ALM_RELAYER;
+    address constant CCTP_TOKEN_MESSENGER    = Avalanche.CCTP_TOKEN_MESSENGER;
+    address constant CCTP_TOKEN_MESSENGER_V2 = Avalanche.CCTP_TOKEN_MESSENGER_V2;
+    address constant GROVE_EXECUTOR          = Avalanche.GROVE_EXECUTOR;
+    address constant USDC_AVALANCHE          = Avalanche.USDC;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -113,6 +114,7 @@ contract ForkTestBase is Test {
             psm          : address(psmAvalanche),
             usdc         : USDC_AVALANCHE,
             cctp         : CCTP_TOKEN_MESSENGER,
+            cctpV2       : CCTP_TOKEN_MESSENGER_V2,
             pendleRouter : address(0) // No Pendle Router on Avalanche
         });
 

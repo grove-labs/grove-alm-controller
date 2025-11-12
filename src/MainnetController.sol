@@ -13,14 +13,15 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
-import { IALMProxy }     from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
-import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
-import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+import { IALMProxy }              from "./interfaces/IALMProxy.sol";
+import { ICCTPLike, ICCTPv2Like } from "./interfaces/CCTPInterfaces.sol";
+import { IPendleMarket }          from "./interfaces/PendleInterfaces.sol";
+import { IRateLimits }            from "./interfaces/IRateLimits.sol";
 
 import "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
+import { CCTPv2Lib }                      from "./libraries/CCTPv2Lib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
@@ -64,6 +65,7 @@ contract MainnetController is AccessControl {
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
+    event MintRecipientV2Set(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
     /**********************************************************************************************/
@@ -89,6 +91,8 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
     bytes32 public LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
     bytes32 public LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
+    bytes32 public LIMIT_USDC_TO_CCTP_V2      = keccak256("LIMIT_USDC_TO_CCTP_V2");
+    bytes32 public LIMIT_USDC_TO_DOMAIN_V2    = keccak256("LIMIT_USDC_TO_DOMAIN_V2");
     bytes32 public LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
     bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
     bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
@@ -100,6 +104,7 @@ contract MainnetController is AccessControl {
 
     IALMProxy         public proxy;
     ICCTPLike         public cctp;
+    ICCTPv2Like       public cctpV2;
     IDaiUsdsLike      public daiUsds;
     IEthenaMinterLike public ethenaMinter;
     IPSMLike          public psm;
@@ -117,6 +122,7 @@ contract MainnetController is AccessControl {
     mapping(address pool => uint256 maxSlippage) public maxSlippages;  // 1e18 precision
 
     mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipients;
+    mapping(uint32 destinationDomain     => bytes32 mintRecipient)      public mintRecipientsV2;
     mapping(uint32 destinationEndpointId => bytes32 layerZeroRecipient) public layerZeroRecipients;
     mapping(uint16 centrifugeId          => bytes32 recipient)          public centrifugeRecipients;
 
@@ -131,7 +137,8 @@ contract MainnetController is AccessControl {
         address vault_,
         address psm_,
         address daiUsds_,
-        address cctp_
+        address cctp_,
+        address cctpV2_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -142,6 +149,7 @@ contract MainnetController is AccessControl {
         psm        = IPSMLike(psm_);
         daiUsds    = IDaiUsdsLike(daiUsds_);
         cctp       = ICCTPLike(cctp_);
+        cctpV2     = ICCTPv2Like(cctpV2_);
 
         ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
 
@@ -163,6 +171,13 @@ contract MainnetController is AccessControl {
         mintRecipients[destinationDomain] = mintRecipient;
         emit MintRecipientSet(destinationDomain, mintRecipient);
     }
+
+    function setMintRecipientV2(uint32 destinationDomain, bytes32 mintRecipient) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        mintRecipientsV2[destinationDomain] = mintRecipient;
+        emit MintRecipientV2Set(destinationDomain, mintRecipient);
+    }
+
 
     function setLayerZeroRecipient(
         uint32  destinationEndpointId,
@@ -759,6 +774,22 @@ contract MainnetController is AccessControl {
             domainRateLimitId : LIMIT_USDC_TO_DOMAIN,
             cctpRateLimitId   : LIMIT_USDC_TO_CCTP,
             mintRecipient     : mintRecipients[destinationDomain],
+            destinationDomain : destinationDomain,
+            usdcAmount        : usdcAmount
+        }));
+    }
+
+    function transferUSDCToCCTPv2(uint256 usdcAmount, uint32 destinationDomain) external {
+        _checkRole(RELAYER);
+
+        CCTPv2Lib.transferUSDCToCCTPv2(CCTPv2Lib.TransferUSDCToCCTPv2Params({
+            proxy             : proxy,
+            rateLimits        : rateLimits,
+            cctpV2            : cctpV2,
+            usdc              : usdc,
+            domainRateLimitId : LIMIT_USDC_TO_DOMAIN_V2,
+            cctpRateLimitId   : LIMIT_USDC_TO_CCTP_V2,
+            mintRecipient     : mintRecipientsV2[destinationDomain],
             destinationDomain : destinationDomain,
             usdcAmount        : usdcAmount
         }));

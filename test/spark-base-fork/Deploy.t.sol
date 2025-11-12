@@ -8,8 +8,8 @@ import "./ForkTestBase.t.sol";
 
 contract ForeignControllerDeploySuccessTests is ForkTestBase {
 
-    // TODO: Get this from the registry after added there
-    address constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant PENDLE_ROUTER           = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant CCTP_TOKEN_MESSENGER_V2 = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
 
     function test_deployFull() external {
         // Perform new deployments against existing fork environment
@@ -19,6 +19,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             psm          : Base.PSM3,
             usdc         : Base.USDC,
             cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctpV2       : CCTP_TOKEN_MESSENGER_V2,
             pendleRouter : PENDLE_ROUTER
         });
 
@@ -45,6 +46,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             psm          : Base.PSM3,
             usdc         : Base.USDC,
             cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctpV2       : CCTP_TOKEN_MESSENGER_V2,
             pendleRouter : PENDLE_ROUTER
         }));
 

@@ -33,7 +33,8 @@ contract DeployMainnetFull is Script {
             vault   : config.readAddress(".allocatorVault"),
             psm     : config.readAddress(".psm"),
             daiUsds : config.readAddress(".daiUsds"),
-            cctp    : config.readAddress(".cctpTokenMessenger")
+            cctp    : config.readAddress(".cctpTokenMessenger"),
+            cctpV2  : config.readAddress(".cctpTokenMessengerV2")
         });
 
         vm.stopBroadcast();
@@ -75,7 +76,8 @@ contract DeployMainnetController is Script {
             vault      : config.readAddress(".allocatorVault"),
             psm        : config.readAddress(".psm"),
             daiUsds    : config.readAddress(".daiUsds"),
-            cctp       : config.readAddress(".cctpTokenMessenger")
+            cctp       : config.readAddress(".cctpTokenMessenger"),
+            cctpV2     : config.readAddress(".cctpTokenMessengerV2")
         });
 
         vm.stopBroadcast();
@@ -137,6 +139,7 @@ contract DeployForeignFull is ForeignScript {
             psm          : config.readAddress(".psm"),
             usdc         : config.readAddress(".usdc"),
             cctp         : config.readAddress(".cctpTokenMessenger"),
+            cctpV2       : config.readAddress(".cctpTokenMessengerV2"),
             pendleRouter : config.readAddress(".pendleRouter")
         });
 
@@ -181,6 +184,7 @@ contract DeployForeignController is ForeignScript {
             psm          : config.readAddress(".psm"),
             usdc         : config.readAddress(".usdc"),
             cctp         : config.readAddress(".cctpTokenMessenger"),
+            cctpV2       : config.readAddress(".cctpTokenMessengerV2"),
             pendleRouter : config.readAddress(".pendleRouter")
         });
 

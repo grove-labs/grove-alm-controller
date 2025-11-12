@@ -52,12 +52,13 @@ contract ForkTestBase is Test {
     /**********************************************************************************************/
 
     // TODO: Update these to use the correct addresses from the registry`
-    address constant ALM_FREEZER          = 0xB0113804960345fd0a245788b3423319c86940e5;
-    address constant ALM_RELAYER          = 0x0eEC86649E756a23CBc68d9EFEd756f16aD5F85f;
-    address constant CCTP_TOKEN_MESSENGER = 0x1682Ae6375C4E4A97e4B583BC394c861A46D8962;
-    address constant USDC_BASE            = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address constant PENDLE_ROUTER_BASE   = 0x888888888889758F76e7103c6CbF23ABbF58F946;
-    address constant GROVE_EXECUTOR       = Base.GROVE_EXECUTOR;
+    address constant ALM_FREEZER             = 0xB0113804960345fd0a245788b3423319c86940e5;
+    address constant ALM_RELAYER             = 0x0eEC86649E756a23CBc68d9EFEd756f16aD5F85f;
+    address constant CCTP_TOKEN_MESSENGER    = 0x1682Ae6375C4E4A97e4B583BC394c861A46D8962;
+    address constant CCTP_TOKEN_MESSENGER_V2 = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
+    address constant USDC_BASE               = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address constant PENDLE_ROUTER_BASE      = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant GROVE_EXECUTOR          = Base.GROVE_EXECUTOR;
 
     address relayer = Base.ALM_RELAYER;
 
@@ -117,6 +118,7 @@ contract ForkTestBase is Test {
             psm          : address(psmBase),
             usdc         : USDC_BASE,
             cctp         : CCTP_TOKEN_MESSENGER,
+            cctpV2       : CCTP_TOKEN_MESSENGER_V2,
             pendleRouter : PENDLE_ROUTER_BASE
         });
 

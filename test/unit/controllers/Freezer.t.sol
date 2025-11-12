@@ -32,7 +32,8 @@ contract MainnetControllerRemoveRelayerTests is UnitTestBase {
             address(vault),
             address(psm),
             address(daiUsds),
-            makeAddr("cctp")
+            makeAddr("cctp"),
+            makeAddr("cctpV2")
         );
 
         vm.startPrank(admin);
@@ -106,6 +107,7 @@ contract ForeignControllerRemoveRelayerTests is UnitTestBase {
             address(psm3),
             usdc,
             makeAddr("cctp"),
+            makeAddr("cctpV2"),
             makeAddr("pendleRouter")
         );
 

@@ -48,12 +48,13 @@ contract ForkTestBase is Test {
     /*** Base addresses                                                                         ***/
     /**********************************************************************************************/
 
-    address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
-    address constant CCTP_MESSENGER_BASE = Base.CCTP_TOKEN_MESSENGER;
-    address constant USDC_BASE           = Base.USDC;
-    address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
+    address constant SPARK_EXECUTOR         = Base.SPARK_EXECUTOR;
+    address constant CCTP_MESSENGER_BASE    = Base.CCTP_TOKEN_MESSENGER;
+    address constant USDC_BASE              = Base.USDC;
+    address constant SSR_ORACLE             = Base.SSR_AUTH_ORACLE;
     // TODO: Get this from the registry after added there
-    address constant PENDLE_ROUTER_BASE  = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant PENDLE_ROUTER_BASE     = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant CCTP_MESSENGER_V2_BASE = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -107,6 +108,7 @@ contract ForkTestBase is Test {
             psm          : address(psmBase),
             usdc         : USDC_BASE,
             cctp         : CCTP_MESSENGER_BASE,
+            cctpV2       : CCTP_MESSENGER_V2_BASE,
             pendleRouter : PENDLE_ROUTER_BASE
         });
 
