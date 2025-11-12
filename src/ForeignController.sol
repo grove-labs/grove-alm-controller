@@ -783,7 +783,8 @@ contract ForeignController is AccessControl {
                 tokenId         : tokenId,
                 liquidity       : liquidity,
                 amount0Min      : amount0Min,
-                amount1Min      : amount1Min
+                amount1Min      : amount1Min,
+                maxSlippage     : maxSlippages[pool]
             })
         );
     }

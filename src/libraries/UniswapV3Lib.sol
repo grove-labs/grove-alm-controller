@@ -14,6 +14,8 @@ import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
+import {console} from "forge-std/console.sol";
+
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
 
@@ -73,7 +75,7 @@ library UniswapV3Lib {
         uint128                     liquidity;
         uint256                     amount0Min;
         uint256                     amount1Min;
-        // uint256     maxSlippage;
+        uint256                     maxSlippage;
     }
 
     /**********************************************************************************************/
@@ -168,7 +170,8 @@ library UniswapV3Lib {
         address token0 = pool.token0();
         address token1 = pool.token1();
 
-        // TODO: implement slippage check
+        uint256 amount0CollectedBefore = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 amount1CollectedBefore = IERC20(token1).balanceOf(address(context.proxy));
 
         _decreaseLiquidityCall(
             context.proxy,
@@ -186,6 +189,12 @@ library UniswapV3Lib {
             params.tokenId,
             address(context.proxy)
         );
+
+        uint256 amount0CollectedAfter = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 amount1CollectedAfter = IERC20(token1).balanceOf(address(context.proxy));
+
+        require(params.amount0Min >= (amount0CollectedAfter - amount0CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        require(params.amount1Min >= (amount1CollectedAfter - amount1CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
         
         if (amount0Collected > 0) {
             context.rateLimits.triggerRateLimitDecrease(

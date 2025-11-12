@@ -502,6 +502,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 }
+
 contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
     function _addLiquidityAndValidate(
         uint256 currentTokenId,
@@ -639,6 +640,248 @@ contract ForeignControllerAddLiquidityE2EUniswapV3AusdUsdsTest is ForeignControl
     }
 }
 
+contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
+    using stdStorage for StdStorage;
+
+    uint256 tokenId;
+    uint128 liquidity;
+    uint256 amount0;
+    uint256 amount1;
+
+    uint256 defaultMinAmount0;
+    uint256 defaultMinAmount1;
+
+    function setUp() public override {
+        super.setUp();
+
+        (tokenId, liquidity, amount0, amount1) = _mintProxyPosition();
+
+        defaultMinAmount0 = amount0 * 98/100;
+        defaultMinAmount1 = amount1 * 98/100;
+    }
+
+    function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
+        return UniswapV3Lib.Tick({ lower: initTick - 50, upper: initTick + 50 });
+    }
+
+    function _defaultDesiredPosition() internal view returns (UniswapV3Lib.TokenAmounts memory) {
+        uint256 amount0 = 1_000 * 10 ** uint256(token0Decimals);
+        uint8 token1Decimals = IERC20Metadata(address(token1)).decimals();
+        uint256 amount1 = 1_000 * 10 ** uint256(token1Decimals);
+
+        return UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 });
+    }
+
+    function _mintProxyPosition() internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        deal(address(token0), address(almProxy), desired.amount0);
+        deal(address(token1), address(almProxy), desired.amount1);
+
+        vm.startPrank(address(almProxy));
+        token0.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount0);
+        token1.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount1);
+        (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
+            INonfungiblePositionManager.MintParams({
+                token0: address(token0),
+                token1: address(token1),
+                fee: poolFee,
+                tickLower: tick.lower,
+                tickUpper: tick.upper,
+                amount0Desired: desired.amount0,
+                amount1Desired: desired.amount1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(almProxy),
+                deadline: block.timestamp + 1 hours
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function _mintExternalPosition() internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
+        address stranger = makeAddr("stranger-remove-lp");
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+
+        deal(address(token0), stranger, desired.amount0);
+        deal(address(token1), stranger, desired.amount1);
+
+        vm.startPrank(stranger);
+        token0.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount0);
+        token1.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount1);
+        (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
+            INonfungiblePositionManager.MintParams({
+                token0: address(token0),
+                token1: address(token1),
+                fee: poolFee,
+                tickLower: initTick - 50,
+                tickUpper: initTick + 50,
+                amount0Desired: desired.amount0,
+                amount1Desired: desired.amount1,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: stranger,
+                deadline: block.timestamp + 1 hours
+            })
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_notRelayer() public {
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "AccessControlUnauthorizedAccount(address,bytes32)",
+                address(this),
+                RELAYER
+            )
+        );
+
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            0,
+            1,
+            0,
+            0,
+            block.timestamp + 1 hours
+        );
+    }
+
+    function test_removeLiquidityUniswapV3_positionManagerNotSet() public {
+        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = _mintProxyPosition();
+
+        stdstore
+            .target(address(foreignController))
+            .sig("uniswapV3PositionManager()")
+            .checked_write(address(0));
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("MainnetController/position-manager-not-set");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
+        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = _mintExternalPosition();
+
+        vm.warp(block.timestamp + 1 hours);
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/proxy-does-not-own-token-id");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_zeroLiquidity() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/zero-liquidity");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            0,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_liquidityTooHigh() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/liquidity-too-high");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            type(uint128).max,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_invalidPosition() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/invalid-position");
+        foreignController.removeLiquidityUniswapV3(
+            usdsAusdPool,
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_feeMismatch() public {
+        address mismatchedFeePool = _createPool(address(token0), address(token1), 500);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/fee-mismatch");
+        foreignController.removeLiquidityUniswapV3(
+            mismatchedFeePool,
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_rateLimitExceeded_token0() public {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 1, 0);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey, 1, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_rateLimitExceeded_token1() public {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 1, 0);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey, 1, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            defaultMinAmount0,
+            defaultMinAmount1,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+}
+
 contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
     uint256 tokenId;
     uint128 totalLiquidity;
@@ -689,9 +932,6 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         );
         vm.stopPrank();
 
-        console.log("amount0Used", amount0Used);
-        console.log("amount1Used", amount1Used);
-
         assertGe(amount0Used, minAmount0, "amount0Used should be greater than or equal to minAmount0");
         assertGe(amount1Used, minAmount1, "amount1Used should be greater than or equal to minAmount1");
 
@@ -723,6 +963,17 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignCont
             uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
         );
     }
+
+    function test_e2e_removeLiquidityUniswapV3_usdsUsdc_allLiquidity() public {
+        _removeLiquidityAndValidate(
+            tokenId, 
+            totalLiquidity, 
+            amount0Added-1,
+            amount1Added-1, 
+            uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 
+            uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
+        );
+    }
 }
 
 contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignControllerRemoveLiquidityE2EUniswapV3Test {
@@ -741,6 +992,17 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignCont
             liquidity, 
             minAmount0,
             minAmount1, 
+            uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 
+            uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
+        );
+    }
+
+    function test_e2e_removeLiquidityUniswapV3_ausdUsds_allLiquidity() public {
+        _removeLiquidityAndValidate(
+            tokenId, 
+            totalLiquidity, 
+            amount0Added-1,
+            amount1Added-1, 
             uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 
             uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
         );
