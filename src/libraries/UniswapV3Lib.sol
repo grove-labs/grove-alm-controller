@@ -76,19 +76,6 @@ library UniswapV3Lib {
         // uint256     maxSlippage;
     }
 
-    struct RemoveLiquidityCache {
-        address token0;
-        address token1;
-        uint160 sqrtPriceX96;
-        uint8   token0Decimals;
-        uint8   token1Decimals;
-        uint256 priceX192;
-        int24   tickLower;
-        int24   tickUpper;
-        uint24  fee;
-        uint128 positionLiquidity;
-    }
-
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
@@ -173,11 +160,13 @@ library UniswapV3Lib {
         external
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
-        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
-
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
-        RemoveLiquidityCache memory cache = _populateRemoveLiquidityCache(pool, params);
+        _validateRemoveLiquidityParams(pool, params);
+        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+        address token0 = pool.token0();
+        address token1 = pool.token1();
 
         // TODO: implement slippage check
 
@@ -200,14 +189,14 @@ library UniswapV3Lib {
         
         if (amount0Collected > 0) {
             context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token0, context.pool),
-                _scaleTo1e18(amount0Collected, cache.token0Decimals)
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+                amount0Collected
             );
         }
         if (amount1Collected > 0) {
             context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, cache.token1, context.pool),
-                _scaleTo1e18(amount1Collected, cache.token1Decimals)
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+                amount1Collected
             );
         }
     }
@@ -345,48 +334,34 @@ library UniswapV3Lib {
 
 
     // ---- Remove liquidity helper functions
-    function _populateRemoveLiquidityCache(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view returns (RemoveLiquidityCache memory) {
-        RemoveLiquidityCache memory cache;
+    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool,RemoveLiquidityParams calldata params) internal view {
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+        uint24 fee    = pool.fee();
 
-        cache.token0 = pool.token0();
-        cache.token1 = pool.token1();
-        cache.fee    = pool.fee();
+        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
+        uint256 token0Decimals = IERC20Metadata(token0).decimals();
+        uint256 token1Decimals = IERC20Metadata(token1).decimals();
 
-        (cache.sqrtPriceX96, , , , , , ) = pool.slot0();
-        // cache.priceX192 = _priceX192(cache.sqrtPriceX96);
-        cache.token0Decimals = IERC20Metadata(cache.token0).decimals();
-        cache.token1Decimals = IERC20Metadata(cache.token1).decimals();
-
-        uint128 owed0;
-        uint128 owed1;
-        address positionToken0;
-        address positionToken1;
-        uint24  positionFee;
         (
             ,
             ,
-            positionToken0,
-            positionToken1,
-            positionFee,
-            cache.tickLower,
-            cache.tickUpper,
-            cache.positionLiquidity,
+            address positionToken0,
+            address positionToken1,
+            uint24  positionFee,
             ,
             ,
-            owed0,
-            owed1
+            uint128 positionLiquidity,
+            ,
+            ,
+            uint128 owed0,
+            uint128 owed1
         ) = params.positionManager.positions(params.tokenId);
 
-        require(
-            params.liquidity != 0 || owed0 != 0 || owed1 != 0,
-            "UniswapV3Lib/nothing-to-withdraw"
-        );
-
-        require(positionToken0 == cache.token0 && positionToken1 == cache.token1, "UniswapV3Lib/invalid-position");
-        require(positionFee == cache.fee, "UniswapV3Lib/fee-mismatch");
-        require(params.liquidity <= cache.positionLiquidity, "UniswapV3Lib/liquidity-too-high");
-
-        return cache;
+        require(params.liquidity > 0, "UniswapV3Lib/zero-liquidity");
+        require(positionToken0 == token0 && positionToken1 == token1, "UniswapV3Lib/invalid-position");
+        require(positionFee == fee, "UniswapV3Lib/fee-mismatch");
+        require(params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-too-high");
     }
 
     function _decreaseLiquidityCall(
