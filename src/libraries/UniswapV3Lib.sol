@@ -146,6 +146,7 @@ library UniswapV3Lib {
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
+        require(amount0 > params.amountMin.amount0 && amount1 > params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
     }
 
     /**********************************************************************************************/
