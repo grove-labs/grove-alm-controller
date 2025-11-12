@@ -95,7 +95,6 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
 
         foreignController.setMaxSlippage(_getPool(), 0.98e18);
-        foreignController.setUniswapV3SwapTwapSecondsAgo(_getPool(), 1 hours);
         foreignController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         vm.stopPrank();
 
@@ -166,15 +165,6 @@ contract UniswapV3TestBase is ForkTestBase {
         deal(address(token0), address(almProxy), amount0Desired);
         deal(address(token1), address(almProxy), amount1Desired);
     }
-
-    function _getCurrentPriceX192() internal view returns (uint256) {
-        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3PoolLike(_getPool()).slot0();
-        return _priceX192(sqrtPriceX96);
-    }
-
-    function _priceX192(uint160 sqrtPriceX96) internal pure returns (uint256) {
-        return FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1);
-    }
 }
 
 contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
@@ -185,8 +175,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _defaultDesiredPosition() internal view returns (UniswapV3Lib.TokenAmounts memory) {
-        uint256 amount0 = 10 ** uint256(token0Decimals);
-        uint256 amount1 = 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+        uint256 amount0 = 1000 * 10 ** uint256(token0Decimals);
+        uint256 amount1 = 1000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
 
         return UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 });
     }
@@ -325,26 +315,6 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function test_addLiquidityUniswapV3_zeroTwapSecondsAgo() public {
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setUniswapV3SwapTwapSecondsAgo(_getPool(), 0);
-
-        vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
-        foreignController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            min,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-    }
-
     function test_addLiquidityUniswapV3_invalidTickLower() public {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
@@ -385,7 +355,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
             amount0: 0,
-            amount1: desired.amount1
+            amount1: desired.amount1 * 9/100
         });
 
         vm.startPrank(ALM_RELAYER);
@@ -404,7 +374,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
     function test_addLiquidityUniswapV3_minAmount1BelowBound() public {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
-            amount0: desired.amount0,
+            amount0: desired.amount0 * 98/100,
             amount1: 0
         });
 

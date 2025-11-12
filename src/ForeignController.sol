@@ -221,11 +221,6 @@ contract ForeignController is AccessControl {
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
     }
 
-    function setUniswapV3SwapTwapSecondsAgo(address pool, uint32 swapTwapSecondsAgo) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        params.swapTwapSecondsAgo = swapTwapSecondsAgo;
-        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, swapTwapSecondsAgo);
-    }
 
     /**********************************************************************************************/
     /*** Freezer functions                                                                      ***/
@@ -758,7 +753,6 @@ contract ForeignController is AccessControl {
                 amountDesired   : desired,
                 amountMin       : min,
                 tickBounds      : poolParams.addLiquidityTickBounds,
-                twapSecondsAgo  : poolParams.swapTwapSecondsAgo,
                 maxSlippage     : maxSlippage
             })
         );

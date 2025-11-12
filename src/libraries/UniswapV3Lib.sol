@@ -16,9 +16,6 @@ import { LiquidityAmounts } from "lib/dss-allocator/src/funnels/uniV3/LiquidityA
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
-import { UniswapV3OracleLib } from "./UniswapV3OracleLib.sol";
-import { UniV3UtilsLib }      from "./UniV3UtilsLib.sol";
-
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
 
@@ -69,7 +66,6 @@ library UniswapV3Lib {
         TokenAmounts                amountDesired;
         TokenAmounts                amountMin;
         Tick                        tickBounds;
-        uint32                      twapSecondsAgo;
         uint256                     maxSlippage;
     }
 
@@ -108,36 +104,22 @@ library UniswapV3Lib {
             "UniswapV3Lib/zero-amount"
         );
 
-        require(params.maxSlippage     > 0, "UniswapV3Lib/max-slippage-not-set");
-        require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
+        require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         address token0 = pool.token0();
         address token1 = pool.token1();
 
-        if (params.amountDesired.amount0 > 0) {
-            ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
-        }
-        if (params.amountDesired.amount1 > 0) {
-            ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
-        }
+        _maybeApproveToken(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
+        _maybeApproveToken(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
 
-        _validateAddLiquidityMinAmounts(context, params);
+        uint256 startingBalance0 = ERC20Lib.balanceOf(context.proxy, token0);
+        uint256 startingBalance1 = ERC20Lib.balanceOf(context.proxy, token1);
 
         if (params.tokenId == 0) {
-            require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
-            require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
-
             (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
         } else {
-            require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
-
-            (,,,,, int24 tickLower, int24 tickUpper,,,,,) = params.positionManager.positions(params.tokenId);
-
-            require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
-            require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
-
             (liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
             tokenId = params.tokenId;
         }
@@ -145,18 +127,62 @@ library UniswapV3Lib {
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
         require(amount0 >= params.amountMin.amount0 && amount1 >= params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
 
-        if (amount0 > 0) {
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
-                amount0
-            );
+        uint256 balanceDiff0 = startingBalance0 - ERC20Lib.balanceOf(context.proxy, token0);
+        uint256 balanceDiff1 = startingBalance1 - ERC20Lib.balanceOf(context.proxy, token1);
+
+        require(params.amountMin.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+
+        // Clear approvals of dust
+        _clearApprovals(context.proxy, token0, token1, address(params.positionManager));
+
+        _decreaseRateLimits(context, token0, token1, amount0, amount1, address(pool));
+    }
+
+    function _maybeApproveToken(
+        IALMProxy proxy,
+        address   token,
+        address   spender,
+        uint256   amount
+    )
+        internal
+    {
+        if (amount > 0) {
+            ERC20Lib.approve(proxy, token, spender, amount);
         }
-        if (amount1 > 0) {
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
-                amount1
-            );
-        }
+    }
+
+    function _clearApprovals(
+        IALMProxy proxy,
+        address   token0,
+        address   token1,
+        address   spender
+    )
+        internal
+    {
+        ERC20Lib.approve(proxy, token0, spender, 0);
+        ERC20Lib.approve(proxy, token1, spender, 0);
+    }
+
+    function _decreaseRateLimits(
+        UniV3Context calldata context,
+        address               token0,
+        address               token1,
+        uint256               amount0,
+        uint256               amount1,
+        address               pool
+    )
+        internal
+    {
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, pool),
+            amount0
+        );
+
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, pool),
+            amount1
+        );
     }
 
     /**********************************************************************************************/
@@ -226,6 +252,9 @@ library UniswapV3Lib {
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
+        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
+
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         address token0 = pool.token0();
@@ -261,6 +290,14 @@ library UniswapV3Lib {
         internal
         returns (uint128 liquidity, uint256 amount0, uint256 amount1)
     {
+        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+        // Validate existing position is still within governance bounds
+        (,,,,, int24 tickLower, int24 tickUpper,,,,,) = params.positionManager.positions(params.tokenId);
+        
+        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
                 tokenId        : params.tokenId,
@@ -280,67 +317,5 @@ library UniswapV3Lib {
         );
 
         (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
-    }
-
-    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
-        // Fetch twap tick
-        (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
-
-        uint160 sqrtTwapPriceX96   = TickMath.getSqrtRatioAtTick(twapTick);
-        uint160 sqrtRatioLowerX96  = TickMath.getSqrtRatioAtTick(params.tick.lower);
-        uint160 sqrtRatioUpperX96  = TickMath.getSqrtRatioAtTick(params.tick.upper);
-
-        uint128 expectedLiquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtTwapPriceX96,
-            sqrtRatioLowerX96,
-            sqrtRatioUpperX96,
-            params.amountDesired.amount0,
-            params.amountDesired.amount1
-        );
-
-        uint256 expectedAmount0;
-        uint256 expectedAmount1;
-
-        if (twapTick <= params.tick.lower) {
-            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-            
-            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-        } else if (twapTick >= params.tick.upper) {
-            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-
-            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-        } else {
-            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtTwapPriceX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-            _validateMinAmount(params.amountMin.amount0, expectedAmount0, params.maxSlippage);
-            
-            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtTwapPriceX96,
-                expectedLiquidity,
-                false
-            );
-            
-            _validateMinAmount(params.amountMin.amount1, expectedAmount1, params.maxSlippage);
-        }
-    }
-
-    function _validateMinAmount(uint256 minAmount, uint256 expectedAmount, uint256 maxSlippage) internal pure {
-        uint256 minAmountThreshold = FullMath.mulDiv(expectedAmount, maxSlippage, 1e18);
-        require(minAmount >= minAmountThreshold, "UniswapV3Lib/min-amount-below-bound");
     }
 }
