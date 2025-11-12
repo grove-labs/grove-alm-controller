@@ -219,15 +219,6 @@ contract MainnetController is AccessControl {
         emit UniswapV3PoolParamsUpdated(pool, params);
     }
 
-    function setUniswapV3SwapTwapSecondsAgo(address pool, uint32 swapTwapSecondsAgo) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        params.swapTwapSecondsAgo = swapTwapSecondsAgo;
-        
-        emit UniswapV3PoolParamsUpdated(pool, params);
-    }
-
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
         centrifugeRecipients[centrifugeId] = recipient;

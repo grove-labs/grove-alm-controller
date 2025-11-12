@@ -16,7 +16,6 @@ import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
-import { UniswapV3OracleLib } from "./UniswapV3OracleLib.sol";
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
@@ -26,7 +25,6 @@ library UniswapV3Lib {
     /**********************************************************************************************/
     struct UniswapV3PoolParams {
         uint24 swapMaxTickDelta;
-        uint32 swapTwapSecondsAgo;
     }
 
     struct UniV3Context {
@@ -50,7 +48,6 @@ library UniswapV3Lib {
     struct SwapCache {
         address tokenOut;
         uint160 sqrtPriceLimitX96;
-        uint256 twapExpectedOut;
     }
 
     /**********************************************************************************************/
@@ -64,13 +61,13 @@ library UniswapV3Lib {
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
-        uint256 minOutBySlippage = cache.twapExpectedOut * params.maxSlippage / 1e18;
-
-        require(params.minAmountOut >= minOutBySlippage, "UniswapV3Lib/min-amount-not-met");
-
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
 
+        uint256 startingBalance = ERC20Lib.balanceOf(context.proxy, cache.tokenOut);
         amountOut = _callSwap(context, params, cache);
+
+        uint256 endingBalance = ERC20Lib.balanceOf(context.proxy, cache.tokenOut);
+        require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
@@ -96,10 +93,6 @@ library UniswapV3Lib {
         (, int24 currentTick, , , , , ) = pool.slot0();
 
         cache.tokenOut = params.tokenIn == token0 ? token1 : token0;
-        
-        // Expected out is calculated by by converting amountIn to amountOut using the TWAP tick since some time ago
-        (int24 twapExpectedOutTick, ) = UniswapV3OracleLib.consult(context.pool, params.poolParams.swapTwapSecondsAgo); 
-        cache.twapExpectedOut         = UniswapV3OracleLib.getQuoteAtTick(twapExpectedOutTick, uint128(params.amountIn), params.tokenIn, cache.tokenOut);
         
         int24 delta = int24(params.tickDelta);
         int24 limitTick;

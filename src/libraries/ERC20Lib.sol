@@ -62,4 +62,11 @@ library ERC20Lib {
             "ERC20Lib/transfer-failed"
         );
     }
+
+    function balanceOf(
+        IALMProxy proxy,
+        address   token
+    ) external view returns (uint256) {
+        return IERC20(token).balanceOf(address(proxy));
+    }
 }
