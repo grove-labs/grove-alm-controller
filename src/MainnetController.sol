@@ -227,7 +227,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "ForeignController/lower-tick-out-of-bounds");
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -235,7 +235,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "ForeignController/upper-tick-out-of-bounds");
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);

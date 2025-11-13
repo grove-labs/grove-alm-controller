@@ -653,7 +653,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
             amount0: 0,
-            amount1: desired.amount1 * 9/100
+            amount1: desired.amount1 * 98 / 100
         });
 
         vm.startPrank(relayer);
@@ -672,7 +672,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
     function test_addLiquidityUniswapV3_minAmount1BelowBound() public {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
-            amount0: desired.amount0 * 98/100,
+            amount0: desired.amount0 * 98 / 100,
             amount1: 0
         });
 
@@ -908,7 +908,7 @@ contract MainnetControllerAddLiquidityE2EUniswapV3DaiUsdcTest is MainnetControll
         uint256 addAmount0 = addAmount * 10**token0.decimals() / 10**18;
         uint256 addAmount1 = addAmount * 10**token1.decimals() / 10**18;
 
-        // Pool is slighlty overweight DAI, so reduce USDC amount to counteract
+        // Pool is slightly overweight DAI, so reduce USDC amount to counteract
         addAmount1 = addAmount1 * 93 / 100;
 
         _e2e_addLiquidityUniswapV3(addAmount0, addAmount1, -100, 100, uniswapV3_DaiUsdcPool_DaiAddLiquidityKey, uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey);
