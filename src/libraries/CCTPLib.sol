@@ -53,7 +53,7 @@ library CCTPLib {
             params.usdcAmount
         );
 
-        require(params.mintRecipient != 0, "MainnetController/domain-not-configured");
+        require(params.mintRecipient != 0, "CCTPLib/domain-not-configured");
 
         // Approve USDC to CCTP from the proxy (assumes the proxy has enough USDC)
         ERC20Lib.approve(params.proxy, address(params.usdc), address(params.cctp), params.usdcAmount);
