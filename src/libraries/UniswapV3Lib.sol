@@ -128,12 +128,14 @@ library UniswapV3Lib {
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
 
-        uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
-        uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
+        {
+            uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
+            uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
 
-        require(params.amountMin.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-        require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-
+            require(params.amountMin.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+            require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        }
+        
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
