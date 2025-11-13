@@ -24,7 +24,7 @@ import { PendleLib }    from "./libraries/PendleLib.sol";
 import { ERC20Lib }     from "./libraries/ERC20Lib.sol";
 import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 
-import { INonfungiblePositionManager }                                 from "./interfaces/UniswapV3Interfaces.sol";
+import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
 import "./interfaces/ILayerZero.sol";
@@ -63,11 +63,11 @@ contract ForeignController is AccessControl {
 
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
 
+    event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
-    event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 swapTwapSecondsAgo);
-
+    event UniswapV3SwapMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -105,7 +105,7 @@ contract ForeignController is AccessControl {
     IPSM3       public immutable psm;
     IRateLimits public immutable rateLimits;
 
-    // Uniswap V3 NonfungiblePositionManager used for LP ops
+    ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
 
     IERC20 public immutable usdc;
@@ -197,12 +197,35 @@ contract ForeignController is AccessControl {
         emit MaxSlippageSet(pool, maxSlippage);
     }
 
+
+    function setUniswapV3Router(address router) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(router != address(0), "ForeignController/invalid-router");
+
+        uniswapV3Router = ISwapRouter(router);
+        emit UniswapV3RouterSet(router);
+    }
+
+
     function setUniswapV3PositionManager(address positionManager) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(positionManager != address(0), "ForeignController/invalid-position-manager");
 
         uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
         emit UniswapV3PositionManagerSet(positionManager);
     }
+
+    function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(
+            maxTickDelta > 0 &&
+            maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
+            "ForeignController/max-tick-delta-out-of-bounds"
+        );
+
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        params.swapMaxTickDelta = maxTickDelta;
+        emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
+    }   
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
@@ -720,6 +743,37 @@ contract ForeignController is AccessControl {
     /**********************************************************************************************/
     /*** Relayer UniswapV3 functions                                                            ***/
     /**********************************************************************************************/
+    function swapUniswapV3(
+        address pool,
+        address tokenIn,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        uint24  swapMaxTickDelta
+    )
+        external returns (uint256 amountOut)
+    {
+        _checkRole(RELAYER);
+
+        amountOut = UniswapV3Lib.swap(
+            UniswapV3Lib.UniV3Context({
+                proxy       : proxy,
+                rateLimits  : rateLimits,
+                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
+                pool        : pool
+            }),
+            UniswapV3Lib.SwapParams({
+                router         : uniswapV3Router,
+                tokenIn        : tokenIn,
+                amountIn       : amountIn,
+                minAmountOut   : minAmountOut,
+                maxSlippage    : maxSlippages[pool],
+                tickDelta      : swapMaxTickDelta,
+                poolParams     : uniswapV3PoolParams[pool]
+            })
+        );
+    }
+
+
     function addLiquidityUniswapV3(
         address                            pool,
         uint256                            tokenId,
