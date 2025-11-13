@@ -6,6 +6,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 import { ERC20Lib }  from "../libraries/ERC20Lib.sol";
+import { MathLib }  from "../libraries/common/MathLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 interface ICurvePoolLike is IERC20 {
@@ -186,7 +187,7 @@ library CurveLib {
         // swap rate limit by this amount.
         uint256 totalSwapped;
         for (uint256 i; i < params.depositAmounts.length; i++) {
-            totalSwapped += _absSubtraction(
+            totalSwapped += MathLib._absSubtraction(
                 curvePool.balances(i) * rates[i] * shares / curvePool.totalSupply(),
                 params.depositAmounts[i] * rates[i]
             );
@@ -253,14 +254,6 @@ library CurveLib {
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),
             valueWithdrawn
         );
-    }
-
-    /**********************************************************************************************/
-    /*** Helper functions                                                                       ***/
-    /**********************************************************************************************/
-
-    function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a > b ? a - b : b - a;
     }
 
 }
