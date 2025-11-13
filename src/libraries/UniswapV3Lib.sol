@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./ERC20Lib.sol";
@@ -56,6 +56,7 @@ library UniswapV3Lib {
 
     // Rate limit decreased by value of token1 
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
+        require(address(params.router) != address(0), "UniswapV3Lib/router-not-set");
         SwapCache memory cache = _populateSwapCache(context, params);
 
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
