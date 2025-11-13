@@ -133,7 +133,7 @@ library UniswapV3Lib {
             require(params.min.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
             require(params.min.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
         }
-        
+
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
@@ -166,7 +166,7 @@ library UniswapV3Lib {
         (, int24 currentTick, , , , , ) = pool.slot0();
 
         cache.tokenOut = params.tokenIn == token0 ? token1 : token0;
-        
+
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
         if (params.tokenIn == token0) {
@@ -246,7 +246,6 @@ library UniswapV3Lib {
         (tokenId, liquidity, amount0, amount1) = abi.decode(result, (uint256, uint128, uint256, uint256));
     }
 
-
     function _addLiquidityToExistingPosition(UniV3Context calldata context, AddLiquidityParams calldata params)
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
@@ -256,10 +255,7 @@ library UniswapV3Lib {
         // TODO: Validate existing position is still within governance bounds
         // Causing coverage checks to fail
 
-        // (,,,,, int24 tickLower, int24 tickUpper,,,,,) = params.positionManager.positions(params.tokenId);
-        
-        // require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
-        // require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+        _checkTickBounds(params);
 
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
@@ -281,5 +277,38 @@ library UniswapV3Lib {
 
         (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
         tokenId = params.tokenId;
-    }   
+    }
+
+
+    function _checkTickBounds(AddLiquidityParams calldata params) internal view {
+        int24 tickLower;
+        int24 tickUpper;
+        bytes memory positionData = abi.encodeCall(
+            INonfungiblePositionManager.positions,
+            params.tokenId
+        );
+
+        (bool success, bytes memory result) = address(params.positionManager).staticcall(positionData);
+        require(success, "UniswapV3Lib/positions-call-failed");
+        require(result.length >= 384, "UniswapV3Lib/invalid-positions-return-data");
+
+        assembly {
+            // positions returns 12 values, we need the 6th (tickLower) and 7th (tickUpper)
+            // Offsets: uint96(32) + address(32) + address(32) + address(32) + uint24(32) = 160 bytes
+            let offset := add(result, 192) // 32 (length) + 160 (first 5 values)
+
+            // Load and sign-extend int24 values
+            // ABI encoding already sign-extends, so we can directly load the 32-byte values
+            tickLower := mload(offset)
+            tickUpper := mload(add(offset, 32))
+
+            // Sign-extend from int24 to int256 for proper handling
+            // If bit 23 is set (negative), extend with 1s, otherwise with 0s
+            tickLower := signextend(2, tickLower)  // 2 = 24 bits - 1 byte (3 bytes total, 0-indexed = 2)
+            tickUpper := signextend(2, tickUpper)
+        }
+
+        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+    }
 }
