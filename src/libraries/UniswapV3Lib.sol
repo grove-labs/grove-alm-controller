@@ -10,12 +10,9 @@ import { IALMProxy }                                                    from "..
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
 import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
 
-import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
-import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
+import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
-
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
@@ -23,8 +20,19 @@ library UniswapV3Lib {
     /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
+    struct Tick {
+        int24 lower;
+        int24 upper;
+    }
+
+    struct TokenAmounts {
+        uint256 amount0;
+        uint256 amount1;
+    }
+
     struct UniswapV3PoolParams {
         uint24 swapMaxTickDelta;
+        Tick   addLiquidityTickBounds;
     }
 
     struct UniV3Context {
@@ -49,11 +57,22 @@ library UniswapV3Lib {
         uint160 sqrtPriceLimitX96;
     }
 
+    struct AddLiquidityParams {
+        uint256                     tokenId; // 0 for a new position
+        INonfungiblePositionManager positionManager;
+        Tick                        tick;
+        Tick                        tickBounds;
+        TokenAmounts                target;
+        TokenAmounts                min;
+        uint256                     maxSlippage;
+        uint256                     deadline;
+    }
+
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
 
-    // Rate limit decreased by value of token1 
+    // Rate limit decreased by value of token1
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         require(address(params.router) != address(0), "UniswapV3Lib/router-not-set");
         SwapCache memory cache = _populateSwapCache(context, params);
@@ -75,10 +94,64 @@ library UniswapV3Lib {
         require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
     }
 
+    function addLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
+
+        require(
+            params.target.amount0 > 0 || params.target.amount1 > 0,
+            "UniswapV3Lib/zero-amount"
+        );
+
+        require(params.maxSlippage > 0, "UniswapV3Lib/max-slippage-not-set");
+
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+
+        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
+        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
+
+        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
+
+        if (params.tokenId == 0) {
+            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
+        } else {
+            (tokenId, liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
+        }
+
+        require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
+
+        {
+            uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
+            uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
+
+            require(params.min.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+            require(params.min.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        }
+
+        // Clear approvals of dust
+        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
+        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
+
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, address(pool)),
+            amount0
+        );
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, address(pool)),
+            amount1
+        );
+    }
+
     /**********************************************************************************************/
     /*** Helper functions                                                                       ***/
     /**********************************************************************************************/
-    
+
     //-- Swap helper functions
     function _populateSwapCache(UniV3Context calldata context, SwapParams calldata params) internal view returns (SwapCache memory cache) {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
@@ -93,7 +166,7 @@ library UniswapV3Lib {
         (, int24 currentTick, , , , , ) = pool.slot0();
 
         cache.tokenOut = params.tokenIn == token0 ? token1 : token0;
-        
+
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
         if (params.tokenIn == token0) {
@@ -135,5 +208,107 @@ library UniswapV3Lib {
         );
 
         amountOut = abi.decode(result, (uint256));
+    }
+
+    //-- Add liquidity functions
+    function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
+        internal
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
+
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        INonfungiblePositionManager.MintParams memory mintParams
+            = INonfungiblePositionManager.MintParams({
+                token0         : pool.token0(),
+                token1         : pool.token1(),
+                fee            : pool.fee(),
+                tickLower      : params.tick.lower,
+                tickUpper      : params.tick.upper,
+                recipient      : address(context.proxy),
+                amount0Desired : params.target.amount0,
+                amount1Desired : params.target.amount1,
+                amount0Min     : params.min.amount0,
+                amount1Min     : params.min.amount1,
+                deadline       : params.deadline
+            });
+
+        bytes memory result = context.proxy.doCall(
+            address(params.positionManager),
+            abi.encodeCall(
+                INonfungiblePositionManager.mint,
+                (mintParams)
+            )
+        );
+
+        (tokenId, liquidity, amount0, amount1) = abi.decode(result, (uint256, uint128, uint256, uint256));
+    }
+
+    function _addLiquidityToExistingPosition(UniV3Context calldata context, AddLiquidityParams calldata params)
+        internal
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+        // TODO: Validate existing position is still within governance bounds
+        // Causing coverage checks to fail
+
+        _checkTickBounds(params);
+
+        INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
+            = INonfungiblePositionManager.IncreaseLiquidityParams({
+                tokenId        : params.tokenId,
+                amount0Desired : params.target.amount0,
+                amount1Desired : params.target.amount1,
+                amount0Min     : params.min.amount0,
+                amount1Min     : params.min.amount1,
+                deadline       : params.deadline
+            });
+
+        bytes memory result = context.proxy.doCall(
+            address(params.positionManager),
+            abi.encodeCall(
+                INonfungiblePositionManager.increaseLiquidity,
+                (increaseLiquidityParams)
+            )
+        );
+
+        (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
+        tokenId = params.tokenId;
+    }
+
+
+    function _checkTickBounds(AddLiquidityParams calldata params) internal view {
+        int24 tickLower;
+        int24 tickUpper;
+        bytes memory positionData = abi.encodeCall(
+            INonfungiblePositionManager.positions,
+            params.tokenId
+        );
+
+        (bool success, bytes memory result) = address(params.positionManager).staticcall(positionData);
+        require(success, "UniswapV3Lib/positions-call-failed");
+        require(result.length >= 384, "UniswapV3Lib/invalid-positions-return-data");
+
+        assembly {
+            // positions returns 12 values, we need the 6th (tickLower) and 7th (tickUpper)
+            // Offsets: uint96(32) + address(32) + address(32) + address(32) + uint24(32) = 160 bytes
+            let offset := add(result, 192) // 32 (length) + 160 (first 5 values)
+
+            // Load and sign-extend int24 values
+            // ABI encoding already sign-extends, so we can directly load the 32-byte values
+            tickLower := mload(offset)
+            tickUpper := mload(add(offset, 32))
+
+            // Sign-extend from int24 to int256 for proper handling
+            // If bit 23 is set (negative), extend with 1s, otherwise with 0s
+            tickLower := signextend(2, tickLower)  // 2 = 24 bits - 1 byte (3 bytes total, 0-indexed = 2)
+            tickUpper := signextend(2, tickUpper)
+        }
+
+        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
     }
 }

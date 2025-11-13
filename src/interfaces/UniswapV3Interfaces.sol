@@ -20,6 +20,7 @@ interface ISwapRouter {
 }
 
 interface IUniswapV3PoolLike {
+    function initialize(uint160 sqrtPriceX96) external;
     function token0() external view returns (address);
     function token1() external view returns (address);
     function fee() external view returns (uint24);
@@ -35,7 +36,7 @@ interface IUniswapV3PoolLike {
             uint8 feeProtocol,
             bool unlocked
         );
-    
+
     function observe(uint32[] calldata secondsAgos)
         external
         view
@@ -96,6 +97,8 @@ interface INonfungiblePositionManager {
     function collect(CollectParams calldata params)
         external
         returns (uint256 amount0, uint256 amount1);
+
+    function ownerOf(uint256 tokenId) external view returns (address owner);
 
     function positions(uint256 tokenId)
         external
