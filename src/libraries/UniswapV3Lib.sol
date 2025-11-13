@@ -61,18 +61,18 @@ library UniswapV3Lib {
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
 
-        ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
-
-        uint256 startingBalance = ERC20Lib.balanceOf(context.proxy, cache.tokenOut);
-        amountOut = _callSwap(context, params, cache);
-
-        uint256 endingBalance = ERC20Lib.balanceOf(context.proxy, cache.tokenOut);
-        require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
-
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
             params.amountIn
         );
+
+        ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
+
+        uint256 startingBalance = IERC20(cache.tokenOut).balanceOf(address(context.proxy));
+        amountOut = _callSwap(context, params, cache);
+
+        uint256 endingBalance = IERC20(cache.tokenOut).balanceOf(address(context.proxy));
+        require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
     }
 
     /**********************************************************************************************/
