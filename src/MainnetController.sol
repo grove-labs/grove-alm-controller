@@ -592,13 +592,13 @@ contract MainnetController is AccessControl {
                 pool        : pool
             }),
             UniswapV3Lib.SwapParams({
-                router         : uniswapV3Router,
-                tokenIn        : tokenIn,
-                amountIn       : amountIn,
-                minAmountOut   : minAmountOut,
-                maxSlippage    : maxSlippages[pool],
-                tickDelta      : swapMaxTickDelta,
-                poolParams     : uniswapV3PoolParams[pool]
+                router       : uniswapV3Router,
+                tokenIn      : tokenIn,
+                amountIn     : amountIn,
+                minAmountOut : minAmountOut,
+                maxSlippage  : maxSlippages[pool],
+                tickDelta    : swapMaxTickDelta,
+                poolParams   : uniswapV3PoolParams[pool]
             })
         );
     }
