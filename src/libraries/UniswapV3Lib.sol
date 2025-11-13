@@ -61,9 +61,9 @@ library UniswapV3Lib {
         uint256                     tokenId; // 0 for a new position
         INonfungiblePositionManager positionManager;
         Tick                        tick;
-        TokenAmounts                amountDesired;
-        TokenAmounts                amountMin;
         Tick                        tickBounds;
+        TokenAmounts                target;
+        TokenAmounts                min;
         uint256                     maxSlippage;
         uint256                     deadline;
     }
@@ -101,7 +101,7 @@ library UniswapV3Lib {
         require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
 
         require(
-            params.amountDesired.amount0 > 0 || params.amountDesired.amount1 > 0,
+            params.target.amount0 > 0 || params.target.amount1 > 0,
             "UniswapV3Lib/zero-amount"
         );
 
@@ -112,8 +112,8 @@ library UniswapV3Lib {
         address token0 = pool.token0();
         address token1 = pool.token1();
 
-        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
-        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
+        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
+        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
@@ -130,8 +130,8 @@ library UniswapV3Lib {
             uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
             uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
 
-            require(params.amountMin.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-            require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+            require(params.min.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+            require(params.min.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
         }
         
         // Clear approvals of dust
@@ -228,10 +228,10 @@ library UniswapV3Lib {
                 tickLower      : params.tick.lower,
                 tickUpper      : params.tick.upper,
                 recipient      : address(context.proxy),
-                amount0Desired : params.amountDesired.amount0,
-                amount1Desired : params.amountDesired.amount1,
-                amount0Min     : params.amountMin.amount0,
-                amount1Min     : params.amountMin.amount1,
+                amount0Desired : params.target.amount0,
+                amount1Desired : params.target.amount1,
+                amount0Min     : params.min.amount0,
+                amount1Min     : params.min.amount1,
                 deadline       : params.deadline
             });
 
@@ -264,10 +264,10 @@ library UniswapV3Lib {
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
                 tokenId        : params.tokenId,
-                amount0Desired : params.amountDesired.amount0,
-                amount1Desired : params.amountDesired.amount1,
-                amount0Min     : params.amountMin.amount0,
-                amount1Min     : params.amountMin.amount1,
+                amount0Desired : params.target.amount0,
+                amount1Desired : params.target.amount1,
+                amount0Min     : params.min.amount0,
+                amount1Min     : params.min.amount1,
                 deadline       : params.deadline
             });
 

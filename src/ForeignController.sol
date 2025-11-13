@@ -724,7 +724,7 @@ contract ForeignController is AccessControl {
         address                            pool,
         uint256                            tokenId,
         UniswapV3Lib.Tick calldata         tick,
-        UniswapV3Lib.TokenAmounts calldata desired,
+        UniswapV3Lib.TokenAmounts calldata target,
         UniswapV3Lib.TokenAmounts calldata min,
         uint256                            deadline
     )
@@ -747,11 +747,11 @@ contract ForeignController is AccessControl {
                 positionManager : uniswapV3PositionManager,
                 tokenId         : tokenId,
                 tick            : tick,
-                amountDesired   : desired,
-                amountMin       : min,
+                target          : target,
+                min             : min,
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 maxSlippage     : maxSlippage,
-                deadline    : deadline
+                deadline        : deadline
             })
         );
     }
