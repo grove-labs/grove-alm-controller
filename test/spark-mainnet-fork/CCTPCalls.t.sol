@@ -12,7 +12,6 @@ import { IPSM3 }            from "spark-psm/src/PSM3.sol";
 import { MockRateProvider } from "spark-psm/test/mocks/MockRateProvider.sol";
 
 import { CCTPBridgeTesting } from "xchain-helpers/testing/bridges/CCTPBridgeTesting.sol";
-import { CCTPForwarder }     from "xchain-helpers/forwarders/CCTPForwarder.sol";
 
 import { ForeignControllerDeploy } from "../../deploy/ControllerDeploy.sol";
 import { ControllerInstance }      from "../../deploy/ControllerInstance.sol";

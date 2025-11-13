@@ -26,7 +26,7 @@ import { RateLimitHelpers }        from "../../src/RateLimitHelpers.sol";
 
 import "src/interfaces/ILayerZero.sol";
 
-import { CCTPForwarder } from "xchain-helpers/forwarders/CCTPForwarder.sol";
+import { CCTPv2Forwarder as CCTPForwarder } from "xchain-helpers/forwarders/CCTPv2Forwarder.sol";
 
 contract MainnetControllerLayerZeroTestBase is ForkTestBase {
 

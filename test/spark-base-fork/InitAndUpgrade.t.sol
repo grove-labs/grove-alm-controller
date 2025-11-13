@@ -3,8 +3,6 @@ pragma solidity >=0.8.0;
 
 import "../../test/spark-base-fork/ForkTestBase.t.sol";
 
-import { CCTPForwarder } from "xchain-helpers/forwarders/CCTPForwarder.sol";
-
 import { ControllerInstance }      from "../../deploy/ControllerInstance.sol";
 import { ForeignControllerDeploy } from "../../deploy/ControllerDeploy.sol";
 
