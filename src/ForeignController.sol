@@ -775,8 +775,7 @@ contract ForeignController is AccessControl {
                 proxy       : proxy,
                 rateLimits  : rateLimits,
                 rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
-                pool        : pool,
-                deadline    : deadline
+                pool        : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({
                 positionManager : uniswapV3PositionManager,
@@ -784,7 +783,8 @@ contract ForeignController is AccessControl {
                 liquidity       : liquidity,
                 amount0Min      : amount0Min,
                 amount1Min      : amount1Min,
-                maxSlippage     : maxSlippages[pool]
+                maxSlippage     : maxSlippages[pool],
+                deadline        : deadline
             })
         );
     }

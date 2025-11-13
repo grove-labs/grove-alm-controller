@@ -76,6 +76,7 @@ library UniswapV3Lib {
         uint256                     amount0Min;
         uint256                     amount1Min;
         uint256                     maxSlippage;
+        uint256                     deadline;
     }
 
     /**********************************************************************************************/
@@ -180,7 +181,7 @@ library UniswapV3Lib {
             params.liquidity,
             params.amount0Min,
             params.amount1Min,
-            context.deadline
+            params.deadline
         );
 
         (amount0Collected, amount1Collected) = _collectAll(
