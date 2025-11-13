@@ -2,21 +2,23 @@
 pragma solidity >=0.8.0;
 
 import "./ForkTestBase.t.sol";
-import { IERC20 } from "forge-std/interfaces/IERC20.sol";
+import { IERC20 }         from "forge-std/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
+import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
+
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
-import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
+import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 
 contract UniswapV3TestBase is ForkTestBase {
-    address constant UNISWAP_V3_ROUTER              = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
-    address constant UNISWAP_V3_POSITION_MANAGER    = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
-    address constant UNISWAP_V3_USDC_USDT_POOL      = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
-    address constant UNISWAP_V3_DAI_USDC_POOL       = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
+    address constant UNISWAP_V3_ROUTER           = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
+    address constant UNISWAP_V3_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
+    address constant UNISWAP_V3_USDC_USDT_POOL   = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
+    address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
 
-    int24 internal constant DEFAULT_TICK_LOWER      = -600;
-    int24 internal constant DEFAULT_TICK_UPPER      = 600;
+    int24 internal constant DEFAULT_TICK_LOWER = -600;
+    int24 internal constant DEFAULT_TICK_UPPER =  600;
 
     bytes32 uniswapV3AddLiquidityKey;
     bytes32 uniswapV3_UsdcUsdtPool_UsdcSwapKey;
@@ -34,20 +36,20 @@ contract UniswapV3TestBase is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        uniswapV3_UsdcUsdtPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), address(usdt), UNISWAP_V3_USDC_USDT_POOL);
 
-        uniswapV3_DaiUsdcPool_DaiSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai), UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiSwapKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), address(dai), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcSwapKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), address(usdc), UNISWAP_V3_DAI_USDC_POOL);
 
-        uniswapV3AddLiquidityKey   = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  _getPool());
+        uniswapV3AddLiquidityKey    = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  _getPool());
         uniswapV3RemoveLiquidityKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), _getPool());
 
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e6,  uint256(1_000_000e6) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey, 1_000_000e6,  uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtSwapKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e6,  uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e6,  uint256(1_000_000e6)  / 1 days);
 
         vm.stopPrank();
 
@@ -73,10 +75,10 @@ contract UniswapV3TestBase is ForkTestBase {
     }
     
     function _label() internal {
-        vm.label(UNISWAP_V3_ROUTER,            'UniswapV3Router');
-        vm.label(UNISWAP_V3_POSITION_MANAGER,  'UniswapV3PositionManager');
-        vm.label(UNISWAP_V3_USDC_USDT_POOL,    'USDC-USDT Pool');
-        vm.label(UNISWAP_V3_DAI_USDC_POOL,     'DAI-USDC Pool');
+        vm.label(UNISWAP_V3_ROUTER,           'UniswapV3Router');
+        vm.label(UNISWAP_V3_POSITION_MANAGER, 'UniswapV3PositionManager');
+        vm.label(UNISWAP_V3_USDC_USDT_POOL,   'USDC-USDT Pool');
+        vm.label(UNISWAP_V3_DAI_USDC_POOL,    'DAI-USDC Pool');
     }
 
     function _getPool() internal pure virtual returns (address) {
