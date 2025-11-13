@@ -11,7 +11,7 @@ interface ICCTPLike {
         bytes32 destinationCaller,
         uint256 maxFee,
         uint32  minFinalityThreshold
-    ) external returns (uint64 nonce);
+    ) external;
 
     function localMinter() external view returns (ICCTPTokenMinterLike);
 
