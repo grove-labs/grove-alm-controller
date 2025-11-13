@@ -263,7 +263,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             .checked_write(address(0));
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("MainnetController/position-manager-not-set");
+        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
