@@ -10,8 +10,8 @@ import { IALMProxy }                                                    from "..
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
 import { ISwapRouter, IUniswapV3PoolLike, INonfungiblePositionManager } from "../interfaces/UniswapV3Interfaces.sol";
 
-import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
-import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
+import { FullMath }         from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
+import { TickMath }         from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 import { LiquidityAmounts } from "lib/dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
@@ -34,7 +34,7 @@ library UniswapV3Lib {
 
     struct UniswapV3PoolParams {
         uint24 swapMaxTickDelta;
-        Tick addLiquidityTickBounds;
+        Tick   addLiquidityTickBounds;
     }
 
     struct UniV3Context {
@@ -114,8 +114,8 @@ library UniswapV3Lib {
         address token0 = pool.token0();
         address token1 = pool.token1();
 
-        _maybeApproveToken(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
-        _maybeApproveToken(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
+        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
+        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
@@ -128,7 +128,6 @@ library UniswapV3Lib {
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
-        require(amount0 >= params.amountMin.amount0 && amount1 >= params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
 
         uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
         uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
@@ -140,19 +139,6 @@ library UniswapV3Lib {
         _clearApprovals(context.proxy, token0, token1, address(params.positionManager));
 
         _decreaseRateLimits(context, token0, token1, amount0, amount1, address(pool));
-    }
-
-    function _maybeApproveToken(
-        IALMProxy proxy,
-        address   token,
-        address   spender,
-        uint256   amount
-    )
-        internal
-    {
-        if (amount > 0) {
-            ERC20Lib.approve(proxy, token, spender, amount);
-        }
     }
 
     function _clearApprovals(
