@@ -123,8 +123,7 @@ library UniswapV3Lib {
         if (params.tokenId == 0) {
             (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
         } else {
-            (liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
-            tokenId = params.tokenId;
+            (tokenId, liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
@@ -136,40 +135,15 @@ library UniswapV3Lib {
         require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
 
         // Clear approvals of dust
-        _clearApprovals(context.proxy, token0, token1, address(params.positionManager));
+        ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
+        ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
 
-        _decreaseRateLimits(context, token0, token1, amount0, amount1, address(pool));
-    }
-
-    function _clearApprovals(
-        IALMProxy proxy,
-        address   token0,
-        address   token1,
-        address   spender
-    )
-        internal
-    {
-        ERC20Lib.approve(proxy, token0, spender, 0);
-        ERC20Lib.approve(proxy, token1, spender, 0);
-    }
-
-    function _decreaseRateLimits(
-        UniV3Context calldata context,
-        address               token0,
-        address               token1,
-        uint256               amount0,
-        uint256               amount1,
-        address               pool
-    )
-        internal
-    {
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, pool),
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, address(pool)),
             amount0
         );
-
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, pool),
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, address(pool)),
             amount1
         );
     }
@@ -246,13 +220,10 @@ library UniswapV3Lib {
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-
         INonfungiblePositionManager.MintParams memory mintParams
             = INonfungiblePositionManager.MintParams({
-                token0         : token0,
-                token1         : token1,
+                token0         : pool.token0(),
+                token1         : pool.token1(),
                 fee            : pool.fee(),
                 tickLower      : params.tick.lower,
                 tickUpper      : params.tick.upper,
@@ -275,9 +246,10 @@ library UniswapV3Lib {
         (tokenId, liquidity, amount0, amount1) = abi.decode(result, (uint256, uint128, uint256, uint256));
     }
 
+
     function _addLiquidityToExistingPosition(UniV3Context calldata context, AddLiquidityParams calldata params)
         internal
-        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
@@ -306,5 +278,6 @@ library UniswapV3Lib {
         );
 
         (liquidity, amount0, amount1) = abi.decode(result, (uint128, uint256, uint256));
-    }
+        tokenId = params.tokenId;
+    }   
 }
