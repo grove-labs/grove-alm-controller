@@ -22,7 +22,7 @@ import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { CurveLib }  from "./libraries/CurveLib.sol";
 import { PendleLib } from "./libraries/PendleLib.sol";
-import { ERC20Lib }  from "./libraries/ERC20Lib.sol";
+import { ERC20Lib }  from "./libraries/common/ERC20Lib.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 

@@ -9,7 +9,7 @@ import { ICCTPLike }   from "../interfaces/CCTPInterfaces.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
-import { ERC20Lib } from "./ERC20Lib.sol";
+import { ERC20Lib } from "./common/ERC20Lib.sol";
 
 library CCTPLib {
 
@@ -125,7 +125,7 @@ library CCTPLib {
     /**********************************************************************************************/
     /*** Rate Limit helper functions                                                            ***/
     /**********************************************************************************************/
-    
+
     function _rateLimited(IRateLimits rateLimits, bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitDecrease(key, amount);
     }
