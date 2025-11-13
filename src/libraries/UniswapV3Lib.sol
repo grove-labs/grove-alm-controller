@@ -107,11 +107,11 @@ library UniswapV3Lib {
         return cache;
     }
 
-    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+    function _min(int24 a, int24 b) internal pure returns (int24) {
         return a < b ? a : b;
     }
 
-    function _max(uint256 a, uint256 b) internal pure returns (uint256) {
+    function _max(int24 a, int24 b) internal pure returns (int24) {
         return a > b ? a : b;
     }
 
