@@ -148,7 +148,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3Router(address(0));
 
         vm.startPrank(relayer);
-        vm.expectRevert("MainnetController/router-not-set");
+        vm.expectRevert("UniswapV3Lib/router-not-set");
         mainnetController.swapUniswapV3(
             _getPool(),
             address(token0),
