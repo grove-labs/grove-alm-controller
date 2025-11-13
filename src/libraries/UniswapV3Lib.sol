@@ -374,7 +374,7 @@ library UniswapV3Lib {
         require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
     }
 
-    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool,RemoveLiquidityParams calldata params) internal view {
+    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view {
         address token0 = pool.token0();
         address token1 = pool.token1();
         uint24 fee    = pool.fee();

@@ -407,7 +407,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
     function test_addLiquidityUniswapV3_minAmount1BelowBound() public {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
-            amount0: desired.amount0 * 98/100,
+            amount0: desired.amount0 * 98 / 100,
             amount1: 0
         });
 
@@ -847,8 +847,8 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
         (tokenId, liquidity, amount0, amount1) = _mintProxyPosition();
 
-        defaultMinAmount0 = amount0 * 98/100;
-        defaultMinAmount1 = amount1 * 98/100;
+        defaultMinAmount0 = amount0 * 98 / 100;
+        defaultMinAmount1 = amount1 * 98 / 100;
     }
 
     function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
@@ -1088,7 +1088,7 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         uint256 addAmount1 = addAmount * 10**token1.decimals() / 10**18;
 
         (tokenId, totalLiquidity, amount0Added, amount1Added) = _addLiquidity(
-            addAmount0, 
+            addAmount0,
             addAmount1, 
             UniswapV3Lib.Tick({lower : -100, upper : 100})
         );
@@ -1159,8 +1159,8 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignCont
         _removeLiquidityAndValidate(
             tokenId, 
             totalLiquidity, 
-            amount0Added-1,
-            amount1Added-1, 
+            amount0Added - 1,
+            amount1Added - 1, 
             uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 
             uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
         );
