@@ -68,6 +68,16 @@ library UniswapV3Lib {
         uint256                     deadline;
     }
 
+    struct RemoveLiquidityParams {
+        INonfungiblePositionManager positionManager;
+        uint256                     tokenId;
+        uint128                     liquidity;
+        uint256                     amount0Min;
+        uint256                     amount1Min;
+        uint256                     maxSlippage;
+        uint256                     deadline;
+    }
+
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
@@ -146,6 +156,58 @@ library UniswapV3Lib {
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, address(pool)),
             amount1
         );
+    }
+
+    function removeLiquidity(UniV3Context calldata context, RemoveLiquidityParams calldata params)
+        external
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        _validateRemoveLiquidityParams(pool, params);
+        require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+
+        uint256 amount0CollectedBefore = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 amount1CollectedBefore = IERC20(token1).balanceOf(address(context.proxy));
+
+        _decreaseLiquidityCall(
+            context.proxy,
+            address(params.positionManager),
+            params.tokenId,
+            params.liquidity,
+            params.amount0Min,
+            params.amount1Min,
+            params.deadline
+        );
+
+        (amount0Collected, amount1Collected) = _collectAll(
+            context.proxy,
+            address(params.positionManager),
+            params.tokenId,
+            address(context.proxy)
+        );
+
+        uint256 amount0CollectedAfter = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 amount1CollectedAfter = IERC20(token1).balanceOf(address(context.proxy));
+
+        require(params.amount0Min >= (amount0CollectedAfter - amount0CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        require(params.amount1Min >= (amount1CollectedAfter - amount1CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+
+        if (amount0Collected > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+                amount0Collected
+            );
+        }
+        if (amount1Collected > 0) {
+            context.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+                amount1Collected
+            );
+        }
     }
 
     /**********************************************************************************************/
@@ -310,5 +372,86 @@ library UniswapV3Lib {
 
         require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
         require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
+    }
+
+    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool,RemoveLiquidityParams calldata params) internal view {
+        address token0 = pool.token0();
+        address token1 = pool.token1();
+        uint24 fee    = pool.fee();
+
+        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
+        uint256 token0Decimals = IERC20Metadata(token0).decimals();
+        uint256 token1Decimals = IERC20Metadata(token1).decimals();
+
+        (
+            ,
+            ,
+            address positionToken0,
+            address positionToken1,
+            uint24  positionFee,
+            ,
+            ,
+            uint128 positionLiquidity,
+            ,
+            ,
+            uint128 owed0,
+            uint128 owed1
+        ) = params.positionManager.positions(params.tokenId);
+
+        require(params.liquidity > 0, "UniswapV3Lib/zero-liquidity");
+        require(positionToken0 == token0 && positionToken1 == token1, "UniswapV3Lib/invalid-position");
+        require(positionFee == fee, "UniswapV3Lib/fee-mismatch");
+        require(params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-too-high");
+    }
+
+    function _decreaseLiquidityCall(
+        IALMProxy proxy,
+        address positionManager,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    )
+        internal
+    {
+        proxy.doCall(
+            positionManager,
+            abi.encodeWithSelector(
+                INonfungiblePositionManager.decreaseLiquidity.selector,
+                INonfungiblePositionManager.DecreaseLiquidityParams({
+                    tokenId: tokenId,
+                    liquidity: liquidity,
+                    amount0Min: amount0Min,
+                    amount1Min: amount1Min,
+                    deadline: deadline
+                })
+            )
+        );
+    }
+
+    function _collectAll(
+        IALMProxy proxy,
+        address positionManager,
+        uint256 tokenId,
+        address recipient
+    )
+        internal
+        returns (uint256 amount0, uint256 amount1)
+    {
+        bytes memory result = proxy.doCall(
+            positionManager,
+            abi.encodeWithSelector(
+                INonfungiblePositionManager.collect.selector,
+                INonfungiblePositionManager.CollectParams({
+                    tokenId: tokenId,
+                    recipient: recipient,
+                    amount0Max: type(uint128).max,
+                    amount1Max: type(uint128).max
+                })
+            )
+        );
+
+        (amount0, amount1) = abi.decode(result, (uint256, uint256));
     }
 }

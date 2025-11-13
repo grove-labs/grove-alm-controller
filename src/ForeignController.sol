@@ -825,6 +825,39 @@ contract ForeignController is AccessControl {
         );
     }
 
+    function removeLiquidityUniswapV3(
+        address pool,
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0Min,
+        uint256 amount1Min,
+        uint256 deadline
+    )
+        external
+        onlyRole(RELAYER)
+        returns (uint256 amount0Collected, uint256 amount1Collected)
+    {
+        require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
+
+        return UniswapV3Lib.removeLiquidity(
+            UniswapV3Lib.UniV3Context({
+                proxy       : proxy,
+                rateLimits  : rateLimits,
+                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
+                pool        : pool
+            }),
+            UniswapV3Lib.RemoveLiquidityParams({
+                positionManager : uniswapV3PositionManager,
+                tokenId         : tokenId,
+                liquidity       : liquidity,
+                amount0Min      : amount0Min,
+                amount1Min      : amount1Min,
+                maxSlippage     : maxSlippages[pool],
+                deadline        : deadline
+            })
+        );
+    }
+
 
     /**********************************************************************************************/
     /*** Internal helper functions                                                              ***/
