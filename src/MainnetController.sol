@@ -578,8 +578,7 @@ contract MainnetController is AccessControl {
         address tokenIn,
         uint256 amountIn,
         uint256 minAmountOut,
-        uint24  swapMaxTickDelta,
-        uint256 deadline
+        uint24  swapMaxTickDelta
     )
         external returns (uint256 amountOut)
     {
@@ -590,8 +589,7 @@ contract MainnetController is AccessControl {
                 proxy       : proxy,
                 rateLimits  : rateLimits,
                 rateLimitId : LIMIT_UNISWAP_V3_SWAP,
-                pool        : pool,
-                deadline    : deadline
+                pool        : pool
             }),
             UniswapV3Lib.SwapParams({
                 router         : uniswapV3Router,

@@ -106,8 +106,7 @@ contract UniswapV3TestBase is ForkTestBase {
             tokenIn,
             amountIn,
             minAmountOut,
-            200,
-            block.timestamp + 1 hours
+            200
         );
         vm.stopPrank();
     }
@@ -135,8 +134,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             1,
             1,
-            100,
-            block.timestamp + 1 hours
+            100
         );
     }
 
@@ -154,8 +152,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            200,
-            block.timestamp + 1 hours
+            200
         );
         vm.stopPrank();
     }
@@ -174,8 +171,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            200,
-            block.timestamp + 1 hours
+            200
         );
         vm.stopPrank();
     }
@@ -191,8 +187,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(dai),
             amountIn,
             0,
-            200,
-            block.timestamp + 1 hours
+            200
         );
         vm.stopPrank();
     }
@@ -208,8 +203,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             amountIn * 9999/10000,
-            0,
-            block.timestamp + 1 hours
+            0
         );
         vm.stopPrank();
     }
@@ -225,8 +219,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            type(uint24).max,
-            block.timestamp + 1 hours
+            type(uint24).max
         );
         vm.stopPrank();
     }
@@ -246,8 +239,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             amountIn * 999/1000,
-            0, // amountOut will be capped to only liquidity that's within the current tick
-            block.timestamp + 1 hours
+            0 // amountOut will be capped to only liquidity that's within the current tick
         );
 
         vm.stopPrank();
@@ -264,8 +256,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             address(token0),
             amountIn,
             0,
-            200,
-            block.timestamp + 1 hours
+            200
         );
         vm.stopPrank();
     }
@@ -345,7 +336,6 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
         uint256 swapAmountOut = FullMath.mulDiv(swapAmount, 10**tokenOutDecimals, 10**tokenInDecimals);
 
         uint256 tokenOutBalanceBeforeSwap = tokenOut.balanceOf(address(almProxy));
-        uint256 swapDeadline              = block.timestamp + 1 hours;
 
         uint256 swapRateLimitBefore = rateLimits.getCurrentRateLimit(swapKey);
 
@@ -355,8 +345,7 @@ contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
             address(tokenIn),
             swapAmount,
             swapAmountOut * 999 / 1000,
-            200, // allow for price impact of up to 2 points
-            swapDeadline
+            200 // allow for price impact of up to 2 points
         );
         vm.stopPrank();
 
