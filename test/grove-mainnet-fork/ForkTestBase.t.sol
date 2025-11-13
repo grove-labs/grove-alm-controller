@@ -297,6 +297,7 @@ contract ForkTestBase is DssTest {
         vm.label(address(susds), "susds");
         vm.label(address(usdc),  "usdc");
         vm.label(address(usds),  "usds");
+        vm.label(address(dai),   "dai");
         vm.label(vault,          "vault");
     }
 
