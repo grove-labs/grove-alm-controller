@@ -67,6 +67,7 @@ library UniswapV3Lib {
         TokenAmounts                amountMin;
         Tick                        tickBounds;
         uint256                     maxSlippage;
+        uint256                     deadline;
     }
 
     /**********************************************************************************************/
@@ -99,6 +100,8 @@ library UniswapV3Lib {
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
+        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
+
         require(
             params.amountDesired.amount0 > 0 || params.amountDesired.amount1 > 0,
             "UniswapV3Lib/zero-amount"
@@ -114,8 +117,8 @@ library UniswapV3Lib {
         _maybeApproveToken(context.proxy, token0, address(params.positionManager), params.amountDesired.amount0);
         _maybeApproveToken(context.proxy, token1, address(params.positionManager), params.amountDesired.amount1);
 
-        uint256 startingBalance0 = ERC20Lib.balanceOf(context.proxy, token0);
-        uint256 startingBalance1 = ERC20Lib.balanceOf(context.proxy, token1);
+        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
 
         if (params.tokenId == 0) {
             (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
@@ -127,8 +130,8 @@ library UniswapV3Lib {
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
         require(amount0 >= params.amountMin.amount0 && amount1 >= params.amountMin.amount1, "UniswapV3Lib/amounts-not-met");
 
-        uint256 balanceDiff0 = startingBalance0 - ERC20Lib.balanceOf(context.proxy, token0);
-        uint256 balanceDiff1 = startingBalance1 - ERC20Lib.balanceOf(context.proxy, token1);
+        uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
+        uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
 
         require(params.amountMin.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
         require(params.amountMin.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
@@ -272,7 +275,7 @@ library UniswapV3Lib {
                 amount1Desired : params.amountDesired.amount1,
                 amount0Min     : params.amountMin.amount0,
                 amount1Min     : params.amountMin.amount1,
-                deadline       : context.deadline
+                deadline       : params.deadline
             });
 
         bytes memory result = context.proxy.doCall(
@@ -305,7 +308,7 @@ library UniswapV3Lib {
                 amount1Desired : params.amountDesired.amount1,
                 amount0Min     : params.amountMin.amount0,
                 amount1Min     : params.amountMin.amount1,
-                deadline       : context.deadline
+                deadline       : params.deadline
             });
 
         bytes memory result = context.proxy.doCall(
