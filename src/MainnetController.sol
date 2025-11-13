@@ -70,6 +70,8 @@ contract MainnetController is AccessControl {
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3SwapMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
+    event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
+    event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -103,6 +105,10 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
+
+    // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
+    int24 internal constant MIN_TICK = -887_272;
+    int24 internal constant MAX_TICK =  887_272;
 
     address public buffer;
 
@@ -217,6 +223,22 @@ contract MainnetController is AccessControl {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         params.swapMaxTickDelta = maxTickDelta;
         emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
+    }
+
+    function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "ForeignController/lower-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.lower = lowerTickBound;
+        emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
+    }
+
+    function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "ForeignController/upper-tick-out-of-bounds");
+
+        params.addLiquidityTickBounds.upper = upperTickBound;
+        emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
@@ -602,6 +624,43 @@ contract MainnetController is AccessControl {
             })
         );
     }
+
+    function addLiquidityUniswapV3(
+        address                            pool,
+        uint256                            tokenId,
+        UniswapV3Lib.Tick calldata         tick,
+        UniswapV3Lib.TokenAmounts calldata desired,
+        UniswapV3Lib.TokenAmounts calldata min,
+        uint256                            deadline
+    )
+        external
+        returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_)
+    {
+        _checkRole(RELAYER);
+
+        UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
+        uint256 maxSlippage                                = maxSlippages[pool];
+
+        (tokenId_, liquidity_, amount0_, amount1_) = UniswapV3Lib.addLiquidity(
+            UniswapV3Lib.UniV3Context({
+                proxy       : proxy,
+                rateLimits  : rateLimits,
+                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
+                pool        : pool
+            }),
+            UniswapV3Lib.AddLiquidityParams({
+                positionManager : uniswapV3PositionManager,
+                tokenId         : tokenId,
+                tick            : tick,
+                amountDesired   : desired,
+                amountMin       : min,
+                tickBounds      : poolParams.addLiquidityTickBounds,
+                maxSlippage     : maxSlippage,
+                deadline    : deadline
+            })
+        );
+    }
+
 
     /**********************************************************************************************/
     /*** Relayer Ethena functions                                                               ***/
