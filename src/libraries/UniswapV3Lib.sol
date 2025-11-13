@@ -97,16 +97,22 @@ library UniswapV3Lib {
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
         if (params.tokenIn == token0) {
-            limitTick = currentTick - delta;
-            if (limitTick < TickMath.MIN_TICK) limitTick = TickMath.MIN_TICK;
+            limitTick = _max(currentTick - delta, TickMath.MIN_TICK);
         } else {
-            limitTick = currentTick + delta;
-            if (limitTick > TickMath.MAX_TICK) limitTick = TickMath.MAX_TICK;
+            limitTick = _min(currentTick + delta, TickMath.MAX_TICK);
         }
 
         cache.sqrtPriceLimitX96 = TickMath.getSqrtRatioAtTick(limitTick);
 
         return cache;
+    }
+
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    function _max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a > b ? a : b;
     }
 
     function _callSwap(UniV3Context calldata context, SwapParams calldata params, SwapCache memory cache) internal returns (uint256 amountOut) {
