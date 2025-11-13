@@ -242,15 +242,9 @@ contract ForeignController is AccessControl {
     /*** Relayer bridging functions                                                             ***/
     /**********************************************************************************************/
 
-    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain)
-        external
-        onlyRole(RELAYER)
-        rateLimited(LIMIT_USDC_TO_CCTP, usdcAmount)
-        rateLimited(
-            RateLimitHelpers.makeDomainKey(LIMIT_USDC_TO_DOMAIN, destinationDomain),
-            usdcAmount
-        )
-    {
+    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain) external {
+        _checkRole(RELAYER);
+
         CCTPLib.transferUSDCToCCTP(CCTPLib.TransferUSDCToCCTPParams({
             proxy             : proxy,
             rateLimits        : rateLimits,
