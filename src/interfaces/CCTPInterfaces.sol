@@ -7,7 +7,10 @@ interface ICCTPLike {
         uint256 amount,
         uint32  destinationDomain,
         bytes32 mintRecipient,
-        address burnToken
+        address burnToken,
+        bytes32 destinationCaller,
+        uint256 maxFee,
+        uint32  minFinalityThreshold
     ) external returns (uint64 nonce);
 
     function localMinter() external view returns (ICCTPTokenMinterLike);

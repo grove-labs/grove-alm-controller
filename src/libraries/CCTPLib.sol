@@ -112,7 +112,10 @@ library CCTPLib {
                         usdcAmount,
                         destinationDomain,
                         mintRecipient,
-                        address(usdc)
+                        address(usdc),
+                        bytes32(0), // destinationCaller = 0 means anyone can relay
+                        0,          // maxFee = 0 for standard burns (no fast burn fee)
+                        2_000       // minFinalityThreshold = 2000 for standard (finalized) messages
                     )
                 )
             ),
