@@ -32,7 +32,6 @@ library UniswapV3Lib {
         IRateLimits rateLimits;
         bytes32     rateLimitId;
         address     pool;
-        uint256     deadline;
     }
 
     struct SwapParams {
