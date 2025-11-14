@@ -4,7 +4,7 @@ pragma solidity ^0.8.21;
 import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import { ERC20Lib } from "./ERC20Lib.sol";
+import { ERC20Lib } from "./common/ERC20Lib.sol";
 
 import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";

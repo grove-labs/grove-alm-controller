@@ -23,7 +23,7 @@ import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { CurveLib }     from "./libraries/CurveLib.sol";
 import { PendleLib }    from "./libraries/PendleLib.sol";
 import { CCTPLib }      from "./libraries/CCTPLib.sol";
-import { ERC20Lib }     from "./libraries/ERC20Lib.sol";
+import { ERC20Lib }     from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 
 import { INonfungiblePositionManager }                                 from "./interfaces/UniswapV3Interfaces.sol";

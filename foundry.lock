@@ -18,7 +18,7 @@
     "rev": "bf909b22fa55e244796dfa920c9639fdffa1c545"
   },
   "lib/grove-address-registry": {
-    "rev": "bee148b3e92dc7c52790a4e7eee5f6911303b09c"
+    "rev": "5c27727cde409147262bbc9625284283a9b37ca2"
   },
   "lib/layerzero-v2": {
     "rev": "88428755be6caa71cb1d2926141d73c8989296b5"
@@ -45,9 +45,6 @@
     "rev": "1e91268374d2796abcbb1af2b75473b2af488265"
   },
   "lib/xchain-helpers": {
-    "branch": {
-      "name": "master",
-      "rev": "c93404800dbcaafec4af068b04ce7df6df7c95fa"
-    }
+    "rev": "235bce21fbe43a50f69d1baa09df55ae08116384"
   }
 }
