@@ -630,9 +630,9 @@ contract ForeignController is AccessControl {
     }
 
     function addLiquidityCurve(
-        address          pool,
+        address   pool,
         uint256[] memory depositAmounts,
-        uint256          minLpAmount
+        uint256   minLpAmount
     )
         external returns (uint256 shares)
     {
@@ -651,8 +651,8 @@ contract ForeignController is AccessControl {
     }
 
     function removeLiquidityCurve(
-        address pool,
-        uint256 lpBurnAmount,
+        address   pool,
+        uint256   lpBurnAmount,
         uint256[] memory minWithdrawAmounts
     )
         external returns (uint256[] memory withdrawnTokens)
