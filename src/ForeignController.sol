@@ -826,12 +826,11 @@ contract ForeignController is AccessControl {
     }
 
     function removeLiquidityUniswapV3(
-        address pool,
-        uint256 tokenId,
-        uint128 liquidity,
-        uint256 amount0Min,
-        uint256 amount1Min,
-        uint256 deadline
+        address                   pool,
+        uint256                   tokenId,
+        uint128                   liquidity,
+        UniswapV3Lib.TokenAmounts calldata min,
+        uint256                   deadline
     )
         external
         onlyRole(RELAYER)
@@ -848,8 +847,7 @@ contract ForeignController is AccessControl {
                 positionManager : uniswapV3PositionManager,
                 tokenId         : tokenId,
                 liquidity       : liquidity,
-                amount0Min      : amount0Min,
-                amount1Min      : amount1Min,
+                min             : min,
                 maxSlippage     : maxSlippages[pool],
                 deadline        : deadline
             })

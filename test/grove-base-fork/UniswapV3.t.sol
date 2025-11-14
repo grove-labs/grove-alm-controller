@@ -932,8 +932,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             0,
             1,
-            0,
-            0,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
             block.timestamp + 1 hours
         );
     }
@@ -952,8 +951,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -969,8 +967,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -983,8 +980,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             0,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -997,8 +993,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             type(uint128).max,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1011,8 +1006,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             usdsAusdPool,
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1027,8 +1021,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             mismatchedFeePool,
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1046,8 +1039,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1065,8 +1057,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             tokenId,
             liquidity,
-            defaultMinAmount0,
-            defaultMinAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1117,8 +1108,7 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
             _getPool(),
             tokenId,
             liquidity,
-            minAmount0,
-            minAmount1,
+            UniswapV3Lib.TokenAmounts({ amount0: minAmount0, amount1: minAmount1 }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();
