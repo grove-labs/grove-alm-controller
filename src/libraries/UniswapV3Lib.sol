@@ -314,10 +314,11 @@ library UniswapV3Lib {
     {
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
-        // TODO: Validate existing position is still within governance bounds
-        // Causing coverage checks to fail
 
-        _checkTickBounds(params);
+        (, , , int24 tickLower, int24 tickUpper, ) = _fetchPositionData(params.tokenId, params.positionManager);
+
+        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
 
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
@@ -341,37 +342,43 @@ library UniswapV3Lib {
         tokenId = params.tokenId;
     }
 
-
-    function _checkTickBounds(AddLiquidityParams calldata params) internal view {
-        int24 tickLower;
-        int24 tickUpper;
+    function _fetchPositionData(uint256 tokenId, INonfungiblePositionManager positionManager) internal view returns (address payable token0, address payable token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity) {
         bytes memory positionData = abi.encodeCall(
             INonfungiblePositionManager.positions,
-            params.tokenId
+            tokenId
         );
 
-        (bool success, bytes memory result) = address(params.positionManager).staticcall(positionData);
+        (bool success, bytes memory result) = address(positionManager).staticcall(positionData);
         require(success, "UniswapV3Lib/positions-call-failed");
         require(result.length >= 384, "UniswapV3Lib/invalid-positions-return-data");
-
+    
         assembly {
-            // positions returns 12 values, we need the 6th (tickLower) and 7th (tickUpper)
-            // Offsets: uint96(32) + address(32) + address(32) + address(32) + uint24(32) = 160 bytes
-            let offset := add(result, 192) // 32 (length) + 160 (first 5 values)
+            // pointer to the first return slot (nonce)
+            let data := add(result, 32)
 
-            // Load and sign-extend int24 values
-            // ABI encoding already sign-extends, so we can directly load the 32-byte values
-            tickLower := mload(offset)
-            tickUpper := mload(add(offset, 32))
+            // --- ABI return layout (each 32 bytes) ---
+            // word 0: nonce
+            // word 1: operator
+            // word 2: token0
+            // word 3: token1
+            // word 4: fee
+            // word 5: tickLower
+            // word 6: tickUpper
+            // word 7: liquidity
+            // -----------------------------------------
+
+            token0 := mload(add(data, 64))      // word 2
+            token1 := mload(add(data, 96))      // word 3
+            fee := mload(add(data, 128))        // word 4
+            tickLower := mload(add(data, 160))  // word 5
+            tickUpper := mload(add(data, 192))  // word 6
+            liquidity := mload(add(data, 224))  // word 7
 
             // Sign-extend from int24 to int256 for proper handling
             // If bit 23 is set (negative), extend with 1s, otherwise with 0s
             tickLower := signextend(2, tickLower)  // 2 = 24 bits - 1 byte (3 bytes total, 0-indexed = 2)
             tickUpper := signextend(2, tickUpper)
         }
-
-        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
-        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
     }
 
     function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view {
@@ -384,19 +391,13 @@ library UniswapV3Lib {
         uint256 token1Decimals = IERC20Metadata(token1).decimals();
 
         (
-            ,
-            ,
             address positionToken0,
             address positionToken1,
             uint24  positionFee,
             ,
             ,
-            uint128 positionLiquidity,
-            ,
-            ,
-            uint128 owed0,
-            uint128 owed1
-        ) = params.positionManager.positions(params.tokenId);
+            uint128 positionLiquidity
+        ) = _fetchPositionData(params.tokenId, params.positionManager);
 
         require(params.liquidity > 0, "UniswapV3Lib/zero-liquidity");
         require(positionToken0 == token0 && positionToken1 == token1, "UniswapV3Lib/invalid-position");
