@@ -163,11 +163,8 @@ library UniswapV3Lib {
     {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
-        _validateRemoveLiquidityParams(pool, params);
+        (address token0, address token1) = _validateRemoveLiquidityParams(pool, params);
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
-
-        address token0 = pool.token0();
-        address token1 = pool.token1();
 
         uint256 amount0CollectedBefore = IERC20(token0).balanceOf(address(context.proxy));
         uint256 amount1CollectedBefore = IERC20(token1).balanceOf(address(context.proxy));
@@ -341,7 +338,17 @@ library UniswapV3Lib {
     }
 
     // Fetches only the position data that we need
-    function _fetchPositionData(uint256 tokenId, INonfungiblePositionManager positionManager) internal view returns (address payable token0, address payable token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity) {
+    function _fetchPositionData(
+        uint256 tokenId,
+        INonfungiblePositionManager positionManager
+    ) internal view returns (
+        address payable token0,
+        address payable token1,
+        uint24 fee,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liquidity
+    ) {
         bytes memory positionData = abi.encodeCall(
             INonfungiblePositionManager.positions,
             tokenId
@@ -381,12 +388,12 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view {
+    function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view returns (address token0, address token1) {
         require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
 
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-        uint24 fee     = pool.fee();
+        token0     = pool.token0();
+        token1     = pool.token1();
+        uint24 fee = pool.fee();
 
         (
             address positionToken0,

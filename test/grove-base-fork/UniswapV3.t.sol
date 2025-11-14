@@ -388,7 +388,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired,) = _prepareDefaultAddLiquidity();
         UniswapV3Lib.TokenAmounts memory min = UniswapV3Lib.TokenAmounts({
             amount0: 0,
-            amount1: desired.amount1 * 9/100
+            amount1: desired.amount1 * 98/100
         });
 
         vm.startPrank(ALM_RELAYER);
@@ -457,8 +457,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             0,
             UniswapV3Lib.Tick({
-                lower: initTick+50,
-                upper: initTick+100
+                lower: initTick + 50,
+                upper: initTick + 100
             }),
             UniswapV3Lib.TokenAmounts({
                 amount0: amount0,
@@ -485,8 +485,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             _getPool(),
             0,
             UniswapV3Lib.Tick({
-                lower: initTick-100,
-                upper: initTick-50
+                lower: initTick - 100,
+                upper: initTick - 50
             }),
             UniswapV3Lib.TokenAmounts({
                 amount0: amount0,
