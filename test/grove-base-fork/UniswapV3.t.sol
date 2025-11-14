@@ -107,6 +107,9 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
 
         foreignController.setMaxSlippage(_getPool(), 0.98e18);
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
+
+        foreignController.setUniswapV3Router(UNISWAP_V3_ROUTER);
         foreignController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         vm.stopPrank();
 
@@ -197,6 +200,114 @@ contract UniswapV3TestBase is ForkTestBase {
             amount0 : amount0 * 98 / 100,
             amount1 : amount1 * 98 / 100
         });
+    }
+}
+
+contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
+    using stdStorage for StdStorage;
+
+    function test_setUniswapv3Router_notAdmin() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3Router(address(0));
+    }
+
+    function test_setUniswapv3Router_invalidRouter() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/invalid-router");
+        foreignController.setUniswapV3Router(address(0));
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_notAdmin() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 100);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_zeroTickDelta() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_outOfBounds() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
+    }
+
+    function test_swapUniswapV3_notRelayer() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            RELAYER
+        ));
+        foreignController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            1,
+            1,
+            100
+        );
+    }
+
+    function test_swapUniswapV3_routerNotSet() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        stdstore
+            .target(address(foreignController))
+            .sig("uniswapV3Router()")
+            .checked_write(address(0));
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/router-not-set");
+        foreignController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            0,
+            200
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_maxSlippageNotSet() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxSlippage(_getPool(), 0);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
+        foreignController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            0,
+            200
+        );
+        vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_invalidTokenIn() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/invalid-token-pair");
+        foreignController.swapUniswapV3(
+            _getPool(),
+            makeAddr("random-token"),
+            1,
+            1,
+            100
+        );
+        vm.stopPrank();
     }
 }
 
