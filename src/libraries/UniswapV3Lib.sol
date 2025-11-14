@@ -14,6 +14,8 @@ import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
+import {console} from "forge-std/console.sol";
+
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
 
@@ -342,6 +344,7 @@ library UniswapV3Lib {
         tokenId = params.tokenId;
     }
 
+    // Fetches only the position data that we need
     function _fetchPositionData(uint256 tokenId, INonfungiblePositionManager positionManager) internal view returns (address payable token0, address payable token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity) {
         bytes memory positionData = abi.encodeCall(
             INonfungiblePositionManager.positions,

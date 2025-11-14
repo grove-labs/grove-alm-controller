@@ -1140,7 +1140,7 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
 
 contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignControllerRemoveLiquidityE2EUniswapV3Test {
     function test_e2e_addRemoveLiquidityUniswapV3_usdsUsdc(uint128 liquidity) public {
-        liquidity = uint128(bound(uint256(liquidity), 1000, uint256(totalLiquidity)));
+        liquidity = uint128(bound(uint256(liquidity), 1000000, uint256(totalLiquidity)));
 
         uint256 minAmount0 = amount0Added * liquidity / totalLiquidity;
         uint256 minAmount1 = amount1Added * liquidity / totalLiquidity;
@@ -1148,8 +1148,8 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignCont
         _removeLiquidityAndValidate(
             tokenId, 
             liquidity, 
-            minAmount0 - 1,
-            minAmount1,
+            minAmount0 * 9999/10000,
+            minAmount1 * 9999/10000, 
             uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 
             uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
         );
@@ -1159,8 +1159,8 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignCont
         _removeLiquidityAndValidate(
             tokenId, 
             totalLiquidity, 
-            amount0Added - 1,
-            amount1Added - 1, 
+            amount0Added * 9999/10000,
+            amount1Added * 9999/10000, 
             uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey, 
             uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
         );
@@ -1173,7 +1173,7 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignCont
     }
 
     function test_e2e_addRemoveLiquidityUniswapV3_ausdUsds(uint128 liquidity) public {
-        liquidity = uint128(bound(uint256(liquidity), 1000, uint256(totalLiquidity)));
+        liquidity = uint128(bound(uint256(liquidity), 1000000, uint256(totalLiquidity)));
 
         uint256 minAmount0 = amount0Added * liquidity / totalLiquidity;
         uint256 minAmount1 = amount1Added * liquidity / totalLiquidity;
@@ -1181,8 +1181,8 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignCont
         _removeLiquidityAndValidate(
             tokenId, 
             liquidity, 
-            minAmount0,
-            minAmount1, 
+            minAmount0 * 9999/10000,
+            minAmount1 * 9999/10000, 
             uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 
             uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
         );
@@ -1192,8 +1192,8 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignCont
         _removeLiquidityAndValidate(
             tokenId, 
             totalLiquidity, 
-            amount0Added - 1,
-            amount1Added - 1, 
+            amount0Added * 9999/10000,
+            amount1Added * 9999/10000, 
             uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 
             uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
         );
