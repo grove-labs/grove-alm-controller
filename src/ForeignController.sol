@@ -63,7 +63,7 @@ contract ForeignController is AccessControl {
     event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
-    event UniswapV3SwapMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
+    event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -223,7 +223,7 @@ contract ForeignController is AccessControl {
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         params.swapMaxTickDelta = maxTickDelta;
-        emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
+        emit UniswapV3PoolMaxTickDeltaSet(pool, maxTickDelta);
     }   
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {

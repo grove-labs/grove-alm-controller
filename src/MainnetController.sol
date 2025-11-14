@@ -69,7 +69,7 @@ contract MainnetController is AccessControl {
     event RelayerRemoved(address indexed relayer);
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
-    event UniswapV3SwapMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
+    event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -216,7 +216,7 @@ contract MainnetController is AccessControl {
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         params.swapMaxTickDelta = maxTickDelta;
-        emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
+        emit UniswapV3PoolMaxTickDeltaSet(pool, maxTickDelta);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
