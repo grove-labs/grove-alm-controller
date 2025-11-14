@@ -222,7 +222,7 @@ contract MainnetController is AccessControl {
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         params.swapMaxTickDelta = maxTickDelta;
-        emit UniswapV3SwapMaxTickDeltaSet(pool, maxTickDelta);
+        emit UniswapV3PoolMaxTickDeltaSet(pool, maxTickDelta);
     }
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
