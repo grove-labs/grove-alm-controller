@@ -175,7 +175,7 @@ contract ForkTestBase is Test {
 
     // Default configuration for the fork, can be overridden in inheriting tests
     function _getBlock() internal virtual pure returns (uint256) {
-        return 36912750; //  October 16, 2025
+        return 37589683; //  November 1, 2025
     }
 
     function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {

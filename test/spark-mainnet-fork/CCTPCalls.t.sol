@@ -198,7 +198,7 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
 
         /*** Step 1: Set up environment and deploy mocks ***/
 
-        destination = getChain("base").createSelectFork(20782500);  // October 7, 2024
+        destination = getChain("base").createSelectFork(37589683);  // November 1, 2025
 
         usdsBase  = IERC20(address(new ERC20Mock()));
         susdsBase = IERC20(address(new ERC20Mock()));

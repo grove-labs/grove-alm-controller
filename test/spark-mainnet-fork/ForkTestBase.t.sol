@@ -302,7 +302,7 @@ contract ForkTestBase is DssTest {
 
     // Default configuration for the fork, can be overridden in inheriting tests
     function _getBlock() internal virtual pure returns (uint256) {
-        return 20917850; //  October 7, 2024
+        return 23700802; // November 1, 2025
     }
 
     function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {
