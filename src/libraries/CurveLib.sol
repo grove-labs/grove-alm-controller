@@ -5,15 +5,15 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
-import { ERC20Lib }  from "../libraries/common/ERC20Lib.sol";
-import { MathLib }  from "../libraries/common/MathLib.sol";
+import { ERC20Lib }    from "../libraries/common/ERC20Lib.sol";
+import { MathLib }     from "../libraries/common/MathLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 interface ICurvePoolLike is IERC20 {
     function add_liquidity(
         uint256[] memory amounts,
-        uint256          minMintAmount,
-        address          receiver
+        uint256   minMintAmount,
+        address   receiver
     ) external;
     function balances(uint256 index) external view returns (uint256);
     function coins(uint256 index) external returns (address);
@@ -27,10 +27,10 @@ interface ICurvePoolLike is IERC20 {
     function get_virtual_price() external view returns (uint256);
     function N_COINS() external view returns (uint256);
     function remove_liquidity(
-        uint256          burnAmount,
+        uint256   burnAmount,
         uint256[] memory minAmounts,
-        address          receiver,
-        bool             claimAdminFees
+        address   receiver,
+        bool      claimAdminFees
     ) external;
     function stored_rates() external view returns (uint256[] memory);
 }
