@@ -216,7 +216,7 @@ contract ArbitrumChainLayerZeroTestBase is ForkTestBase {
     /*** Arbtirum addresses                                                                     ***/
     /**********************************************************************************************/
 
-    address constant CCTP_MESSENGER_ARB = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
+    address constant CCTP_MESSENGER_ARB = Arbitrum.CCTP_TOKEN_MESSENGER_V2;
     address constant SPARK_EXECUTOR     = Arbitrum.SPARK_EXECUTOR;
     address constant SSR_ORACLE         = Arbitrum.SSR_AUTH_ORACLE;
     address constant USDC_ARB           = Arbitrum.USDC;

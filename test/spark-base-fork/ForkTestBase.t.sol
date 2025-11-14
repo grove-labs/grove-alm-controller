@@ -49,7 +49,7 @@ contract ForkTestBase is Test {
     /**********************************************************************************************/
 
     address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
-    address constant CCTP_MESSENGER_BASE = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
+    address constant CCTP_MESSENGER_BASE = Base.CCTP_TOKEN_MESSENGER_V2;
     address constant USDC_BASE           = Base.USDC;
     address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
     // TODO: Get this from the registry after added there
@@ -132,7 +132,7 @@ contract ForkTestBase is Test {
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
             admin        : Base.SPARK_EXECUTOR,
             psm          : address(psmBase),
-            cctp         : 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d,
+            cctp         : Base.CCTP_TOKEN_MESSENGER_V2,
             usdc         : address(usdcBase),
             pendleRouter : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),

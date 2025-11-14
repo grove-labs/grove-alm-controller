@@ -53,7 +53,7 @@ contract ForkTestBase is Test {
 
     address constant ALM_FREEZER          = Avalanche.ALM_FREEZER;
     address constant ALM_RELAYER          = Avalanche.ALM_RELAYER;
-    address constant CCTP_TOKEN_MESSENGER = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
+    address constant CCTP_TOKEN_MESSENGER = Avalanche.CCTP_TOKEN_MESSENGER_V2;
     address constant GROVE_EXECUTOR       = Avalanche.GROVE_EXECUTOR;
     address constant USDC_AVALANCHE       = Avalanche.USDC;
 
