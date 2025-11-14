@@ -165,7 +165,7 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
     /*** Base addresses                                                                         ***/
     /**********************************************************************************************/
 
-    address constant CCTP_MESSENGER_BASE = Base.CCTP_TOKEN_MESSENGER;
+    address constant CCTP_MESSENGER_BASE = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
     address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
     address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
     address constant USDC_BASE           = Base.USDC;
@@ -244,7 +244,7 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
             admin        : Base.SPARK_EXECUTOR,
             psm          : address(psmBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctp         : 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d,
             usdc         : address(usdcBase),
             pendleRouter : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),

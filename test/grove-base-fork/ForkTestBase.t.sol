@@ -53,7 +53,7 @@ contract ForkTestBase is Test {
 
     address constant ALM_FREEZER          = Base.ALM_FREEZER;
     address constant ALM_RELAYER          = Base.ALM_RELAYER;
-    address constant CCTP_TOKEN_MESSENGER = Base.CCTP_TOKEN_MESSENGER;
+    address constant CCTP_TOKEN_MESSENGER = 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d;
     address constant GROVE_EXECUTOR       = Base.GROVE_EXECUTOR;
     address constant USDC_BASE            = Base.USDC;
     address constant PENDLE_ROUTER_BASE   = Base.PENDLE_ROUTER;

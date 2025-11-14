@@ -58,7 +58,7 @@ contract MainnetControllerDeploySuccessTests is ForkTestBase {
         assertEq(address(controller.buffer()),       buffer);
         assertEq(address(controller.psm()),          Ethereum.PSM);
         assertEq(address(controller.daiUsds()),      Ethereum.DAI_USDS);
-        assertEq(address(controller.cctp()),         Ethereum.CCTP_TOKEN_MESSENGER);
+        assertEq(address(controller.cctp()),         0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d);
         assertEq(address(controller.ethenaMinter()), Ethereum.ETHENA_MINTER);
         assertEq(address(controller.susde()),        Ethereum.SUSDE);
         assertEq(address(controller.dai()),          Ethereum.DAI);

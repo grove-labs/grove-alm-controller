@@ -18,7 +18,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             admin        : Base.SPARK_EXECUTOR,
             psm          : Base.PSM3,
             usdc         : Base.USDC,
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctp         : 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d,
             pendleRouter : PENDLE_ROUTER
         });
 
@@ -44,7 +44,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             rateLimits   : address(rateLimits),
             psm          : Base.PSM3,
             usdc         : Base.USDC,
-            cctp         : Base.CCTP_TOKEN_MESSENGER,
+            cctp         : 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d,
             pendleRouter : PENDLE_ROUTER
         }));
 
@@ -59,7 +59,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
         assertEq(address(controller.rateLimits()), rateLimits);
         assertEq(address(controller.psm()),        Base.PSM3);
         assertEq(address(controller.usdc()),       Base.USDC);
-        assertEq(address(controller.cctp()),       Base.CCTP_TOKEN_MESSENGER);
+        assertEq(address(controller.cctp()),       0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d);
     }
 
 }
