@@ -19,6 +19,7 @@ import { ISUsds } from "sdai/src/ISUsds.sol";
 
 import { Ethereum } from "spark-address-registry/Ethereum.sol";
 
+import { Ethereum as GroveEthereum } from "grove-address-registry/Ethereum.sol";
 import { Bridge }                from "xchain-helpers/testing/Bridge.sol";
 import { CCTPv2Forwarder as CCTPForwarder } from "xchain-helpers/forwarders/CCTPv2Forwarder.sol";
 import { Domain, DomainHelpers } from "xchain-helpers/testing/Domain.sol";
@@ -93,7 +94,7 @@ contract ForkTestBase is DssTest {
 
     address constant LOG = 0xdA0Ab1e0017DEbCd72Be8599041a2aa3bA7e740F;
 
-    address constant CCTP_MESSENGER = Ethereum.CCTP_TOKEN_MESSENGER_V2;
+    address constant CCTP_MESSENGER = GroveEthereum.CCTP_TOKEN_MESSENGER_V2;
     address constant DAI_USDS       = Ethereum.DAI_USDS;
     address constant ETHENA_MINTER  = Ethereum.ETHENA_MINTER;
     address constant PAUSE_PROXY    = Ethereum.PAUSE_PROXY;
@@ -208,7 +209,7 @@ contract ForkTestBase is DssTest {
             vault   : ilkInst.vault,
             psm     : Ethereum.PSM,
             daiUsds : Ethereum.DAI_USDS,
-            cctp    : Ethereum.CCTP_TOKEN_MESSENGER_V2
+            cctp    : GroveEthereum.CCTP_TOKEN_MESSENGER_V2
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -237,7 +238,7 @@ contract ForkTestBase is DssTest {
                 vault      : address(vault),
                 psm        : Ethereum.PSM,
                 daiUsds    : Ethereum.DAI_USDS,
-                cctp       : Ethereum.CCTP_TOKEN_MESSENGER_V2
+                cctp       : GroveEthereum.CCTP_TOKEN_MESSENGER_V2
             });
 
         Init.LayerZeroRecipient[] memory layerZeroRecipients = new Init.LayerZeroRecipient[](0);

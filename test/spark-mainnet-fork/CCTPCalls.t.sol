@@ -7,6 +7,7 @@ import { ERC20Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC20Moc
 
 import { Base } from "spark-address-registry/Base.sol";
 
+import { Base as GroveBase } from "grove-address-registry/Base.sol";
 import { PSM3Deploy }       from "spark-psm/deploy/PSM3Deploy.sol";
 import { IPSM3 }            from "spark-psm/src/PSM3.sol";
 import { MockRateProvider } from "spark-psm/test/mocks/MockRateProvider.sol";
@@ -165,7 +166,7 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
     /*** Base addresses                                                                         ***/
     /**********************************************************************************************/
 
-    address constant CCTP_MESSENGER_BASE = Base.CCTP_TOKEN_MESSENGER_V2;
+    address constant CCTP_MESSENGER_BASE = GroveBase.CCTP_TOKEN_MESSENGER_V2;
     address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
     address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
     address constant USDC_BASE           = Base.USDC;
@@ -244,7 +245,7 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
             admin        : Base.SPARK_EXECUTOR,
             psm          : address(psmBase),
-            cctp         : Base.CCTP_TOKEN_MESSENGER_V2,
+            cctp         : GroveEthereum.CCTP_TOKEN_MESSENGER_V2,
             usdc         : address(usdcBase),
             pendleRouter : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),
