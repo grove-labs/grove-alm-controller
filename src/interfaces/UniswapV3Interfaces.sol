@@ -24,6 +24,7 @@ interface IUniswapV3PoolLike {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function fee() external view returns (uint24);
+
     function slot0()
         external
         view

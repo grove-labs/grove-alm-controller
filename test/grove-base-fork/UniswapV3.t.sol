@@ -216,17 +216,17 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         token1.approve(UNISWAP_V3_POSITION_MANAGER, amount1);
         (tokenId,,,) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
             INonfungiblePositionManager.MintParams({
-                token0: address(token0),
-                token1: address(token1),
-                fee: poolFee,
-                tickLower: initTick - 50,
-                tickUpper: initTick + 50,
-                amount0Desired: amount0,
-                amount1Desired: amount1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: stranger,
-                deadline: block.timestamp + 1 hours
+                token0         : address(token0),
+                token1         : address(token1),
+                fee            : poolFee,
+                tickLower      : initTick - 50,
+                tickUpper      : initTick + 50,
+                amount0Desired : amount0,
+                amount1Desired : amount1,
+                amount0Min     : 0,
+                amount1Min     : 0,
+                recipient      : stranger,
+                deadline       : block.timestamp + 1 hours
             })
         );
         vm.stopPrank();
