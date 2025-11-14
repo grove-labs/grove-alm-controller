@@ -837,8 +837,6 @@ contract ForeignController is AccessControl {
         onlyRole(RELAYER)
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
-        require(address(uniswapV3PositionManager) != address(0), "MainnetController/position-manager-not-set");
-
         return UniswapV3Lib.removeLiquidity(
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,

@@ -947,7 +947,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             .checked_write(address(0));
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("MainnetController/position-manager-not-set");
+        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
         foreignController.removeLiquidityUniswapV3(
             _getPool(),
             tokenId,
@@ -978,7 +978,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_zeroLiquidity() public {
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/zero-liquidity");
+        vm.expectRevert("UniswapV3Lib/liquidity-out-of-bounds");
         foreignController.removeLiquidityUniswapV3(
             _getPool(),
             tokenId,
@@ -992,7 +992,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_liquidityTooHigh() public {
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/liquidity-too-high");
+        vm.expectRevert("UniswapV3Lib/liquidity-out-of-bounds");
         foreignController.removeLiquidityUniswapV3(
             _getPool(),
             tokenId,
@@ -1006,7 +1006,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_invalidPosition() public {
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/invalid-position");
+        vm.expectRevert("UniswapV3Lib/invalid-pool");
         foreignController.removeLiquidityUniswapV3(
             usdsAusdPool,
             tokenId,
@@ -1022,7 +1022,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         address mismatchedFeePool = _createPool(address(token0), address(token1), 500);
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/fee-mismatch");
+        vm.expectRevert("UniswapV3Lib/invalid-pool");
         foreignController.removeLiquidityUniswapV3(
             mismatchedFeePool,
             tokenId,

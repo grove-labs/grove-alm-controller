@@ -164,6 +164,8 @@ library UniswapV3Lib {
         external
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
+        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
+
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         _validateRemoveLiquidityParams(pool, params);
@@ -389,10 +391,6 @@ library UniswapV3Lib {
         address token1 = pool.token1();
         uint24 fee    = pool.fee();
 
-        (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
-        uint256 token0Decimals = IERC20Metadata(token0).decimals();
-        uint256 token1Decimals = IERC20Metadata(token1).decimals();
-
         (
             address positionToken0,
             address positionToken1,
@@ -402,10 +400,8 @@ library UniswapV3Lib {
             uint128 positionLiquidity
         ) = _fetchPositionData(params.tokenId, params.positionManager);
 
-        require(params.liquidity > 0, "UniswapV3Lib/zero-liquidity");
-        require(positionToken0 == token0 && positionToken1 == token1, "UniswapV3Lib/invalid-position");
-        require(positionFee == fee, "UniswapV3Lib/fee-mismatch");
-        require(params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-too-high");
+        require(positionToken0 == token0 && positionToken1 == token1 && positionFee == fee, "UniswapV3Lib/invalid-pool");
+        require(params.liquidity > 0 && params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-out-of-bounds");
     }
 
     function _decreaseLiquidityCall(
