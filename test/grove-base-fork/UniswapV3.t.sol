@@ -94,7 +94,7 @@ contract UniswapV3TestBase is ForkTestBase {
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcSwapKey, 1_000_000e6,  uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcSwapKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
 
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);

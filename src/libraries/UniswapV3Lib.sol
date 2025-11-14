@@ -14,8 +14,6 @@ import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
-import {console} from "forge-std/console.sol";
-
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
 
@@ -164,8 +162,6 @@ library UniswapV3Lib {
         external
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
-        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
-
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         _validateRemoveLiquidityParams(pool, params);
@@ -354,7 +350,8 @@ library UniswapV3Lib {
         );
 
         (bool success, bytes memory result) = address(positionManager).staticcall(positionData);
-        require(success, "UniswapV3Lib/positions-call-failed");
+
+        require(success,              "UniswapV3Lib/positions-call-failed");
         require(result.length >= 384, "UniswapV3Lib/invalid-positions-return-data");
     
         assembly {
@@ -372,9 +369,9 @@ library UniswapV3Lib {
             // word 7: liquidity
             // -----------------------------------------
 
-            token0 := mload(add(data, 64))      // word 2
-            token1 := mload(add(data, 96))      // word 3
-            fee := mload(add(data, 128))        // word 4
+            token0    := mload(add(data, 64))   // word 2
+            token1    := mload(add(data, 96))   // word 3
+            fee       := mload(add(data, 128))  // word 4
             tickLower := mload(add(data, 160))  // word 5
             tickUpper := mload(add(data, 192))  // word 6
             liquidity := mload(add(data, 224))  // word 7
@@ -387,9 +384,11 @@ library UniswapV3Lib {
     }
 
     function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view {
+        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
+
         address token0 = pool.token0();
         address token1 = pool.token1();
-        uint24 fee    = pool.fee();
+        uint24 fee     = pool.fee();
 
         (
             address positionToken0,
@@ -401,7 +400,7 @@ library UniswapV3Lib {
         ) = _fetchPositionData(params.tokenId, params.positionManager);
 
         require(positionToken0 == token0 && positionToken1 == token1 && positionFee == fee, "UniswapV3Lib/invalid-pool");
-        require(params.liquidity > 0 && params.liquidity <= positionLiquidity, "UniswapV3Lib/liquidity-out-of-bounds");
+        require(params.liquidity > 0 && params.liquidity <= positionLiquidity,              "UniswapV3Lib/liquidity-out-of-bounds");
     }
 
     function _decreaseLiquidityCall(
@@ -420,11 +419,11 @@ library UniswapV3Lib {
             abi.encodeWithSelector(
                 INonfungiblePositionManager.decreaseLiquidity.selector,
                 INonfungiblePositionManager.DecreaseLiquidityParams({
-                    tokenId: tokenId,
-                    liquidity: liquidity,
-                    amount0Min: amount0Min,
-                    amount1Min: amount1Min,
-                    deadline: deadline
+                    tokenId    : tokenId,
+                    liquidity  : liquidity,
+                    amount0Min : amount0Min,
+                    amount1Min : amount1Min,
+                    deadline   : deadline
                 })
             )
         );
@@ -444,10 +443,10 @@ library UniswapV3Lib {
             abi.encodeWithSelector(
                 INonfungiblePositionManager.collect.selector,
                 INonfungiblePositionManager.CollectParams({
-                    tokenId: tokenId,
-                    recipient: recipient,
-                    amount0Max: type(uint128).max,
-                    amount1Max: type(uint128).max
+                    tokenId    : tokenId,
+                    recipient  : recipient,
+                    amount0Max : type(uint128).max,
+                    amount1Max : type(uint128).max
                 })
             )
         );
