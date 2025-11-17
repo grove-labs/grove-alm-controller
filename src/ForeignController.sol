@@ -62,9 +62,7 @@ contract ForeignController is AccessControl {
 
     event UniswapV3RouterSet(address indexed router);
     event UniswapV3PositionManagerSet(address indexed positionManager);
-    event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
-    event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
-    event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
+    event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -213,34 +211,32 @@ contract ForeignController is AccessControl {
         emit UniswapV3PositionManagerSet(positionManager);
     }
 
-    function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external {
+    function setUniswapV3PoolParams(address pool, UniswapV3Lib.UniswapV3PoolParams memory params) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
+        string memory errorMessage = "ForeignController/invalid-params";
+
         require(
-            maxTickDelta > 0 &&
-            maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "ForeignController/max-tick-delta-out-of-bounds"
+            params.swapMaxTickDelta > 0 &&
+            params.swapMaxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
+            errorMessage
         );
 
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        params.swapMaxTickDelta = maxTickDelta;
-        emit UniswapV3PoolMaxTickDeltaSet(pool, maxTickDelta);
-    }   
+        UniswapV3Lib.Tick memory tickBounds = params.addLiquidityTickBounds;
+        
+        require(
+            tickBounds.lower >= MIN_TICK && 
+            tickBounds.lower < tickBounds.upper, 
+            errorMessage
+        );
 
-    function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "ForeignController/lower-tick-out-of-bounds");
-
-        params.addLiquidityTickBounds.lower = lowerTickBound;
-        emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
-    }
-
-    function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "ForeignController/upper-tick-out-of-bounds");
-
-        params.addLiquidityTickBounds.upper = upperTickBound;
-        emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
+        require(
+            tickBounds.upper > tickBounds.lower && 
+            tickBounds.upper <= MAX_TICK, 
+            errorMessage
+        );
+        uniswapV3PoolParams[pool] = params;
+        emit UniswapV3PoolParamsUpdated(pool, params);
     }
 
 
