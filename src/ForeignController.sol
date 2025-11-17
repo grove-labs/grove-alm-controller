@@ -15,12 +15,14 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
-import { IALMProxy }     from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
-import { IRateLimits }   from "./interfaces/IRateLimits.sol";
-import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
+import { IALMProxy }             from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }             from "./interfaces/CCTPInterfaces.sol";
+import { IRateLimits }           from "./interfaces/IRateLimits.sol";
+import { IMerklDistributorLike } from "./interfaces/MerklInterfaces.sol";
+import { IPendleMarket }         from "./interfaces/PendleInterfaces.sol";
 
 import { CurveLib }  from "./libraries/CurveLib.sol";
+import { MerklLib }  from "./libraries/MerklLib.sol";
 import { PendleLib } from "./libraries/PendleLib.sol";
 import { CCTPLib }   from "./libraries/CCTPLib.sol";
 import { ERC20Lib }  from "./libraries/common/ERC20Lib.sol";
@@ -57,6 +59,7 @@ contract ForeignController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
+    event MerklDistributorSet(address indexed merklDistributor);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -91,6 +94,8 @@ contract ForeignController is AccessControl {
     IRateLimits public immutable rateLimits;
     IERC20      public immutable usdc;
     address     public immutable pendleRouter;
+
+    IMerklDistributorLike public merklDistributor;
 
     mapping(address pool                    => uint256 maxSlippage)        public maxSlippages;  // 1e18 precision
     mapping(uint32  destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
@@ -176,6 +181,14 @@ contract ForeignController is AccessControl {
     {
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
+    }
+
+    function setMerklDistributor(address merklDistributor_)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        merklDistributor = IMerklDistributorLike(merklDistributor_);
+        emit MerklDistributorSet(merklDistributor_);
     }
 
     /**********************************************************************************************/
@@ -667,6 +680,21 @@ contract ForeignController is AccessControl {
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
+        }));
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Merkl functions                                                                 ***/
+    /**********************************************************************************************/
+
+    function toggleOperatorMerkl(address operator) external {
+        _checkRole(RELAYER);
+        require(address(merklDistributor) != address(0), "ForeignController/merkl-distributor-not-set");
+
+        MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
+            proxy        : proxy,
+            distributor  : merklDistributor,
+            operator     : operator
         }));
     }
 
