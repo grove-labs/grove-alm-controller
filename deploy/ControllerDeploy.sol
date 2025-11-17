@@ -24,13 +24,13 @@ library ForeignControllerDeploy {
         internal returns (address controller)
     {
         controller = address(new ForeignController({
-            admin_                : admin,
-            proxy_                : almProxy,
-            rateLimits_           : rateLimits,
-            psm_                  : psm,
-            usdc_                 : usdc,
-            cctp_                 : cctp,
-            pendleRouter_         : pendleRouter,
+            admin_                    : admin,
+            proxy_                    : almProxy,
+            rateLimits_               : rateLimits,
+            psm_                      : psm,
+            usdc_                     : usdc,
+            cctp_                     : cctp,
+            pendleRouter_             : pendleRouter,
             uniswapV3Router_          : uniswapV3Router,
             uniswapV3PositionManager_ : uniswapV3PositionManager
         }));
@@ -51,13 +51,13 @@ library ForeignControllerDeploy {
         instance.rateLimits = address(new RateLimits(admin));
 
         instance.controller = address(new ForeignController({
-            admin_                : admin,
-            proxy_                : instance.almProxy,
-            rateLimits_           : instance.rateLimits,
-            psm_                  : psm,
-            usdc_                 : usdc,
-            cctp_                 : cctp,
-            pendleRouter_         : pendleRouter,
+            admin_                    : admin,
+            proxy_                    : instance.almProxy,
+            rateLimits_               : instance.rateLimits,
+            psm_                      : psm,
+            usdc_                     : usdc,
+            cctp_                     : cctp,
+            pendleRouter_             : pendleRouter,
             uniswapV3Router_          : uniswapV3Router,
             uniswapV3PositionManager_ : uniswapV3PositionManager
         }));
