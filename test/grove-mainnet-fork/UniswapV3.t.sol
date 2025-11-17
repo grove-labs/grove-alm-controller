@@ -184,6 +184,54 @@ contract UniswapV3TestBase is ForkTestBase {
     }
 }
 
+contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
+    int24 internal constant MIN_UNISWAP_TICK = -887_272;
+    int24 internal constant MAX_UNISWAP_TICK =  887_272;
+
+    function test_setUniswapV3PoolMaxTickDelta_isZero() public {
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_isTooLarge() public {
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
+    }
+
+    function test_setUniswapV3AddLiquidityLowerTickBound_isTooSmall() public {
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
+    }
+
+
+    function test_setUniswapv3AddLiquidityLowerTickBound_isTooLarge() public {
+        (, UniswapV3Lib.Tick memory tickBounds) = mainnetController.uniswapV3PoolParams(_getPool());
+        int24 currentUpper = tickBounds.upper;
+
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
+    }
+
+    function test_setUniswapv3AddLiquidityUpperTickBound_isTooSmall() public {
+        (, UniswapV3Lib.Tick memory tickBounds) = mainnetController.uniswapV3PoolParams(_getPool());
+        int24 currentLower = tickBounds.lower;
+
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), currentLower);
+    }
+
+    function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {
+        vm.prank(GROVE_PROXY);
+        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), MAX_UNISWAP_TICK + 1);
+    }
+}
+
 contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
 
     function test_swapUniswapV3_notRelayer() public {

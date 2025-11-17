@@ -181,7 +181,17 @@ contract UniswapV3TestBase is ForkTestBase {
         deal(address(token1), address(almProxy), amount1Desired);
     }
 
-    function _addLiquidity(uint256 _tokenId, UniswapV3Lib.Tick memory _tick, UniswapV3Lib.TokenAmounts memory _desired, UniswapV3Lib.TokenAmounts memory _min) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
+    function _addLiquidity(
+        uint256                          _tokenId, 
+        UniswapV3Lib.Tick         memory _tick, 
+        UniswapV3Lib.TokenAmounts memory _desired, 
+        UniswapV3Lib.TokenAmounts memory _min
+    ) internal returns (
+        uint256 tokenId, 
+        uint128 liquidity, 
+        uint256 amount0Used, 
+        uint256 amount1Used
+    ) {
         vm.startPrank(ALM_RELAYER);
         (tokenId, liquidity, amount0Used, amount1Used)
             = foreignController.addLiquidityUniswapV3(
@@ -200,6 +210,54 @@ contract UniswapV3TestBase is ForkTestBase {
             amount0 : amount0 * 98 / 100,
             amount1 : amount1 * 98 / 100
         });
+    }
+}
+
+contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
+    int24 internal constant MIN_UNISWAP_TICK = -887_272;
+    int24 internal constant MAX_UNISWAP_TICK =  887_272;
+
+    function test_setUniswapV3PoolMaxTickDelta_isZero() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_isTooLarge() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
+    }
+
+    function test_setUniswapV3AddLiquidityLowerTickBound_isTooSmall() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
+    }
+
+
+    function test_setUniswapv3AddLiquidityLowerTickBound_isTooLarge() public {
+        (, UniswapV3Lib.Tick memory tickBounds) = foreignController.uniswapV3PoolParams(_getPool());
+        int24 currentUpper = tickBounds.upper;
+
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
+    }
+
+    function test_setUniswapv3AddLiquidityUpperTickBound_isTooSmall() public {
+        (, UniswapV3Lib.Tick memory tickBounds) = foreignController.uniswapV3PoolParams(_getPool());
+        int24 currentLower = tickBounds.lower;
+
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), currentLower);
+    }
+
+    function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), MAX_UNISWAP_TICK + 1);
     }
 }
 
@@ -987,17 +1045,17 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         token1.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount1);
         (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
             INonfungiblePositionManager.MintParams({
-                token0: address(token0),
-                token1: address(token1),
-                fee: poolFee,
-                tickLower: tick.lower,
-                tickUpper: tick.upper,
-                amount0Desired: desired.amount0,
-                amount1Desired: desired.amount1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: address(almProxy),
-                deadline: block.timestamp + 1 hours
+                token0         : address(token0),
+                token1         : address(token1),
+                fee            : poolFee,
+                tickLower      : tick.lower,
+                tickUpper      : tick.upper,
+                amount0Desired : desired.amount0,
+                amount1Desired : desired.amount1,
+                amount0Min     : 0,
+                amount1Min     : 0,
+                recipient      : address(almProxy),
+                deadline       : block.timestamp + 1 hours
             })
         );
         vm.stopPrank();
@@ -1015,17 +1073,17 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         token1.approve(UNISWAP_V3_POSITION_MANAGER, desired.amount1);
         (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
             INonfungiblePositionManager.MintParams({
-                token0: address(token0),
-                token1: address(token1),
-                fee: poolFee,
-                tickLower: initTick - 50,
-                tickUpper: initTick + 50,
-                amount0Desired: desired.amount0,
-                amount1Desired: desired.amount1,
-                amount0Min: 0,
-                amount1Min: 0,
-                recipient: stranger,
-                deadline: block.timestamp + 1 hours
+                token0         : address(token0),
+                token1         : address(token1),
+                fee            : poolFee,
+                tickLower      : initTick - 50,
+                tickUpper      : initTick + 50,
+                amount0Desired : desired.amount0,
+                amount1Desired : desired.amount1,
+                amount0Min     : 0,
+                amount1Min     : 0,
+                recipient      : stranger,
+                deadline       : block.timestamp + 1 hours
             })
         );
         vm.stopPrank();

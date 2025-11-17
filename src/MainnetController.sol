@@ -573,8 +573,8 @@ contract MainnetController is AccessControl {
     }
 
     function removeLiquidityCurve(
-        address pool,
-        uint256 lpBurnAmount,
+        address   pool,
+        uint256   lpBurnAmount,
         uint256[] memory minWithdrawAmounts
     )
         external returns (uint256[] memory withdrawnTokens)
@@ -628,7 +628,7 @@ contract MainnetController is AccessControl {
     function addLiquidityUniswapV3(
         address                            pool,
         uint256                            tokenId,
-        UniswapV3Lib.Tick calldata         tick,
+        UniswapV3Lib.Tick         calldata tick,
         UniswapV3Lib.TokenAmounts calldata target,
         UniswapV3Lib.TokenAmounts calldata min,
         uint256                            deadline
