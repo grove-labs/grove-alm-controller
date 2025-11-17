@@ -102,8 +102,8 @@ contract ForeignController is AccessControl {
     IERC20      public immutable usdc;
     address     public immutable pendleRouter;
 
-    ISwapRouter                 public immutable uniswapV3Router;
-    INonfungiblePositionManager public immutable uniswapV3PositionManager;
+    ISwapRouter                 public uniswapV3Router;
+    INonfungiblePositionManager public uniswapV3PositionManager;
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
