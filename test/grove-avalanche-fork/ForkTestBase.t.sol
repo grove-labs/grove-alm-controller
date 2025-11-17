@@ -109,11 +109,13 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : GROVE_EXECUTOR,
-            psm          : address(psmAvalanche),
-            usdc         : USDC_AVALANCHE,
-            cctp         : CCTP_TOKEN_MESSENGER,
-            pendleRouter : address(0) // No Pendle Router on Avalanche
+            admin                    : GROVE_EXECUTOR,
+            psm                      : address(psmAvalanche),
+            usdc                     : USDC_AVALANCHE,
+            cctp                     : CCTP_TOKEN_MESSENGER,
+            pendleRouter             : address(0), // No Pendle Router on Avalanche
+            uniswapV3Router          : address(0xdeadbeef), // Unused
+            uniswapV3PositionManager : address(0xdeadbeef)  // Unused
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -136,11 +138,13 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
-            admin        : GROVE_EXECUTOR,
-            psm          : address(psmAvalanche),
-            cctp         : CCTP_TOKEN_MESSENGER,
-            usdc         : USDC_AVALANCHE,
-            pendleRouter : address(0) // No Pendle Router on Avalanche
+            admin                    : GROVE_EXECUTOR,
+            psm                      : address(psmAvalanche),
+            cctp                     : CCTP_TOKEN_MESSENGER,
+            usdc                     : USDC_AVALANCHE,
+            pendleRouter             : address(0), // No Pendle Router on Avalanche
+            uniswapV3Router          : address(0xdeadbeef), // Unused
+            uniswapV3PositionManager : address(0xdeadbeef)  // Unused
             // susds : address(susdsAvalanche),
             // usds  : address(usdsAvalanche)
         });

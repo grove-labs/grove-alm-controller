@@ -309,11 +309,13 @@ contract FullStagingDeploy is Script {
         // Step 1: Deploy ALM controller
 
         controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : domain.admin,
-            psm          : domain.input.readAddress(".psm"),
-            usdc         : domain.input.readAddress(".usdc"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
+            admin                    : domain.admin,
+            psm                      : domain.input.readAddress(".psm"),
+            usdc                     : domain.input.readAddress(".usdc"),
+            cctp                     : domain.input.readAddress(".cctpTokenMessenger"),
+            pendleRouter             : domain.input.readAddress(".pendleRouter"),
+            uniswapV3Router          : domain.input.readAddress(".uniswapV3Router"),
+            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager")
         });
 
         // Step 2: Initialize ALM system
@@ -328,11 +330,14 @@ contract FullStagingDeploy is Script {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin        : domain.admin,
-            psm          : domain.input.readAddress(".psm"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            usdc         : domain.input.readAddress(".usdc"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
+            admin                    : domain.admin,
+            psm                      : domain.input.readAddress(".psm"),
+            cctp                     : domain.input.readAddress(".cctpTokenMessenger"),
+            usdc                     : domain.input.readAddress(".usdc"),
+            pendleRouter             : domain.input.readAddress(".pendleRouter"),
+            uniswapV3Router          : domain.input.readAddress(".uniswapV3Router"),
+            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager")
+            
             // susds : domain.input.readAddress(".susds"),
             // usds  : domain.input.readAddress(".usds")
         });

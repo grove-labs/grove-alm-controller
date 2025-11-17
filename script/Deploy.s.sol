@@ -133,11 +133,13 @@ contract DeployForeignFull is ForeignScript {
         vm.startBroadcast();
 
         ControllerInstance memory instance = ForeignControllerDeploy.deployFull({
-            admin        : config.readAddress(".admin"),
-            psm          : config.readAddress(".psm"),
-            usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            admin                    : config.readAddress(".admin"),
+            psm                      : config.readAddress(".psm"),
+            usdc                     : config.readAddress(".usdc"),
+            cctp                     : config.readAddress(".cctpTokenMessenger"),
+            pendleRouter             : config.readAddress(".pendleRouter"),
+            uniswapV3Router          : config.readAddress(".uniswapV3Router"),
+            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager")
         });
 
         vm.stopBroadcast();
@@ -175,13 +177,15 @@ contract DeployForeignController is ForeignScript {
         vm.startBroadcast();
 
         address controller = ForeignControllerDeploy.deployController({
-            admin        : config.readAddress(".admin"),
-            almProxy     : config.readAddress(".almProxy"),
-            rateLimits   : config.readAddress(".rateLimits"),
-            psm          : config.readAddress(".psm"),
-            usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            admin                    : config.readAddress(".admin"),
+            almProxy                 : config.readAddress(".almProxy"),
+            rateLimits               : config.readAddress(".rateLimits"),
+            psm                      : config.readAddress(".psm"),
+            usdc                     : config.readAddress(".usdc"),
+            cctp                     : config.readAddress(".cctpTokenMessenger"),
+            pendleRouter             : config.readAddress(".pendleRouter"),
+            uniswapV3Router          : config.readAddress(".uniswapV3Router"),
+            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager")
         });
 
         vm.stopBroadcast();

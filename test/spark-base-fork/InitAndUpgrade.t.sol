@@ -63,11 +63,13 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
         });
 
         checkAddresses = Init.CheckAddressParams({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            usdc         : address(usdcBase),
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin                    : Base.SPARK_EXECUTOR,
+            psm                      : address(psmBase),
+            cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            usdc                     : address(usdcBase),
+            pendleRouter             : PENDLE_ROUTER_BASE,
+            uniswapV3Router          : address(0xdeadbeef),
+            uniswapV3PositionManager : address(0xdeadbeef)
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });
@@ -125,13 +127,15 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
         // NOTE: initAlmSystem will redundantly call rely and approve on already inited
         //       almProxy and rateLimits, this setup was chosen to easily test upgrade and init failures
         foreignController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : address(psmBase),
-            usdc         : address(usdcBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin                    : Base.SPARK_EXECUTOR,
+            almProxy                 : address(almProxy),
+            rateLimits               : address(rateLimits),
+            psm                      : address(psmBase),
+            usdc                     : address(usdcBase),
+            cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            pendleRouter             : PENDLE_ROUTER_BASE,
+            uniswapV3Router          : address(0xdeadbeef),
+            uniswapV3PositionManager : address(0xdeadbeef)
         }));
 
         Init.MintRecipient[] memory mintRecipients_ = new Init.MintRecipient[](1);
@@ -307,7 +311,9 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            PENDLE_ROUTER_BASE,
+            address(0xdeadbeef),
+            address(0xdeadbeef)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -334,7 +340,9 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            PENDLE_ROUTER_BASE,
+            address(0xdeadbeef),
+            address(0xdeadbeef)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -361,7 +369,9 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
-            PENDLE_ROUTER_BASE
+            PENDLE_ROUTER_BASE,
+            address(0xdeadbeef),
+            address(0xdeadbeef)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -501,7 +511,9 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             address(psmBase),
             address(usdcBase),
             GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            PENDLE_ROUTER_BASE
+            PENDLE_ROUTER_BASE,
+            address(0xdeadbeef),
+            address(0xdeadbeef)
         );
 
         // Overwrite storage for all previous deployments in setUp and assert brand new deployment
@@ -610,13 +622,15 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
         centrifugeRecipients.push(centrifugeRecipients_[0]);
 
         newController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : address(psmBase),
-            usdc         : address(usdcBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin                    : Base.SPARK_EXECUTOR,
+            almProxy                 : address(almProxy),
+            rateLimits               : address(rateLimits),
+            psm                      : address(psmBase),
+            usdc                     : address(usdcBase),
+            cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            pendleRouter             : PENDLE_ROUTER_BASE,
+            uniswapV3Router          : address(0xdeadbeef),
+            uniswapV3PositionManager : address(0xdeadbeef)
         }));
 
         controllerInst = ControllerInstance({

@@ -59,9 +59,6 @@ contract ForeignController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
-
-    event UniswapV3RouterSet(address indexed router);
-    event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3PoolParamsUpdated(address indexed pool, UniswapV3Lib.UniswapV3PoolParams params);
 
     /**********************************************************************************************/
@@ -105,8 +102,8 @@ contract ForeignController is AccessControl {
     IERC20      public immutable usdc;
     address     public immutable pendleRouter;
 
-    ISwapRouter                 public uniswapV3Router;
-    INonfungiblePositionManager public uniswapV3PositionManager;
+    ISwapRouter                 public immutable uniswapV3Router;
+    INonfungiblePositionManager public immutable uniswapV3PositionManager;
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
@@ -126,16 +123,20 @@ contract ForeignController is AccessControl {
         address psm_,
         address usdc_,
         address cctp_,
-        address pendleRouter_
+        address pendleRouter_,
+        address uniswapV3Router_,
+        address uniswapV3PositionManager_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
-        proxy        = IALMProxy(proxy_);
-        rateLimits   = IRateLimits(rateLimits_);
-        psm          = IPSM3(psm_);
-        usdc         = IERC20(usdc_);
-        cctp         = ICCTPLike(cctp_);
-        pendleRouter = pendleRouter_;
+        proxy                    = IALMProxy(proxy_);
+        rateLimits               = IRateLimits(rateLimits_);
+        psm                      = IPSM3(psm_);
+        usdc                     = IERC20(usdc_);
+        cctp                     = ICCTPLike(cctp_);
+        pendleRouter             = pendleRouter_;
+        uniswapV3Router          = ISwapRouter(uniswapV3Router_);
+        uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
     }
 
     /**********************************************************************************************/
@@ -194,21 +195,6 @@ contract ForeignController is AccessControl {
     {
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
-    }
-
-    function setUniswapV3Router(address router) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(router != address(0), "ForeignController/invalid-router");
-
-        uniswapV3Router = ISwapRouter(router);
-        emit UniswapV3RouterSet(router);
-    }
-
-
-    function setUniswapV3PositionManager(address positionManager) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(positionManager != address(0), "ForeignController/invalid-position-manager");
-
-        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
-        emit UniswapV3PositionManagerSet(positionManager);
     }
 
     function setUniswapV3PoolParams(address pool, UniswapV3Lib.UniswapV3PoolParams memory params) external {

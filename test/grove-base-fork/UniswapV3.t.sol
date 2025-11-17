@@ -35,8 +35,6 @@ interface IUniswapV3Factory {
 }
 
 contract UniswapV3TestBase is ForkTestBase {
-    address constant UNISWAP_V3_ROUTER           = 0x2626664c2603336E57B271c5C0b26F421741e481;
-    address constant UNISWAP_V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
     address constant UNISWAP_V3_FACTORY          = 0x33128a8fC17869897dcE68Ed026d694621f6FDfD;
 
     int24 internal constant DEFAULT_TICK_LOWER = -600;
@@ -107,9 +105,6 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
 
         foreignController.setMaxSlippage(_getPool(), 0.98e18);
-
-        foreignController.setUniswapV3Router(UNISWAP_V3_ROUTER);
-        foreignController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
         vm.stopPrank();
 
 
@@ -304,21 +299,6 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
 contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
     using stdStorage for StdStorage;
 
-    function test_setUniswapv3Router_notAdmin() public {
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            DEFAULT_ADMIN_ROLE
-        ));
-        foreignController.setUniswapV3Router(address(0));
-    }
-
-    function test_setUniswapv3Router_invalidRouter() public {
-        vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/invalid-router");
-        foreignController.setUniswapV3Router(address(0));
-    }
-
     function test_setUniswapV3PoolMaxTickDelta_notAdmin() public {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
@@ -491,27 +471,6 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         );
     }
 
-    function test_addLiquidityUniswapV3_positionManagerNotSet() public {
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
-        stdstore
-            .target(address(foreignController))
-            .sig("uniswapV3PositionManager()")
-            .checked_write(address(0));
-
-        vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
-        foreignController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            min,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-    }
 
     function test_addLiquidityUniswapV3_zeroAmount() public {
         UniswapV3Lib.Tick memory tick = _defaultTickRange();
@@ -1140,26 +1099,6 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
             block.timestamp + 1 hours
         );
-    }
-
-    function test_removeLiquidityUniswapV3_positionManagerNotSet() public {
-        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = _mintProxyPosition();
-
-        stdstore
-            .target(address(foreignController))
-            .sig("uniswapV3PositionManager()")
-            .checked_write(address(0));
-
-        vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
-        foreignController.removeLiquidityUniswapV3(
-            _getPool(),
-            tokenId,
-            liquidity,
-            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
     }
 
     function test_removeLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
