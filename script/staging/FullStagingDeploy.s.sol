@@ -240,11 +240,13 @@ contract FullStagingDeploy is Script {
         // Step 1: Deploy ALM controller
 
         mainnetInst = MainnetControllerDeploy.deployFull({
-            admin   : mainnet.admin,
-            vault   : vault,
-            psm     : psm,  // Wrapper
-            daiUsds : daiUsds,
-            cctp    : mainnet.input.readAddress(".cctpTokenMessenger")
+            admin                    : mainnet.admin,
+            vault                    : vault,
+            psm                      : psm,  // Wrapper
+            daiUsds                  : daiUsds,
+            cctp                     : mainnet.input.readAddress('.cctpTokenMessenger'),
+            uniswapV3Router          : mainnet.input.readAddress('.uniswapV3Router'),
+            uniswapV3PositionManager : mainnet.input.readAddress('.uniswapV3PositionManager')
         });
 
         // Step 2: Initialize ALM system
@@ -261,13 +263,15 @@ contract FullStagingDeploy is Script {
 
         MainnetControllerInit.CheckAddressParams memory checkAddresses
             = MainnetControllerInit.CheckAddressParams({
-                admin      : mainnet.admin,
-                proxy      : mainnetInst.almProxy,
-                rateLimits : mainnetInst.rateLimits,
-                vault      : vault,
-                psm        : psm,
-                daiUsds    : mainnet.input.readAddress(".daiUsds"),
-                cctp       : mainnet.input.readAddress(".cctpTokenMessenger")
+                admin                    : mainnet.admin,
+                proxy                    : mainnetInst.almProxy,
+                rateLimits               : mainnetInst.rateLimits,
+                vault                    : vault,
+                psm                      : psm,
+                daiUsds                  : mainnet.input.readAddress(".daiUsds"),
+                cctp                     : mainnet.input.readAddress(".cctpTokenMessenger"),
+                uniswapV3Router          : mainnet.input.readAddress(".uniswapV3Router"),
+                uniswapV3PositionManager : mainnet.input.readAddress(".uniswapV3PositionManager")
             });
 
         MainnetControllerInit.MintRecipient[] memory mintRecipients = new MainnetControllerInit.MintRecipient[](0);

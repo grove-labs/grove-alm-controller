@@ -19,8 +19,6 @@ interface IUniswapV3PoolLikeTickSpacing is IUniswapV3PoolLike {
 }
 
 contract UniswapV3TestBase is ForkTestBase {
-    address constant UNISWAP_V3_ROUTER           = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
-    address constant UNISWAP_V3_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     address constant UNISWAP_V3_USDC_USDT_POOL   = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
     address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
 
@@ -86,9 +84,7 @@ contract UniswapV3TestBase is ForkTestBase {
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
-        
-        mainnetController.setUniswapV3PositionManager(UNISWAP_V3_POSITION_MANAGER);
-        mainnetController.setUniswapV3Router(UNISWAP_V3_ROUTER);
+
         vm.stopPrank();
 
         pool               = IUniswapV3PoolLike(_getPool());
@@ -247,25 +243,6 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             1,
             100
         );
-    }
-
-    function test_swapUniswapV3_routerNotSet() public {
-        uint256 amountIn = 100_000e6;
-        _fundProxy(amountIn, 0);
-
-        vm.prank(GROVE_PROXY);
-        mainnetController.setUniswapV3Router(address(0));
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/router-not-set");
-        mainnetController.swapUniswapV3(
-            _getPool(),
-            address(token0),
-            amountIn,
-            0,
-            200
-        );
-        vm.stopPrank();
     }
 
     function test_swapUniswapV3_maxSlippageNotSet() public {

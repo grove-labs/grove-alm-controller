@@ -88,6 +88,8 @@ contract MainnetControllerDeployTests is UnitTestBase {
         address admin;
         address vault;
         address cctp;
+        address uniswapV3Router;
+        address uniswapV3PositionManager;
     }
 
     function test_deployController() public {
@@ -97,8 +99,10 @@ contract MainnetControllerDeployTests is UnitTestBase {
         vars.psm     = address(new MockPSM(makeAddr("usdc")));
         vars.vault   = address(new MockVault(makeAddr("buffer")));
 
-        vars.admin = makeAddr("admin");
-        vars.cctp  = makeAddr("cctp");
+        vars.admin                    = makeAddr("admin");
+        vars.cctp                     = makeAddr("cctp");
+        vars.uniswapV3Router          = makeAddr("uniswapV3Router");
+        vars.uniswapV3PositionManager = makeAddr("uniswapV3PositionManager");
 
         address almProxy   = address(new ALMProxy(admin));
         address rateLimits = address(new RateLimits(admin));
@@ -111,7 +115,9 @@ contract MainnetControllerDeployTests is UnitTestBase {
                 vars.vault,
                 vars.psm,
                 vars.daiUsds,
-                vars.cctp
+                vars.cctp,
+                vars.uniswapV3Router,
+                vars.uniswapV3PositionManager
             )
         );
 
@@ -137,15 +143,19 @@ contract MainnetControllerDeployTests is UnitTestBase {
         vars.psm     = address(new MockPSM(makeAddr("usdc")));
         vars.vault   = address(new MockVault(makeAddr("buffer")));
 
-        vars.admin  = makeAddr("admin");
-        vars.cctp   = makeAddr("cctp");
+        vars.admin                    = makeAddr("admin");
+        vars.cctp                     = makeAddr("cctp");
+        vars.uniswapV3Router          = makeAddr("uniswapV3Router");
+        vars.uniswapV3PositionManager = makeAddr("uniswapV3PositionManager");
 
         ControllerInstance memory instance = MainnetControllerDeploy.deployFull(
             admin,
             vars.vault,
             vars.psm,
             vars.daiUsds,
-            vars.cctp
+            vars.cctp,
+            vars.uniswapV3Router,
+            vars.uniswapV3PositionManager
         );
 
         ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));

@@ -67,8 +67,6 @@ contract MainnetController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
-    event UniswapV3RouterSet(address indexed router);
-    event UniswapV3PositionManagerSet(address indexed positionManager);
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
@@ -149,17 +147,21 @@ contract MainnetController is AccessControl {
         address vault_,
         address psm_,
         address daiUsds_,
-        address cctp_
+        address cctp_,
+        address uniswapV3Router_,
+        address uniswapV3PositionManager_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
-        proxy      = IALMProxy(proxy_);
-        rateLimits = IRateLimits(rateLimits_);
-        vault      = IVaultLike(vault_);
-        buffer     = IVaultLike(vault_).buffer();
-        psm        = IPSMLike(psm_);
-        daiUsds    = IDaiUsdsLike(daiUsds_);
-        cctp       = ICCTPLike(cctp_);
+        proxy                    = IALMProxy(proxy_);
+        rateLimits               = IRateLimits(rateLimits_);
+        vault                    = IVaultLike(vault_);
+        buffer                   = IVaultLike(vault_).buffer();
+        psm                      = IPSMLike(psm_);
+        daiUsds                  = IDaiUsdsLike(daiUsds_);
+        cctp                     = ICCTPLike(cctp_);
+        uniswapV3Router          = ISwapRouter(uniswapV3Router_);
+        uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
 
         ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
 
@@ -197,18 +199,6 @@ contract MainnetController is AccessControl {
         _checkRole(DEFAULT_ADMIN_ROLE);
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
-    }
-
-    function setUniswapV3Router(address router) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3Router = ISwapRouter(router);
-        emit UniswapV3RouterSet(router);
-    }
-
-    function setUniswapV3PositionManager(address positionManager) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-        uniswapV3PositionManager = INonfungiblePositionManager(positionManager);
-        emit UniswapV3PositionManagerSet(positionManager);
     }
 
     function setUniswapV3PoolMaxTickDelta(address pool, uint24 maxTickDelta) external {

@@ -35,7 +35,9 @@ contract MainnetControllerAdminTestBase is UnitTestBase {
             address(vault),
             address(psm),
             address(daiUsds),
-            makeAddr("cctp")
+            makeAddr("cctp"),
+            makeAddr("uniswapV3Router"),
+            makeAddr("uniswapV3PositionManager")
         );
     }
 

@@ -29,8 +29,10 @@ contract MainnetControllerHarness is MainnetController {
         address vault_,
         address psm_,
         address daiUsds_,
-        address cctp_
-    ) MainnetController(admin_, proxy_, rateLimits_, vault_, psm_, daiUsds_, cctp_) {}
+        address cctp_,
+        address uniswapV3Router_,
+        address uniswapV3PositionManager_
+    ) MainnetController(admin_, proxy_, rateLimits_, vault_, psm_, daiUsds_, cctp_, uniswapV3Router_, uniswapV3PositionManager_) {}
 
     function approve(address token, address spender, uint256 amount) external {
         ERC20Lib.approve(proxy, token, spender, amount);
@@ -108,7 +110,9 @@ contract MainnetControllerApproveSuccessTests is ApproveTestBase {
             address(mainnetController.vault()),
             address(mainnetController.psm()),
             address(mainnetController.daiUsds()),
-            address(mainnetController.cctp())
+            address(mainnetController.cctp()),
+            address(mainnetController.uniswapV3Router()),
+            address(mainnetController.uniswapV3PositionManager())
         );
 
         vm.etch(address(mainnetController), address(harnessCode).code);

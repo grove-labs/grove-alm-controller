@@ -50,13 +50,15 @@ contract UpgradeMainnetController is Script {
         });
 
         MainnetInit.CheckAddressParams memory checkAddresses = MainnetInit.CheckAddressParams({
-            admin      : inputConfig.readAddress(".admin"),
-            proxy      : inputConfig.readAddress(".almProxy"),
-            rateLimits : inputConfig.readAddress(".rateLimits"),
-            vault      : inputConfig.readAddress(".allocatorVault"),
-            psm        : inputConfig.readAddress(".psm"),
-            daiUsds    : inputConfig.readAddress(".daiUsds"),
-            cctp       : inputConfig.readAddress(".cctpTokenMessenger")
+            admin                    : inputConfig.readAddress(".admin"),
+            proxy                    : inputConfig.readAddress(".almProxy"),
+            rateLimits               : inputConfig.readAddress(".rateLimits"),
+            vault                    : inputConfig.readAddress(".allocatorVault"),
+            psm                      : inputConfig.readAddress(".psm"),
+            daiUsds                  : inputConfig.readAddress(".daiUsds"),
+            cctp                     : inputConfig.readAddress(".cctpTokenMessenger"),
+            uniswapV3Router          : inputConfig.readAddress(".uniswapV3Router"),
+            uniswapV3PositionManager : inputConfig.readAddress(".uniswapV3PositionManager")
         });
 
         MainnetInit.MintRecipient[] memory mintRecipients = new MainnetInit.MintRecipient[](1);
