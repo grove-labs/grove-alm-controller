@@ -1116,7 +1116,6 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
     function test_removeLiquidityUniswapV3_rateLimitExceeded_token0() public {
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey, 1, 0);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey, 1, 0);
         vm.stopPrank();
 
         vm.startPrank(relayer);
@@ -1133,7 +1132,6 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_rateLimitExceeded_token1() public {
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey, 1, 0);
         rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey, 1, 0);
         vm.stopPrank();
 
