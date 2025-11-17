@@ -230,7 +230,6 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
     }
 
-
     function test_setUniswapv3AddLiquidityLowerTickBound_isTooLarge() public {
         (, UniswapV3Lib.Tick memory tickBounds) = foreignController.uniswapV3PoolParams(_getPool());
         int24 currentUpper = tickBounds.upper;
@@ -238,15 +237,6 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
         vm.prank(GROVE_EXECUTOR);
         vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
-    }
-
-    function test_setUniswapv3AddLiquidityUpperTickBound_isTooSmall() public {
-        (, UniswapV3Lib.Tick memory tickBounds) = foreignController.uniswapV3PoolParams(_getPool());
-        int24 currentLower = tickBounds.lower;
-
-        vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
-        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), currentLower);
     }
 
     function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {

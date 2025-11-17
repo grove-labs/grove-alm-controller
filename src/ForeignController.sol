@@ -98,12 +98,12 @@ contract ForeignController is AccessControl {
     int24 internal MIN_TICK = -887_272;
     int24 internal MAX_TICK =  887_272;
 
-    IALMProxy   public immutable proxy;
-    ICCTPLike   public immutable cctp;
-    IPSM3       public immutable psm;
-    IRateLimits public immutable rateLimits;
-    IERC20      public immutable usdc;
-    address     public immutable pendleRouter;
+    IALMProxy   public proxy;
+    ICCTPLike   public cctp;
+    IPSM3       public psm;
+    IRateLimits public rateLimits;
+    IERC20      public usdc;
+    address     public pendleRouter;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
