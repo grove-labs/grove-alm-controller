@@ -1146,6 +1146,32 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         );
         vm.stopPrank();
     }
+
+    function test_removeLiquidityUniswapV3_minAmount0BelowBound() public {
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_minAmount1BelowBound() public {
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
 }
 
 contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
