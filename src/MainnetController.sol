@@ -13,11 +13,10 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { Ethereum } from "grove-address-registry/Ethereum.sol";
 
-import { IALMProxy }             from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }             from "./interfaces/CCTPInterfaces.sol";
-import { IMerklDistributorLike } from "./interfaces/MerklInterfaces.sol";
-import { IPendleMarket }         from "./interfaces/PendleInterfaces.sol";
-import { IRateLimits }           from "./interfaces/IRateLimits.sol";
+import { IALMProxy }     from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
+import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
+import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 
 import "./interfaces/ILayerZero.sol";
 
@@ -100,14 +99,13 @@ contract MainnetController is AccessControl {
 
     address public buffer;
 
-    IALMProxy             public proxy;
-    ICCTPLike             public cctp;
-    IDaiUsdsLike          public daiUsds;
-    IEthenaMinterLike     public ethenaMinter;
-    IPSMLike              public psm;
-    IRateLimits           public rateLimits;
-    IVaultLike            public vault;
-    IMerklDistributorLike public merklDistributor;
+    IALMProxy         public proxy;
+    ICCTPLike         public cctp;
+    IDaiUsdsLike      public daiUsds;
+    IEthenaMinterLike public ethenaMinter;
+    IPSMLike          public psm;
+    IRateLimits       public rateLimits;
+    IVaultLike        public vault;
 
     IERC20     public dai;
     IERC20     public usds;
@@ -146,8 +144,7 @@ contract MainnetController is AccessControl {
         daiUsds    = IDaiUsdsLike(daiUsds_);
         cctp       = ICCTPLike(cctp_);
 
-        ethenaMinter     = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
-        merklDistributor = IMerklDistributorLike(Ethereum.MERKL_DISTRIBUTOR);
+        ethenaMinter = IEthenaMinterLike(Ethereum.ETHENA_MINTER);
 
         susde = ISUSDELike(Ethereum.SUSDE);
         dai   = IERC20(daiUsds.dai());
@@ -757,7 +754,7 @@ contract MainnetController is AccessControl {
 
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
-            distributor : merklDistributor,
+            distributor : Ethereum.MERKL_DISTRIBUTOR,
             operator    : operator
         }));
     }

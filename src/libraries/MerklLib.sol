@@ -7,15 +7,15 @@ import { IMerklDistributorLike } from "../interfaces/MerklInterfaces.sol";
 library MerklLib {
 
     struct MerklToggleOperatorParams {
-        IALMProxy             proxy;
-        IMerklDistributorLike distributor;
-        address               operator;
+        IALMProxy proxy;
+        address   distributor;
+        address   operator;
     }
 
     function toggleOperator(MerklToggleOperatorParams memory params) external {
         params.proxy.doCall(
-            address(params.distributor),
-            abi.encodeCall(params.distributor.toggleOperator, (address(params.proxy), params.operator))
+            params.distributor,
+            abi.encodeCall(IMerklDistributorLike.toggleOperator, (address(params.proxy), params.operator))
         );
     }
 
