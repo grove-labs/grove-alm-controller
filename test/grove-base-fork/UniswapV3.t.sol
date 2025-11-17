@@ -121,8 +121,8 @@ contract UniswapV3TestBase is ForkTestBase {
         initTick       = TickMath.getTickAtSqrtRatio(_getInitialSqrtPriceX96(address(token0), address(token1)));
 
         vm.startPrank(GROVE_EXECUTOR);
-        foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick-1000);
-        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), initTick+1000);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick - 1000);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), initTick + 1000);
         vm.stopPrank();
 
         _label();
