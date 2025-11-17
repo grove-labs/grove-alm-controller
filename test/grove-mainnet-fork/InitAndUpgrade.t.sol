@@ -270,6 +270,16 @@ contract MainnetControllerInitAndUpgradeFailureTest is MainnetControllerInitAndU
         _checkInitAndUpgradeFail(abi.encodePacked("MainnetControllerInit/incorrect-cctp"));
     }
 
+    function test_initAlmSystem_upgradeController_incorrectUniswapV3Router() external {
+        checkAddresses.uniswapV3Router = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("MainnetControllerInit/incorrect-uniswapV3Router"));
+    }
+
+    function test_initAlmSystem_upgradeController_incorrectUniswapV3PositionManager() external {
+        checkAddresses.uniswapV3PositionManager = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("MainnetControllerInit/incorrect-uniswapV3PositionManager"));
+    }
+
     function test_initAlmSystem_upgradeController_oldControllerIsNewController() external {
         configAddresses.oldController = controllerInst.controller;
         _checkInitAndUpgradeFail(abi.encodePacked("MainnetControllerInit/old-controller-is-new-controller"));

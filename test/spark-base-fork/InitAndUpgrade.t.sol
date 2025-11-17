@@ -240,6 +240,21 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
         _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/old-controller-is-new-controller"));
     }
 
+    function test_initAlmSystem_upgradeController_incorrectPendleRouter() external {
+        checkAddresses.pendleRouter = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/incorrect-pendleRouter"));
+    }
+
+    function test_initAlmSystem_upgradeController_incorrectUniswapV3Router() external {
+        checkAddresses.uniswapV3Router = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/incorrect-uniswapV3Router"));
+    }
+
+    function test_initAlmSystem_upgradeController_incorrectUniswapV3PositionManager() external {
+        checkAddresses.uniswapV3PositionManager = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/incorrect-uniswapV3PositionManager"));
+    }
+
     /**********************************************************************************************/
     /*** PSM tests                                                                              ***/
     /**********************************************************************************************/
