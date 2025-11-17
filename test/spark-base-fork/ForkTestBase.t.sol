@@ -49,12 +49,13 @@ contract ForkTestBase is Test {
     /*** Base addresses                                                                         ***/
     /**********************************************************************************************/
 
-    address constant SPARK_EXECUTOR      = Base.SPARK_EXECUTOR;
-    address constant CCTP_MESSENGER_BASE = GroveBase.CCTP_TOKEN_MESSENGER_V2;
-    address constant USDC_BASE           = Base.USDC;
-    address constant SSR_ORACLE          = Base.SSR_AUTH_ORACLE;
+    address constant SPARK_EXECUTOR         = Base.SPARK_EXECUTOR;
+    address constant CCTP_MESSENGER_BASE    = GroveBase.CCTP_TOKEN_MESSENGER_V2;
+    address constant USDC_BASE              = Base.USDC;
+    address constant SSR_ORACLE             = Base.SSR_AUTH_ORACLE;
     // TODO: Get this from the registry after added there
-    address constant PENDLE_ROUTER_BASE  = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant PENDLE_ROUTER_BASE     = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant MERKL_DISTRIBUTOR_BASE = 0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -104,11 +105,12 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            usdc         : USDC_BASE,
-            cctp         : CCTP_MESSENGER_BASE,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin            : SPARK_EXECUTOR,
+            psm              : address(psmBase),
+            usdc             : USDC_BASE,
+            cctp             : CCTP_MESSENGER_BASE,
+            merklDistributor : MERKL_DISTRIBUTOR_BASE,
+            pendleRouter     : PENDLE_ROUTER_BASE
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -131,11 +133,12 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            usdc         : address(usdcBase),
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin            : Base.SPARK_EXECUTOR,
+            psm              : address(psmBase),
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            usdc             : address(usdcBase),
+            merklDistributor : MERKL_DISTRIBUTOR_BASE,
+            pendleRouter     : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });

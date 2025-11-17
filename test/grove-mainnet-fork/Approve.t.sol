@@ -51,8 +51,9 @@ contract ForeignControllerHarness is ForeignController {
         address psm_,
         address usdc_,
         address cctp_,
+        address merklDistributor_,
         address pendleRouter_
-    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, pendleRouter_) {}
+    ) ForeignController(admin_, proxy_, rateLimits_, psm_, usdc_, cctp_, merklDistributor_, pendleRouter_) {}
 
     function approve(address token, address spender, uint256 amount) external {
         ERC20Lib.approve(proxy, token, spender, amount);
@@ -177,6 +178,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("merklDistributor"),
             makeAddr("pendleRouter")
         );
 
@@ -187,6 +189,7 @@ contract ForeignControllerApproveSuccessTests is ApproveTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("merklDistributor"),
             makeAddr("pendleRouter")
         );
 

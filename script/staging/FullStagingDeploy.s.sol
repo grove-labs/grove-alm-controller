@@ -309,11 +309,12 @@ contract FullStagingDeploy is Script {
         // Step 1: Deploy ALM controller
 
         controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : domain.admin,
-            psm          : domain.input.readAddress(".psm"),
-            usdc         : domain.input.readAddress(".usdc"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
+            admin            : domain.admin,
+            psm              : domain.input.readAddress(".psm"),
+            usdc             : domain.input.readAddress(".usdc"),
+            cctp             : domain.input.readAddress(".cctpTokenMessenger"),
+            merklDistributor : domain.input.readAddress(".merklDistributor"),
+            pendleRouter     : domain.input.readAddress(".pendleRouter")
         });
 
         // Step 2: Initialize ALM system
@@ -328,11 +329,12 @@ contract FullStagingDeploy is Script {
         });
 
         ForeignControllerInit.CheckAddressParams memory checkAddresses = ForeignControllerInit.CheckAddressParams({
-            admin        : domain.admin,
-            psm          : domain.input.readAddress(".psm"),
-            cctp         : domain.input.readAddress(".cctpTokenMessenger"),
-            usdc         : domain.input.readAddress(".usdc"),
-            pendleRouter : domain.input.readAddress(".pendleRouter")
+            admin            : domain.admin,
+            psm              : domain.input.readAddress(".psm"),
+            cctp             : domain.input.readAddress(".cctpTokenMessenger"),
+            usdc             : domain.input.readAddress(".usdc"),
+            merklDistributor : domain.input.readAddress(".merklDistributor"),
+            pendleRouter     : domain.input.readAddress(".pendleRouter")
             // susds : domain.input.readAddress(".susds"),
             // usds  : domain.input.readAddress(".usds")
         });

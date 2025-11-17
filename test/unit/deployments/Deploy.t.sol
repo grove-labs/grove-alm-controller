@@ -12,11 +12,12 @@ import "../UnitTestBase.t.sol";
 contract ForeignControllerDeployTests is UnitTestBase {
 
     function test_deployController() public {
-        address admin        = makeAddr("admin");
-        address psm          = makeAddr("psm");
-        address usdc         = makeAddr("usdc");
-        address cctp         = makeAddr("cctp");
-        address pendleRouter = makeAddr("pendleRouter");
+        address admin            = makeAddr("admin");
+        address psm              = makeAddr("psm");
+        address usdc             = makeAddr("usdc");
+        address cctp             = makeAddr("cctp");
+        address merklDistributor = makeAddr("merklDistributor");
+        address pendleRouter     = makeAddr("pendleRouter");
 
         address almProxy   = address(new ALMProxy(admin));
         address rateLimits = address(new RateLimits(admin));
@@ -29,6 +30,7 @@ contract ForeignControllerDeployTests is UnitTestBase {
                 psm,
                 usdc,
                 cctp,
+                merklDistributor,
                 pendleRouter
             )
         );
@@ -44,14 +46,15 @@ contract ForeignControllerDeployTests is UnitTestBase {
     }
 
     function test_deployFull() public {
-        address admin        = makeAddr("admin");
-        address psm          = makeAddr("psm");
-        address usdc         = makeAddr("usdc");
-        address cctp         = makeAddr("cctp");
-        address pendleRouter = makeAddr("pendleRouter");
+        address admin            = makeAddr("admin");
+        address psm              = makeAddr("psm");
+        address usdc             = makeAddr("usdc");
+        address cctp             = makeAddr("cctp");
+        address merklDistributor = makeAddr("merklDistributor");
+        address pendleRouter     = makeAddr("pendleRouter");
 
         ControllerInstance memory instance
-            = ForeignControllerDeploy.deployFull(admin, psm, usdc, cctp, pendleRouter);
+            = ForeignControllerDeploy.deployFull(admin, psm, usdc, cctp, merklDistributor, pendleRouter);
 
         ALMProxy          almProxy   = ALMProxy(payable(instance.almProxy));
         ForeignController controller = ForeignController(instance.controller);

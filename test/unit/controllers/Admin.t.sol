@@ -198,6 +198,7 @@ contract ForeignControllerAdminTestBase is UnitTestBase {
             makeAddr("psm"),
             makeAddr("usdc"),
             makeAddr("cctp"),
+            makeAddr("merklDistributor"),
             makeAddr("pendleRouter")
         );
     }

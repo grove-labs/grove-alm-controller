@@ -106,6 +106,7 @@ contract ForeignControllerRemoveRelayerTests is UnitTestBase {
             address(psm3),
             usdc,
             makeAddr("cctp"),
+            makeAddr("merklDistributor"),
             makeAddr("pendleRouter")
         );
 

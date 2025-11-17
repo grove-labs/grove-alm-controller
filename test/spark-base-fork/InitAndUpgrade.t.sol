@@ -63,11 +63,12 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
         });
 
         checkAddresses = Init.CheckAddressParams({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : address(psmBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            usdc         : address(usdcBase),
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin            : Base.SPARK_EXECUTOR,
+            psm              : address(psmBase),
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            usdc             : address(usdcBase),
+            merklDistributor : MERKL_DISTRIBUTOR_BASE,
+            pendleRouter     : PENDLE_ROUTER_BASE
             // susds : address(susdsBase),
             // usds  : address(usdsBase)
         });
@@ -125,13 +126,14 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
         // NOTE: initAlmSystem will redundantly call rely and approve on already inited
         //       almProxy and rateLimits, this setup was chosen to easily test upgrade and init failures
         foreignController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : address(psmBase),
-            usdc         : address(usdcBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin            : Base.SPARK_EXECUTOR,
+            almProxy         : address(almProxy),
+            rateLimits       : address(rateLimits),
+            psm              : address(psmBase),
+            usdc             : address(usdcBase),
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            merklDistributor : MERKL_DISTRIBUTOR_BASE,
+            pendleRouter     : PENDLE_ROUTER_BASE
         }));
 
         Init.MintRecipient[] memory mintRecipients_ = new Init.MintRecipient[](1);
@@ -307,6 +309,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            address(0), // No Merkl Distributor on Base
             PENDLE_ROUTER_BASE
         );
 
@@ -334,6 +337,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            MERKL_DISTRIBUTOR_BASE,
             PENDLE_ROUTER_BASE
         );
 
@@ -361,6 +365,7 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             address(psmBase),
             USDC_BASE,
             CCTP_MESSENGER_BASE,
+            MERKL_DISTRIBUTOR_BASE,
             PENDLE_ROUTER_BASE
         );
 
@@ -501,6 +506,7 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             address(psmBase),
             address(usdcBase),
             GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            MERKL_DISTRIBUTOR_BASE,
             PENDLE_ROUTER_BASE
         );
 
@@ -610,13 +616,14 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
         centrifugeRecipients.push(centrifugeRecipients_[0]);
 
         newController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : address(psmBase),
-            usdc         : address(usdcBase),
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER_BASE
+            admin            : Base.SPARK_EXECUTOR,
+            almProxy         : address(almProxy),
+            rateLimits       : address(rateLimits),
+            psm              : address(psmBase),
+            usdc             : address(usdcBase),
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            merklDistributor : MERKL_DISTRIBUTOR_BASE,
+            pendleRouter     : PENDLE_ROUTER_BASE
         }));
 
         controllerInst = ControllerInstance({

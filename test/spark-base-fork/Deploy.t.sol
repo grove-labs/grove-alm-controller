@@ -9,17 +9,19 @@ import "./ForkTestBase.t.sol";
 contract ForeignControllerDeploySuccessTests is ForkTestBase {
 
     // TODO: Get this from the registry after added there
-    address constant PENDLE_ROUTER = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant PENDLE_ROUTER     = 0x888888888889758F76e7103c6CbF23ABbF58F946;
+    address constant MERKL_DISTRIBUTOR = 0x3Ef3D8bA38EBe18DB133cEc108f4D14CE00Dd9Ae;
 
     function test_deployFull() external {
         // Perform new deployments against existing fork environment
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin        : Base.SPARK_EXECUTOR,
-            psm          : Base.PSM3,
-            usdc         : Base.USDC,
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER
+            admin            : Base.SPARK_EXECUTOR,
+            psm              : Base.PSM3,
+            usdc             : Base.USDC,
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            merklDistributor : MERKL_DISTRIBUTOR,
+            pendleRouter     : PENDLE_ROUTER
         });
 
         ALMProxy          newAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -39,13 +41,14 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
         // Perform new deployments against existing fork environment
 
         ForeignController newController = ForeignController(ForeignControllerDeploy.deployController({
-            admin        : Base.SPARK_EXECUTOR,
-            almProxy     : address(almProxy),
-            rateLimits   : address(rateLimits),
-            psm          : Base.PSM3,
-            usdc         : Base.USDC,
-            cctp         : GroveBase.CCTP_TOKEN_MESSENGER_V2,
-            pendleRouter : PENDLE_ROUTER
+            admin            : Base.SPARK_EXECUTOR,
+            almProxy         : address(almProxy),
+            rateLimits       : address(rateLimits),
+            psm              : Base.PSM3,
+            usdc             : Base.USDC,
+            cctp             : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            merklDistributor : MERKL_DISTRIBUTOR,
+            pendleRouter     : PENDLE_ROUTER
         }));
 
         _assertControllerInitState(newController, address(almProxy), address(rateLimits));

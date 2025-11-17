@@ -133,11 +133,12 @@ contract DeployForeignFull is ForeignScript {
         vm.startBroadcast();
 
         ControllerInstance memory instance = ForeignControllerDeploy.deployFull({
-            admin        : config.readAddress(".admin"),
-            psm          : config.readAddress(".psm"),
-            usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            admin            : config.readAddress(".admin"),
+            psm              : config.readAddress(".psm"),
+            usdc             : config.readAddress(".usdc"),
+            cctp             : config.readAddress(".cctpTokenMessenger"),
+            merklDistributor : config.readAddress(".merklDistributor"),
+            pendleRouter     : config.readAddress(".pendleRouter")
         });
 
         vm.stopBroadcast();
@@ -175,13 +176,14 @@ contract DeployForeignController is ForeignScript {
         vm.startBroadcast();
 
         address controller = ForeignControllerDeploy.deployController({
-            admin        : config.readAddress(".admin"),
-            almProxy     : config.readAddress(".almProxy"),
-            rateLimits   : config.readAddress(".rateLimits"),
-            psm          : config.readAddress(".psm"),
-            usdc         : config.readAddress(".usdc"),
-            cctp         : config.readAddress(".cctpTokenMessenger"),
-            pendleRouter : config.readAddress(".pendleRouter")
+            admin            : config.readAddress(".admin"),
+            almProxy         : config.readAddress(".almProxy"),
+            rateLimits       : config.readAddress(".rateLimits"),
+            psm              : config.readAddress(".psm"),
+            usdc             : config.readAddress(".usdc"),
+            cctp             : config.readAddress(".cctpTokenMessenger"),
+            merklDistributor : config.readAddress(".merklDistributor"),
+            pendleRouter     : config.readAddress(".pendleRouter")
         });
 
         vm.stopBroadcast();
