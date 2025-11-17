@@ -55,6 +55,7 @@ contract MainnetControllerToggleOperatorMerklSuccessTests is MerklBaseTest {
         mainnetController.toggleOperatorMerkl(operator1);
 
         assertEq(merklDistributor.operators(address(almProxy), operator1), 1);
+
     }
 
     function test_toggleOperatorMerkl_multipleOperators() external {
@@ -84,6 +85,7 @@ contract MainnetControllerToggleOperatorMerklSuccessTests is MerklBaseTest {
 
         assertEq(merklDistributor.operators(address(almProxy), operator1), 1);
         assertEq(merklDistributor.operators(address(almProxy), operator2), 1);
+
     }
 
 }

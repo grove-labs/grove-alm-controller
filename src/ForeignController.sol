@@ -15,14 +15,12 @@ import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.s
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
-import { IALMProxy }             from "./interfaces/IALMProxy.sol";
-import { ICCTPLike }             from "./interfaces/CCTPInterfaces.sol";
-import { IRateLimits }           from "./interfaces/IRateLimits.sol";
-import { IMerklDistributorLike } from "./interfaces/MerklInterfaces.sol";
-import { IPendleMarket }         from "./interfaces/PendleInterfaces.sol";
+import { IALMProxy }     from "./interfaces/IALMProxy.sol";
+import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
+import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { CurveLib }  from "./libraries/CurveLib.sol";
-import { MerklLib }  from "./libraries/MerklLib.sol";
 import { PendleLib } from "./libraries/PendleLib.sol";
 import { CCTPLib }   from "./libraries/CCTPLib.sol";
 import { ERC20Lib }  from "./libraries/common/ERC20Lib.sol";
@@ -87,13 +85,12 @@ contract ForeignController is AccessControl {
 
     uint256 internal constant CENTRIFUGE_REQUEST_ID = 0;
 
-    IALMProxy             public immutable proxy;
-    ICCTPLike             public immutable cctp;
-    IPSM3                 public immutable psm;
-    IRateLimits           public immutable rateLimits;
-    IERC20                public immutable usdc;
-    IMerklDistributorLike public immutable merklDistributor;
-    address               public immutable pendleRouter;
+    IALMProxy   public immutable proxy;
+    ICCTPLike   public immutable cctp;
+    IPSM3       public immutable psm;
+    IRateLimits public immutable rateLimits;
+    IERC20      public immutable usdc;
+    address     public immutable pendleRouter;
 
     mapping(address pool                    => uint256 maxSlippage)        public maxSlippages;  // 1e18 precision
     mapping(uint32  destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
@@ -111,18 +108,16 @@ contract ForeignController is AccessControl {
         address psm_,
         address usdc_,
         address cctp_,
-        address merklDistributor_,
         address pendleRouter_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
-        proxy            = IALMProxy(proxy_);
-        rateLimits       = IRateLimits(rateLimits_);
-        psm              = IPSM3(psm_);
-        usdc             = IERC20(usdc_);
-        cctp             = ICCTPLike(cctp_);
-        merklDistributor = IMerklDistributorLike(merklDistributor_);
-        pendleRouter     = pendleRouter_;
+        proxy        = IALMProxy(proxy_);
+        rateLimits   = IRateLimits(rateLimits_);
+        psm          = IPSM3(psm_);
+        usdc         = IERC20(usdc_);
+        cctp         = ICCTPLike(cctp_);
+        pendleRouter = pendleRouter_;
     }
 
     /**********************************************************************************************/
@@ -672,19 +667,6 @@ contract ForeignController is AccessControl {
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
-        }));
-    }
-
-    /**********************************************************************************************/
-    /*** Relayer Merkl functions                                                                 ***/
-    /**********************************************************************************************/
-
-    function toggleOperatorMerkl(address operator) external {
-        _checkRole(RELAYER);
-        MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
-            proxy        : proxy,
-            distributor  : merklDistributor,
-            operator     : operator
         }));
     }
 

@@ -56,7 +56,6 @@ contract ForkTestBase is Test {
     address constant CCTP_TOKEN_MESSENGER = Avalanche.CCTP_TOKEN_MESSENGER_V2;
     address constant GROVE_EXECUTOR       = Avalanche.GROVE_EXECUTOR;
     address constant USDC_AVALANCHE       = Avalanche.USDC;
-    address constant MERKL_DISTRIBUTOR    = Avalanche.MERKL_DISTRIBUTOR;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -110,12 +109,11 @@ contract ForkTestBase is Test {
         /*** Step 3: Deploy ALM system ***/
 
         ControllerInstance memory controllerInst = ForeignControllerDeploy.deployFull({
-            admin            : GROVE_EXECUTOR,
-            psm              : address(psmAvalanche),
-            usdc             : USDC_AVALANCHE,
-            cctp             : CCTP_TOKEN_MESSENGER,
-            merklDistributor : MERKL_DISTRIBUTOR,
-            pendleRouter     : address(0) // No Pendle Router on Avalanche
+            admin        : GROVE_EXECUTOR,
+            psm          : address(psmAvalanche),
+            usdc         : USDC_AVALANCHE,
+            cctp         : CCTP_TOKEN_MESSENGER,
+            pendleRouter : address(0) // No Pendle Router on Avalanche
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -138,12 +136,11 @@ contract ForkTestBase is Test {
         });
 
         Init.CheckAddressParams memory checkAddresses = Init.CheckAddressParams({
-            admin            : GROVE_EXECUTOR,
-            psm              : address(psmAvalanche),
-            cctp             : CCTP_TOKEN_MESSENGER,
-            usdc             : USDC_AVALANCHE,
-            merklDistributor : MERKL_DISTRIBUTOR,
-            pendleRouter     : address(0) // No Pendle Router on Avalanche
+            admin        : GROVE_EXECUTOR,
+            psm          : address(psmAvalanche),
+            cctp         : CCTP_TOKEN_MESSENGER,
+            usdc         : USDC_AVALANCHE,
+            pendleRouter : address(0) // No Pendle Router on Avalanche
             // susds : address(susdsAvalanche),
             // usds  : address(usdsAvalanche)
         });
