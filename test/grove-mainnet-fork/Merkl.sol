@@ -120,6 +120,8 @@ contract MainnetControllerToggleOperatorMerklSuccessTests is MerklBaseTest {
         vm.prank(relayer);
         mainnetController.toggleOperatorMerkl(operator1);
 
+        // Hitting the InvalidProof() error proves that we are whitelisted as operator1
+        // (https://github.com/AngleProtocol/merkl-contracts/blob/e4c49c1fbfb274029d31969adf70ca6aeec689f0/contracts/Distributor.sol#L378-L383)
         vm.expectRevert(abi.encodeWithSignature("InvalidProof()"));
         vm.prank(operator1);
         merklDistributor.claim(users, tokens, amounts, proofs);
