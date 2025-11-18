@@ -135,8 +135,6 @@ contract UpgradeForeignController is Script {
             pendleRouter             : inputConfig.readAddress(".pendleRouter"),
             uniswapV3Router          : inputConfig.readAddress(".uniswapV3Router"),
             uniswapV3PositionManager : inputConfig.readAddress(".uniswapV3PositionManager")
-            // susds : inputConfig.readAddress(".susds"),
-            // usds  : inputConfig.readAddress(".usds")
         });
 
         string memory mainnetInputConfig = ScriptTools.readInput(string(abi.encodePacked("mainnet-", vm.envString("ENV"))));

@@ -70,8 +70,6 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
             uniswapV3PositionManager : address(0xdeadbeef)
-            // susds : address(susdsBase),
-            // usds  : address(usdsBase)
         });
 
         mintRecipients = new Init.MintRecipient[](1);

@@ -140,8 +140,6 @@ contract ForkTestBase is Test {
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xDeadBeef), // unused
             uniswapV3PositionManager : address(0xDeadBeef)  // unused
-            // susds : address(susdsBase),
-            // usds  : address(usdsBase)
         });
 
         Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);

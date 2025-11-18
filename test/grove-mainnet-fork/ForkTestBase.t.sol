@@ -99,6 +99,7 @@ contract ForkTestBase is DssTest {
     address constant PAUSE_PROXY                 = Ethereum.PAUSE_PROXY;
     address constant PSM                         = Ethereum.PSM;
     address constant GROVE_PROXY                 = Ethereum.GROVE_PROXY;
+    // TODO: add to grove-address-registry
     address constant UNISWAP_V3_ROUTER           = 0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45;
     address constant UNISWAP_V3_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
 

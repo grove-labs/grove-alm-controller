@@ -100,7 +100,7 @@ library UniswapV3Lib {
         amountOut = _callSwap(context, params, cache);
 
         uint256 endingBalance = IERC20(cache.tokenOut).balanceOf(address(context.proxy));
-        require(params.minAmountOut * 1e18 >= (endingBalance - startingBalance) * params.maxSlippage, "UniswapV3Lib/min-amount-not-met");
+        require(params.minAmountOut >= (endingBalance - startingBalance) * params.maxSlippage / 1e18 , "UniswapV3Lib/min-amount-not-met");
     }
 
     function addLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
@@ -243,13 +243,13 @@ library UniswapV3Lib {
             abi.encodeWithSelector(
                 ISwapRouter.exactInputSingle.selector,
                 ISwapRouter.ExactInputSingleParams({
-                    tokenIn          : params.tokenIn,
-                    tokenOut         : cache.tokenOut,
-                    fee              : pool.fee(),
-                    recipient        : address(context.proxy),
-                    amountIn         : params.amountIn,
-                    amountOutMinimum : params.minAmountOut,
-                    sqrtPriceLimitX96: cache.sqrtPriceLimitX96
+                    tokenIn           : params.tokenIn,
+                    tokenOut          : cache.tokenOut,
+                    fee               : pool.fee(),
+                    recipient         : address(context.proxy),
+                    amountIn          : params.amountIn,
+                    amountOutMinimum  : params.minAmountOut,
+                    sqrtPriceLimitX96 : cache.sqrtPriceLimitX96
                 })
             )
         );

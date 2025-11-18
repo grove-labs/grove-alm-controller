@@ -147,8 +147,6 @@ contract ForkTestBase is Test {
             pendleRouter             : address(0), // No Pendle Router on Avalanche
             uniswapV3Router          : UNISWAP_V3_ROUTER,
             uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER
-            // susds : address(susdsAvalanche),
-            // usds  : address(usdsAvalanche)
         });
 
         Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);

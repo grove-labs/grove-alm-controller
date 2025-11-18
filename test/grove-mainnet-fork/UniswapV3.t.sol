@@ -14,12 +14,6 @@ import { UniswapV3Lib }                                    from "../../src/libra
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 
-import {
-    MockPositionManagerZeroLiquidity,
-    MockPositionManagerPositionsCallFailure,
-    MockPositionManagerPositionsShortReturn
-} from "../unit/mocks/MockUniswapV3PositionManager.sol";
-
 interface IUniswapV3PoolLikeTickSpacing is IUniswapV3PoolLike {
     function tickSpacing() external view returns (int24);
 }
@@ -565,11 +559,33 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         _fundProxy(desired.amount0, desired.amount1);
     }
 
-    function _overridePositionManager(address newManager) internal {
-        stdstore
-            .target(address(mainnetController))
-            .sig("uniswapV3PositionManager()")
-            .checked_write(newManager);
+    function _buildMintParams(
+        UniswapV3Lib.Tick         memory tick,
+        UniswapV3Lib.TokenAmounts memory desired,
+        UniswapV3Lib.TokenAmounts memory min,
+        uint256                   deadline
+    ) internal view returns (INonfungiblePositionManager.MintParams memory) {
+        return INonfungiblePositionManager.MintParams({
+            token0         : address(token0),
+            token1         : address(token1),
+            fee            : poolFee,
+            tickLower      : tick.lower,
+            tickUpper      : tick.upper,
+            amount0Desired : desired.amount0,
+            amount1Desired : desired.amount1,
+            amount0Min     : min.amount0,
+            amount1Min     : min.amount1,
+            recipient      : address(almProxy),
+            deadline       : deadline
+        });
+    }
+
+    function _mockOwnerOf(uint256 tokenId) internal {
+        vm.mockCall(
+            UNISWAP_V3_POSITION_MANAGER,
+            abi.encodeCall(INonfungiblePositionManager.ownerOf, (tokenId)),
+            abi.encode(address(almProxy))
+        );
     }
 
     function _mintExternalPosition() internal returns (uint256 tokenId) {
@@ -627,8 +643,14 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
 
-        MockPositionManagerZeroLiquidity mock = new MockPositionManagerZeroLiquidity(address(almProxy));
-        _overridePositionManager(address(mock));
+        uint256 deadline = block.timestamp + 1 hours;
+        INonfungiblePositionManager.MintParams memory mintParams = _buildMintParams(tick, desired, min, deadline);
+
+        vm.mockCall(
+            UNISWAP_V3_POSITION_MANAGER,
+            abi.encodeCall(INonfungiblePositionManager.mint, (mintParams)),
+            abi.encode(uint256(1), uint128(0), uint256(0), uint256(0))
+        );
 
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/no-liquidity-increased");
@@ -638,9 +660,10 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
             tick,
             desired,
             min,
-            block.timestamp + 1 hours
+            deadline
         );
         vm.stopPrank();
+        vm.clearMockedCalls();
     }
 
     function test_addLiquidityUniswapV3_zeroAmount() public {
@@ -783,40 +806,54 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
 
-        MockPositionManagerPositionsCallFailure mock = new MockPositionManagerPositionsCallFailure(address(almProxy));
-        _overridePositionManager(address(mock));
+        uint256 tokenId = 1234;
+        _mockOwnerOf(tokenId);
+
+        vm.mockCallRevert(
+            UNISWAP_V3_POSITION_MANAGER,
+            abi.encodeCall(INonfungiblePositionManager.positions, (tokenId)),
+            abi.encode("fail")
+        );
 
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/positions-call-failed");
         mainnetController.addLiquidityUniswapV3(
             _getPool(),
-            1234,
+            tokenId,
             tick,
             desired,
             min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
+        vm.clearMockedCalls();
     }
 
     function test_addLiquidityUniswapV3_existingPosition_invalidPositionsReturnData() public {
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
 
-        MockPositionManagerPositionsShortReturn mock = new MockPositionManagerPositionsShortReturn(address(almProxy));
-        _overridePositionManager(address(mock));
+        uint256 tokenId = 9999;
+        _mockOwnerOf(tokenId);
+
+        vm.mockCall(
+            UNISWAP_V3_POSITION_MANAGER,
+            abi.encodeCall(INonfungiblePositionManager.positions, (tokenId)),
+            abi.encode(uint256(0))
+        );
 
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/invalid-positions-return-data");
         mainnetController.addLiquidityUniswapV3(
             _getPool(),
-            9999,
+            tokenId,
             tick,
             desired,
             min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
+        vm.clearMockedCalls();
     }
 
     function test_addLiquidityUniswapV3_rateLimitExceeded_token0() public {

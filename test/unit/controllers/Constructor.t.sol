@@ -77,13 +77,12 @@ contract ForeignControllerConstructorTests is UnitTestBase {
 
         assertEq(foreignController.hasRole(DEFAULT_ADMIN_ROLE, admin), true);
 
-        assertEq(address(foreignController.proxy()),                almProxy);
-        assertEq(address(foreignController.rateLimits()),           rateLimits);
-        assertEq(address(foreignController.psm()),                  psm);
-        assertEq(address(foreignController.usdc()),                 usdc);   // asset1 param in MockPSM3
-        assertEq(address(foreignController.cctp()),                 cctp);
-        assertEq(address(foreignController.pendleRouter()),         pendleRouter);
-        
+        assertEq(address(foreignController.proxy()),                    almProxy);
+        assertEq(address(foreignController.rateLimits()),               rateLimits);
+        assertEq(address(foreignController.psm()),                      psm);
+        assertEq(address(foreignController.usdc()),                     usdc);   // asset1 param in MockPSM3
+        assertEq(address(foreignController.cctp()),                     cctp);
+        assertEq(address(foreignController.pendleRouter()),             pendleRouter);
         assertEq(address(foreignController.uniswapV3Router()),          uniswapV3Router);
         assertEq(address(foreignController.uniswapV3PositionManager()), uniswapV3PositionManager);
     }
