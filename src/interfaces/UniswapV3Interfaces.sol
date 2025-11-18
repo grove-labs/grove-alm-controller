@@ -5,9 +5,8 @@ interface ISwapRouter {
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
-        uint24 fee;
+        uint24  fee;
         address recipient;
-        // uint256 deadline;
         uint256 amountIn;
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
@@ -29,12 +28,12 @@ interface IUniswapV3PoolLike {
         view
         returns (
             uint160 sqrtPriceX96,
-            int24 tick,
-            uint16 observationIndex,
-            uint16 observationCardinality,
-            uint16 observationCardinalityNext,
-            uint8 feeProtocol,
-            bool unlocked
+            int24   tick,
+            uint16  observationIndex,
+            uint16  observationCardinality,
+            uint16  observationCardinalityNext,
+            uint8   feeProtocol,
+            bool    unlocked
         );
 
     function observe(uint32[] calldata secondsAgos)
@@ -104,13 +103,13 @@ interface INonfungiblePositionManager {
         external
         view
         returns (
-            uint96 nonce,
+            uint96  nonce,
             address operator,
             address token0,
             address token1,
-            uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
+            uint24  fee,
+            int24   tickLower,
+            int24   tickUpper,
             uint128 liquidity,
             uint256 feeGrowthInside0LastX128,
             uint256 feeGrowthInside1LastX128,
