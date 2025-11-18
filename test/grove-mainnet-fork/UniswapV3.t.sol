@@ -271,27 +271,6 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function test_swapUniswapV3_routerNotSet() public {
-        uint256 amountIn = 100_000e6;
-        _fundProxy(amountIn, 0);
-
-        stdstore
-            .target(address(mainnetController))
-            .sig("uniswapV3Router()")
-            .checked_write(address(0));
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/router-not-set");
-        mainnetController.swapUniswapV3(
-            _getPool(),
-            address(token0),
-            amountIn,
-            0,
-            200
-        );
-        vm.stopPrank();
-    }
-
     function test_swapUniswapV3_invalidTokenIn() public {
         uint256 amountIn = 100_000e6;
         deal(address(dai), address(almProxy), amountIn);
@@ -642,25 +621,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
             min,
             block.timestamp + 1 hours
         );
-    }
-
-    function test_addLiquidityUniswapV3_positionManagerNotSet() public {
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
-        _overridePositionManager(address(0));
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            min,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
     }
 
     function test_addLiquidityUniswapV3_noLiquidityIncrease() public {
@@ -1166,26 +1126,6 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
             UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
             block.timestamp + 1 hours
         );
-    }
-
-    function test_removeLiquidityUniswapV3_positionManagerNotSet() public {
-        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = _mintProxyPosition();
-
-        stdstore
-            .target(address(mainnetController))
-            .sig("uniswapV3PositionManager()")
-            .checked_write(address(0));
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/position-manager-not-set");
-        mainnetController.removeLiquidityUniswapV3(
-            _getPool(),
-            tokenId,
-            liquidity,
-            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
     }
 
     function test_removeLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {

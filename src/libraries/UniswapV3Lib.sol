@@ -83,7 +83,6 @@ library UniswapV3Lib {
 
     // Rate limit decreased by value of token1
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
-        require(address(params.router) != address(0), "UniswapV3Lib/router-not-set");
         SwapCache memory cache = _populateSwapCache(context, params);
 
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
@@ -107,8 +106,6 @@ library UniswapV3Lib {
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
-        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
-
         require(
             params.target.amount0 > 0 || params.target.amount1 > 0,
             "UniswapV3Lib/zero-amount"
@@ -389,8 +386,6 @@ library UniswapV3Lib {
     }
 
     function _validateRemoveLiquidityParams(IUniswapV3PoolLike pool, RemoveLiquidityParams calldata params) internal view returns (address token0, address token1) {
-        require(address(params.positionManager) != address(0), "UniswapV3Lib/position-manager-not-set");
-
         token0     = pool.token0();
         token1     = pool.token1();
         uint24 fee = pool.fee();

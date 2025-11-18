@@ -26,7 +26,7 @@ jobs:
       - name: Build contracts
         run: |
           forge --version
-          forge build --sizes --skip "Approve.t.sol"
+          forge build --sizes
 
   test:
     runs-on: ubuntu-latest

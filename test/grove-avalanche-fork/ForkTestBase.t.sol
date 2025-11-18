@@ -51,11 +51,13 @@ contract ForkTestBase is Test {
     /*** Avalanche addresses                                                                   ***/
     /**********************************************************************************************/
 
-    address constant ALM_FREEZER          = Avalanche.ALM_FREEZER;
-    address constant ALM_RELAYER          = Avalanche.ALM_RELAYER;
-    address constant CCTP_TOKEN_MESSENGER = Avalanche.CCTP_TOKEN_MESSENGER_V2;
-    address constant GROVE_EXECUTOR       = Avalanche.GROVE_EXECUTOR;
-    address constant USDC_AVALANCHE       = Avalanche.USDC;
+    address constant ALM_FREEZER                 = Avalanche.ALM_FREEZER;
+    address constant ALM_RELAYER                 = Avalanche.ALM_RELAYER;
+    address constant CCTP_TOKEN_MESSENGER        = Avalanche.CCTP_TOKEN_MESSENGER_V2;
+    address constant GROVE_EXECUTOR              = Avalanche.GROVE_EXECUTOR;
+    address constant USDC_AVALANCHE              = Avalanche.USDC;
+    address constant UNISWAP_V3_ROUTER           = 0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE;
+    address constant UNISWAP_V3_POSITION_MANAGER = 0x655C406EBFa14EE2006250925e54ec43AD184f8B;
 
     /**********************************************************************************************/
     /*** ALM system deployments                                                                 ***/
@@ -114,8 +116,8 @@ contract ForkTestBase is Test {
             usdc                     : USDC_AVALANCHE,
             cctp                     : CCTP_TOKEN_MESSENGER,
             pendleRouter             : address(0), // No Pendle Router on Avalanche
-            uniswapV3Router          : address(0xdeadbeef), // Unused
-            uniswapV3PositionManager : address(0xdeadbeef)  // Unused
+            uniswapV3Router          : UNISWAP_V3_ROUTER,
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -143,8 +145,8 @@ contract ForkTestBase is Test {
             cctp                     : CCTP_TOKEN_MESSENGER,
             usdc                     : USDC_AVALANCHE,
             pendleRouter             : address(0), // No Pendle Router on Avalanche
-            uniswapV3Router          : address(0xdeadbeef), // Unused
-            uniswapV3PositionManager : address(0xdeadbeef)  // Unused
+            uniswapV3Router          : UNISWAP_V3_ROUTER,
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER
             // susds : address(susdsAvalanche),
             // usds  : address(usdsAvalanche)
         });

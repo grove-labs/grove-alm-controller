@@ -285,28 +285,6 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         );
     }
 
-    function test_swapUniswapV3_routerNotSet() public {
-        vm.skip(true);
-        uint256 amountIn = 100_000e6;
-        _fundProxy(amountIn, 0);
-
-        stdstore
-            .target(address(foreignController))
-            .sig("uniswapV3Router()")
-            .checked_write(address(0));
-
-        vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/router-not-set");
-        foreignController.swapUniswapV3(
-            _getPool(),
-            address(token0),
-            amountIn,
-            0,
-            200
-        );
-        vm.stopPrank();
-    }
-
     function test_swapUniswapV3_maxSlippageNotSet() public {
         uint256 amountIn = 100_000e6;
         _fundProxy(amountIn, 0);

@@ -211,7 +211,7 @@ contract ForkTestBase is DssTest {
             daiUsds                  : Ethereum.DAI_USDS,
             cctp                     : GroveEthereum.CCTP_TOKEN_MESSENGER_V2,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef) // unused
+            uniswapV3PositionManager : address(0xDeadBeef)  // unused
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -242,7 +242,7 @@ contract ForkTestBase is DssTest {
                 daiUsds                  : Ethereum.DAI_USDS,
                 cctp                     : GroveEthereum.CCTP_TOKEN_MESSENGER_V2,
                 uniswapV3Router          : address(0xDeadBeef), // unused
-                uniswapV3PositionManager : address(0xDeadBeef) // unused
+                uniswapV3PositionManager : address(0xDeadBeef)  // unused
             });
 
         Init.LayerZeroRecipient[] memory layerZeroRecipients = new Init.LayerZeroRecipient[](0);

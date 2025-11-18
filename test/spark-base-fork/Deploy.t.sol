@@ -21,7 +21,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef) // unused
+            uniswapV3PositionManager : address(0xDeadBeef)  // unused
         });
 
         ALMProxy          newAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -49,7 +49,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef) // unused
+            uniswapV3PositionManager : address(0xDeadBeef)  // unused
         }));
 
         _assertControllerInitState(newController, address(almProxy), address(rateLimits));
