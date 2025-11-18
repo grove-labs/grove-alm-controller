@@ -5,6 +5,7 @@ import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
+import { MathLib }  from "./common/MathLib.sol";
 
 import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
@@ -224,22 +225,14 @@ library UniswapV3Lib {
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
         if (params.tokenIn == token0) {
-            limitTick = _max(currentTick - delta, TickMath.MIN_TICK);
+            limitTick = MathLib._max(currentTick - delta, TickMath.MIN_TICK);
         } else {
-            limitTick = _min(currentTick + delta, TickMath.MAX_TICK);
+            limitTick = MathLib._min(currentTick + delta, TickMath.MAX_TICK);
         }
 
         cache.sqrtPriceLimitX96 = TickMath.getSqrtRatioAtTick(limitTick);
 
         return cache;
-    }
-
-    function _min(int24 a, int24 b) internal pure returns (int24) {
-        return a < b ? a : b;
-    }
-
-    function _max(int24 a, int24 b) internal pure returns (int24) {
-        return a > b ? a : b;
     }
 
     function _callSwap(UniV3Context calldata context, SwapParams calldata params, SwapCache memory cache) internal returns (uint256 amountOut) {
