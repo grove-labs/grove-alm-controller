@@ -582,7 +582,7 @@ contract MainnetController is AccessControl {
             maxSlippage        : maxSlippages[pool]
         }));
     }
-    
+
     /**********************************************************************************************/
     /*** Relayer UniswapV3 functions                                                            ***/
     /**********************************************************************************************/
@@ -647,7 +647,8 @@ contract MainnetController is AccessControl {
                 min             : min,
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 maxSlippage     : maxSlippage,
-                deadline        : deadline
+                deadline        : deadline,
+                twapSecondsAgo  : poolParams.twapSecondsAgo
             })
         );
     }
