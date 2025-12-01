@@ -19,6 +19,7 @@ contract MainnetControllerAdminTestBase is UnitTestBase {
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
+    event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 twapSecondsAgo);
 
     bytes32 layerZeroRecipient1 = bytes32(uint256(uint160(makeAddr("layerZeroRecipient1"))));
     bytes32 layerZeroRecipient2 = bytes32(uint256(uint160(makeAddr("layerZeroRecipient2"))));
@@ -383,6 +384,50 @@ contract MainnetControllerSetUniswapV3AddLiquidityUpperTickBoundTests is Mainnet
 
 }
 
+contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAdminTestBase {
+
+    function test_setUniswapV3TwapSecondsAgo_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
+    }
+
+    function test_setUniswapV3TwapSecondsAgo() public {
+        address pool = makeAddr("pool");
+
+        (,, uint32 twapSecondsAgo ) = mainnetController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, 300);
+        mainnetController.setUniswapV3TwapSecondsAgo(pool, 300);
+
+        (,, twapSecondsAgo ) = mainnetController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 300);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, 1800);
+        mainnetController.setUniswapV3TwapSecondsAgo(pool, 1800);
+
+        (,, twapSecondsAgo ) = mainnetController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 1800);
+    }
+
+}
+
 
 contract ForeignControllerAdminTestBase is UnitTestBase {
 
@@ -392,6 +437,7 @@ contract ForeignControllerAdminTestBase is UnitTestBase {
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
+    event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 twapSecondsAgo);
 
     ForeignController foreignController;
 
@@ -770,6 +816,50 @@ contract ForeignControllerSetMerklDistributorTests is ForeignControllerAdminTest
         vm.expectEmit(address(foreignController));
         emit MerklDistributorSet(makeAddr("merklDistributor"));
         foreignController.setMerklDistributor(makeAddr("merklDistributor"));
+    }
+
+}
+
+contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAdminTestBase {
+
+    function test_setUniswapV3TwapSecondsAgo_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
+    }
+
+    function test_setUniswapV3TwapSecondsAgo() public {
+        address pool = makeAddr("pool");
+
+        (,, uint32 twapSecondsAgo ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, 300);
+        foreignController.setUniswapV3TwapSecondsAgo(pool, 300);
+
+        (,, twapSecondsAgo ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 300);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, 1800);
+        foreignController.setUniswapV3TwapSecondsAgo(pool, 1800);
+
+        (,, twapSecondsAgo ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(twapSecondsAgo, 1800);
     }
 
 }

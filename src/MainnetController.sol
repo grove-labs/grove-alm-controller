@@ -71,6 +71,7 @@ contract MainnetController is AccessControl {
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
+    event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 twapSecondsAgo);
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -230,6 +231,12 @@ contract MainnetController is AccessControl {
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
+    }
+
+    function setUniswapV3TwapSecondsAgo(address pool, uint32 twapSecondsAgo) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        params.twapSecondsAgo = twapSecondsAgo;
+        emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
