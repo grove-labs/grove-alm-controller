@@ -389,6 +389,9 @@ contract ForeignControllerAdminTestBase is UnitTestBase {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event LayerZeroRecipientSet(uint32 indexed destinationDomain, bytes32 layerZeroRecipient);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
+    event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
+    event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
+    event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
 
     ForeignController foreignController;
 
@@ -542,6 +545,207 @@ contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase 
         foreignController.setMaxSlippage(pool, 0.02e18);
 
         assertEq(foreignController.maxSlippages(pool), 0.02e18);
+    }
+
+}
+
+contract ForeignControllerSetUniswapV3PoolMaxTickDeltaTests is ForeignControllerAdminTestBase {
+
+    function test_setUniswapV3PoolMaxTickDelta_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 1000);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 1000);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_zeroMaxTickDelta() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 0);
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta_exceedsMaxTickDelta() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 887273); // MAX_TICK_DELTA + 1
+    }
+
+    function test_setUniswapV3PoolMaxTickDelta() public {
+        address pool = makeAddr("pool");
+
+        ( uint24 maxTickDelta,, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(uint256(maxTickDelta), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolMaxTickDeltaSet(pool, 1000);
+        foreignController.setUniswapV3PoolMaxTickDelta(pool, 1000);
+
+        ( maxTickDelta,, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(uint256(maxTickDelta), 1000);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolMaxTickDeltaSet(pool, 887272); // MAX_TICK_DELTA
+        foreignController.setUniswapV3PoolMaxTickDelta(pool, 887272);
+
+        ( maxTickDelta,, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(uint256(maxTickDelta), 887272);
+    }
+
+}
+
+contract ForeignControllerSetUniswapV3AddLiquidityLowerTickBoundTests is ForeignControllerAdminTestBase {
+
+    function test_setUniswapV3AddLiquidityLowerTickBound_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(makeAddr("pool"), -1000);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(makeAddr("pool"), -1000);
+    }
+
+    function test_setUniswapV3AddLiquidityLowerTickBound_belowMinTick() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(makeAddr("pool"), -887273); // MIN_TICK - 1
+    }
+
+    function test_setUniswapV3AddLiquidityLowerTickBound_atOrAboveUpperTick() public {
+        address pool = makeAddr("pool");
+
+        // First set an upper tick bound
+        vm.prank(admin);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 1000);
+
+        // Try to set lower tick at or above the upper tick
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, 1000);
+
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, 1001);
+    }
+
+    function test_setUniswapV3AddLiquidityLowerTickBound() public {
+        address pool = makeAddr("pool");
+
+        // First set an upper tick bound so we have room to set lower
+        vm.prank(admin);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 5000);
+
+        (, UniswapV3Lib.Tick memory tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.lower, 0);
+        assertEq(tickBounds.upper, 5000);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolLowerTickUpdated(pool, -1000);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, -1000);
+
+        (, tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.lower, -1000);
+
+        // Can set at MIN_TICK
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolLowerTickUpdated(pool, -887272);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, -887272);
+
+        (, tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.lower, -887272);
+    }
+
+}
+
+contract ForeignControllerSetUniswapV3AddLiquidityUpperTickBoundTests is ForeignControllerAdminTestBase {
+
+    function test_setUniswapV3AddLiquidityUpperTickBound_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(makeAddr("pool"), 1000);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(makeAddr("pool"), 1000);
+    }
+
+    function test_setUniswapV3AddLiquidityUpperTickBound_aboveMaxTick() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(makeAddr("pool"), 887273); // MAX_TICK + 1
+    }
+
+    function test_setUniswapV3AddLiquidityUpperTickBound_atOrBelowLowerTick() public {
+        address pool = makeAddr("pool");
+
+        // First set a lower tick bound
+        vm.prank(admin);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 2000);
+        vm.prank(admin);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, 1000);
+
+        // Try to set upper tick at or below the lower tick
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 1000);
+
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 999);
+    }
+
+    function test_setUniswapV3AddLiquidityUpperTickBound() public {
+        address pool = makeAddr("pool");
+
+        (, UniswapV3Lib.Tick memory tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.lower, 0);
+        assertEq(tickBounds.upper, 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolUpperTickUpdated(pool, 1000);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 1000);
+
+        (, tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.lower, 0);
+        assertEq(tickBounds.upper, 1000);
+
+        // Can set at MAX_TICK
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit UniswapV3PoolUpperTickUpdated(pool, 887272);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 887272);
+
+        (, tickBounds, ) = foreignController.uniswapV3PoolParams(pool);
+        assertEq(tickBounds.upper, 887272);
     }
 
 }
