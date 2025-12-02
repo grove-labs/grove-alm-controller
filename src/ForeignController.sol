@@ -236,6 +236,9 @@ contract ForeignController is AccessControl {
 
     function setUniswapV3TwapSecondsAgo(address pool, uint32 twapSecondsAgo) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
+        // Required due to casting in UniswapV3OracleLibrary.consult
+        // Limits twapSecondsAgo to approximately 68 years
+        require(twapSecondsAgo < uint32(type(int32).max), "ForeignController/twap-seconds-ago-out-of-bounds");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }

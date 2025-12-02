@@ -403,6 +403,18 @@ contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAd
         mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
     }
 
+    function test_setUniswapV3TwapSecondsAgo_outOfBounds() public {
+        vm.startPrank(admin);
+
+        vm.expectRevert("MainnetController/twap-seconds-ago-out-of-bounds");
+        mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), uint32(type(int32).max));
+
+        vm.expectRevert("MainnetController/twap-seconds-ago-out-of-bounds");
+        mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), type(uint32).max);
+
+        vm.stopPrank();
+    }
+
     function test_setUniswapV3TwapSecondsAgo() public {
         address pool = makeAddr("pool");
 
@@ -837,6 +849,18 @@ contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAd
             DEFAULT_ADMIN_ROLE
         ));
         foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), 300);
+    }
+
+    function test_setUniswapV3TwapSecondsAgo_outOfBounds() public {
+        vm.startPrank(admin);
+
+        vm.expectRevert("ForeignController/twap-seconds-ago-out-of-bounds");
+        foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), uint32(type(int32).max));
+
+        vm.expectRevert("ForeignController/twap-seconds-ago-out-of-bounds");
+        foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), type(uint32).max);
+
+        vm.stopPrank();
     }
 
     function test_setUniswapV3TwapSecondsAgo() public {
