@@ -20,7 +20,7 @@ interface IUniswapV3PoolLikeTickSpacing is IUniswapV3PoolLike {
 
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_USDC_USDT_POOL   = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
-    address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; 
+    address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700;
 
     int24 internal constant DEFAULT_TICK_LOWER = -600;
     int24 internal constant DEFAULT_TICK_UPPER =  600;
@@ -102,11 +102,11 @@ contract UniswapV3TestBase is ForkTestBase {
         vm.stopPrank();
     }
 
-    
+
     function _getSwapKey(address tokenIn) internal view returns (bytes32) {
         return RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
     }
-    
+
     function _label() internal {
         vm.label(UNISWAP_V3_ROUTER,           'UniswapV3Router');
         vm.label(UNISWAP_V3_POSITION_MANAGER, 'UniswapV3PositionManager');
@@ -117,7 +117,7 @@ contract UniswapV3TestBase is ForkTestBase {
     function _getPool() internal pure virtual returns (address) {
         return UNISWAP_V3_USDC_USDT_POOL;
     }
-    
+
     function _getBlock() internal pure override returns (uint256) {
         return 23677743;  // Oct 28, 2025
     }
@@ -1289,7 +1289,7 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
 
         (tokenId, totalLiquidity, amount0Added, amount1Added) = _addLiquidity(
             addAmount0,
-            addAmount1, 
+            addAmount1,
             UniswapV3Lib.Tick({lower : -100, upper : 100})
         );
     }
@@ -1307,7 +1307,7 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
 
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
     }
-    
+
     function _removeLiquidityAndValidate(uint256 tokenId, uint128 liquidity, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
         uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(token1RateLimitKey);
@@ -1344,22 +1344,22 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3UsdcUsdtTest is MainnetCont
         uint256 minAmount1 = amount1Added * liquidity / totalLiquidity;
 
         _removeLiquidityAndValidate(
-            tokenId, 
-            liquidity, 
+            tokenId,
+            liquidity,
             minAmount0 * 9999/10000,
-            minAmount1 * 9999/10000, 
-            uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey, 
+            minAmount1 * 9999/10000,
+            uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey,
             uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey
         );
     }
 
     function test_e2e_removeLiquidityUniswapV3_usdcUsdt_allLiquidity() public {
         _removeLiquidityAndValidate(
-            tokenId, 
-            totalLiquidity, 
+            tokenId,
+            totalLiquidity,
             amount0Added * 9999/10000,
-            amount1Added * 9999/10000, 
-            uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey, 
+            amount1Added * 9999/10000,
+            uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey,
             uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey
         );
     }
@@ -1377,7 +1377,7 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3DaiUsdcTest is MainnetContr
 
         (tokenId, totalLiquidity, amount0Added, amount1Added) = _addLiquidity(
             addAmount0,
-            addAmount1, 
+            addAmount1,
             UniswapV3Lib.Tick({lower : -100, upper : 100})
         );
     }
@@ -1393,22 +1393,22 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3DaiUsdcTest is MainnetContr
         uint256 minAmount1 = amount1Added * liquidity / totalLiquidity;
 
         _removeLiquidityAndValidate(
-            tokenId, 
-            liquidity, 
+            tokenId,
+            liquidity,
             minAmount0 * 9999/10000,
-            minAmount1 * 9999/10000, 
-            uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey, 
+            minAmount1 * 9999/10000,
+            uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey,
             uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey
         );
     }
 
     function test_e2e_removeLiquidityUniswapV3_daiUsdc_allLiquidity() public {
         _removeLiquidityAndValidate(
-            tokenId, 
-            totalLiquidity, 
+            tokenId,
+            totalLiquidity,
             amount0Added * 9999/10000,
-            amount1Added * 9999/10000, 
-            uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey, 
+            amount1Added * 9999/10000,
+            uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey,
             uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey
         );
     }
