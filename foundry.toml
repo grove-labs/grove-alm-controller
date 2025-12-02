@@ -31,7 +31,8 @@ exclude_lints = [
     "mixed-case-function"
 ]
 ignore = [
-    "test/**/*.sol",
+    "**/*.t.sol",
+    "**/mocks/*.sol",
     "lib/**/*.sol"
 ]
 

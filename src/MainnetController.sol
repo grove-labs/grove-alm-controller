@@ -80,6 +80,8 @@ contract MainnetController is AccessControl {
 
     uint256 public constant EXCHANGE_RATE_PRECISION = 1e36;
 
+    // Disable lint because these are CONSTANTS but had to remove constant due to size limitations
+    /// forge-lint: disable-start(mixed-case-variable)
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
 
@@ -108,6 +110,7 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
+    /// forge-lint: disable-end(mixed-case-variable)
 
     // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
     int24 internal constant MIN_TICK = -887_272;

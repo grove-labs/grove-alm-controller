@@ -72,6 +72,8 @@ contract ForeignController is AccessControl {
 
     uint256 public constant EXCHANGE_RATE_PRECISION = 1e36;
 
+    // Disable lint because these are CONSTANTS but had to remove constant due to size limitations
+    /// forge-lint: disable-start(mixed-case-variable)
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
 
@@ -101,6 +103,7 @@ contract ForeignController is AccessControl {
     // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
     int24 internal MIN_TICK = -887_272;
     int24 internal MAX_TICK =  887_272;
+    /// forge-lint: disable-end(mixed-case-variable)
 
     IALMProxy   public proxy;
     ICCTPLike   public cctp;
