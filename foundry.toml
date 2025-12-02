@@ -28,7 +28,8 @@ no_match_coverage = 'src/libraries/uniswap-v3/UniV3OracleLib.sol|src/libraries/u
 [lint]
 lint_on_build = true
 exclude_lints = [
-    "mixed-case-function"
+    "mixed-case-function",
+    "asm-keccak256"
 ]
 ignore = [
     "**/*.t.sol",
