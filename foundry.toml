@@ -25,6 +25,16 @@ no_match_coverage = 'src/libraries/uniswap-v3/UniV3OracleLib.sol|src/libraries/u
 [profile.ci]
 # inherit the default by creating an empty CI profiile
 
+[lint]
+lint_on_build = true
+exclude_lints = [
+    "mixed-case-function"
+]
+ignore = [
+    "test/**/*.sol",
+    "lib/**/*.sol"
+]
+
 [fuzz]
 runs = 1000
 
