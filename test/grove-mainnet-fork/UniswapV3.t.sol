@@ -914,6 +914,232 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 }
 
+contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
+    using stdStorage for StdStorage;
+
+    function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
+        return UniswapV3Lib.Tick({ lower: _toSpacedTick(initTick - 100), upper: _toSpacedTick(initTick + 100) });
+    }
+
+    function _defaultDesiredPosition() internal view returns (UniswapV3Lib.TokenAmounts memory) {
+        uint256 amount0 = 10_000 * 10 ** uint256(token0Decimals);
+        uint256 amount1 = 10_000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+
+        return UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 });
+    }
+
+    // Test: Adding liquidity succeeds when spot price matches TWAP (normal conditions)
+    function test_addLiquidityUniswapV3_twapProtection_succeedsWhenPriceMatchesTwap() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        vm.startPrank(relayer);
+        (uint256 tokenId, uint128 liquidity,,) = mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        assertGt(liquidity, 0, "Should successfully add liquidity");
+        assertGt(tokenId, 0, "Should mint position NFT");
+    }
+
+    // Test: Adding liquidity fails when user provides tight min amounts that work for spot price
+    // but TWAP expects different amounts due to price divergence
+    // The transaction reverts due to either TWAP validation or pool's own slippage check
+    function test_addLiquidityUniswapV3_twapProtection_failsWithTightMinAmountsAndDivergedTwap() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        (, int24 currentTick,,,,,) = pool.slot0();
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        // Mock TWAP to a tick where expected amounts differ significantly
+        int24 manipulatedTwapTick = currentTick + 50;
+        _mockTwapObserve(manipulatedTwapTick);
+
+        // Provide min amounts that are very tight - 99.9%
+        UniswapV3Lib.TokenAmounts memory tightMinAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: desired.amount0 * 999 / 1000,
+            amount1: desired.amount1 * 999 / 1000
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert(); // Reverts due to slippage - either TWAP check or pool's check
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            tightMinAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    // Test: Adding liquidity fails with asymmetric position and diverged TWAP
+    function test_addLiquidityUniswapV3_twapProtection_failsWithAsymmetricPositionAndDivergedTwap() public {
+        // Use asymmetric amounts - more token0 than token1
+        uint256 amount0 = 20_000 * 10 ** uint256(token0Decimals);
+        uint256 amount1 = 5_000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+        _fundProxy(amount0, amount1);
+
+        (, int24 currentTick,,,,,) = pool.slot0();
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        // Mock TWAP to a tick that conflicts with the asymmetric position
+        _mockTwapObserve(currentTick + 80);
+
+        UniswapV3Lib.TokenAmounts memory desired = UniswapV3Lib.TokenAmounts({
+            amount0: amount0,
+            amount1: amount1
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert(); // Reverts due to slippage protection
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(amount0, amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    // Test: Verifies twapSecondsAgo=0 reverts (misconfiguration protection)
+    function test_addLiquidityUniswapV3_twapProtection_failsWhenTwapNotConfigured() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Set twapSecondsAgo to 0 (misconfigured)
+        vm.prank(GROVE_PROXY);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 0);
+
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // Test: Adding liquidity fails when min amounts are too low relative to TWAP expectations
+    function test_addLiquidityUniswapV3_twapProtection_failsWhenMinAmountsTooLow() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        // Set min amounts way too low - below maxSlippage threshold (50% vs 98% maxSlippage)
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            UniswapV3Lib.TokenAmounts({ amount0: desired.amount0 * 50 / 100, amount1: desired.amount1 * 50 / 100 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // Test: Tighter maxSlippage makes TWAP protection stricter
+    function test_addLiquidityUniswapV3_twapProtection_tighterSlippageRequiresHigherMinAmounts() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Set very tight maxSlippage (99.5%)
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(_getPool(), 0.995e18);
+
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+
+        // 98% min amounts that would pass with 98% maxSlippage now fail with 99.5%
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // Test: Demonstrates that when TWAP aligns with spot price, liquidity addition succeeds
+    function test_addLiquidityUniswapV3_twapProtection_succeedsWhenTwapAlignedWithSpot() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+        (, int24 currentTick,,,,,) = pool.slot0();
+
+        // Mock TWAP to match current spot tick exactly
+        _mockTwapObserve(currentTick);
+        _fundProxy(desired.amount0, desired.amount1);
+
+        vm.startPrank(relayer);
+        (uint256 tokenId, uint128 liquidity,,) = mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+
+        assertGt(liquidity, 0, "Should successfully add liquidity when TWAP aligns with spot");
+        assertGt(tokenId, 0, "Should mint position NFT");
+    }
+
+    function _mockTwapObserve(int24 twapTick) internal {
+        // The TWAP calculation is: arithmeticMeanTick = (tickCumulatives[1] - tickCumulatives[0]) / secondsAgo
+        // So to get a specific twapTick: tickCumulatives[1] - tickCumulatives[0] = twapTick * secondsAgo
+        int56[] memory tickCumulatives = new int56[](2);
+        tickCumulatives[0] = 0;
+        tickCumulatives[1] = int56(twapTick) * int56(int32(86400)); // delta = twapTick * secondsAgo
+
+        uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
+        secondsPerLiquidityCumulativeX128s[0] = 0;
+        secondsPerLiquidityCumulativeX128s[1] = 1;
+
+        // Build the exact calldata that will be used
+        uint32[] memory secondsAgos = new uint32[](2);
+        secondsAgos[0] = 86400; // 1 day - matches twapSecondsAgo config
+        secondsAgos[1] = 0;
+
+        // Mock the exact call that will be made
+        vm.mockCall(
+            _getPool(),
+            abi.encodeCall(IUniswapV3PoolLike.observe, (secondsAgos)),
+            abi.encode(tickCumulatives, secondsPerLiquidityCumulativeX128s)
+        );
+    }
+}
+
 contract MainnetControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
     function _addLiquidityAndValidate(
         uint256 currentTokenId,
