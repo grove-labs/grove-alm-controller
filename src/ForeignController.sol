@@ -154,6 +154,7 @@ contract ForeignController is AccessControl {
     /*** Modifiers                                                                              ***/
     /**********************************************************************************************/
 
+    /// forge-lint: disable-start(unwrapped-modifier-logic)
     modifier rateLimited(bytes32 key, uint256 amount) {
         rateLimits.triggerRateLimitDecrease(key, amount);
         _;
@@ -171,6 +172,7 @@ contract ForeignController is AccessControl {
         );
         _;
     }
+    /// forge-lint: disable-end(unwrapped-modifier-logic)
 
     /**********************************************************************************************/
     /*** Admin functions                                                                        ***/
