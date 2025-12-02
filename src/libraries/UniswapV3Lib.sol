@@ -410,8 +410,6 @@ library UniswapV3Lib {
                 expectedLiquidity,
                 false
             );
-
-            _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
         } else if (twapTick >= params.tick.upper) {
             expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                 sqrtRatioLowerX96,
@@ -420,7 +418,6 @@ library UniswapV3Lib {
                 false
             );
 
-            _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
         } else {
             expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
                 sqrtTwapPriceX96,
@@ -428,7 +425,6 @@ library UniswapV3Lib {
                 expectedLiquidity,
                 false
             );
-            _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
 
             expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
                 sqrtRatioLowerX96,
@@ -436,9 +432,10 @@ library UniswapV3Lib {
                 expectedLiquidity,
                 false
             );
-
-            _validateMinAmount(params.min.amount1, expectedAmount1, params.maxSlippage);
         }
+
+        _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
+        _validateMinAmount(params.min.amount1, expectedAmount1, params.maxSlippage);
     }
 
     function _validateMinAmount(uint256 minAmount, uint256 expectedAmount, uint256 maxSlippage) internal pure {
