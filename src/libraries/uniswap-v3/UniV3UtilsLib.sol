@@ -9,12 +9,12 @@ import {FullMath}                       from "dss-allocator/src/funnels/uniV3/Fu
 interface UniV3PoolLike {
     function slot0() external view returns (
         uint160 sqrtPriceX96,
-        int24 tick,
-        uint16 observationIndex,
-        uint16 observationCardinality,
-        uint16 observationCardinalityNext,
-        uint8 feeProtocol,
-        bool unlocked
+        int24   tick,
+        uint16  observationIndex,
+        uint16  observationCardinality,
+        uint16  observationCardinalityNext,
+        uint8   feeProtocol,
+        bool    unlocked
     );
 
     struct PositionInfo {
@@ -53,7 +53,7 @@ library UniV3UtilsLib {
         uint160 sqrtRatioAX96,
         uint160 sqrtRatioBX96,
         uint128 liquidity,
-        bool roundUp
+        bool    roundUp
     ) internal pure returns (uint256 amount0) {
         unchecked {
             if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
@@ -78,7 +78,7 @@ library UniV3UtilsLib {
         uint160 sqrtRatioAX96,
         uint160 sqrtRatioBX96,
         uint128 liquidity,
-        bool roundUp
+        bool    roundUp
     ) internal pure returns (uint256 amount1) {
         unchecked {
             if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
@@ -94,7 +94,7 @@ library UniV3UtilsLib {
     function getAmount0Delta(
         uint160 sqrtRatioAX96,
         uint160 sqrtRatioBX96,
-        int128 liquidity
+        int128  liquidity
     ) internal pure returns (int256 amount0) {
         unchecked {
             return
@@ -108,7 +108,7 @@ library UniV3UtilsLib {
     function getAmount1Delta(
         uint160 sqrtRatioAX96,
         uint160 sqrtRatioBX96,
-        int128 liquidity
+        int128  liquidity
     ) internal pure returns (int256 amount1) {
         unchecked {
             return
