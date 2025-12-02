@@ -417,7 +417,6 @@ library UniswapV3Lib {
                 expectedLiquidity,
                 false
             );
-
         } else {
             expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
                 sqrtTwapPriceX96,
@@ -439,6 +438,10 @@ library UniswapV3Lib {
     }
 
     function _validateMinAmount(uint256 minAmount, uint256 expectedAmount, uint256 maxSlippage) internal pure {
+        if (expectedAmount == 0) {
+            require(minAmount == 0, "UniswapV3Lib/min-amount-below-bound");
+            return;
+        }
         uint256 minAmountThreshold = FullMath.mulDiv(expectedAmount, maxSlippage, 1e18);
         require(minAmount >= minAmountThreshold, "UniswapV3Lib/min-amount-below-bound");
     }
