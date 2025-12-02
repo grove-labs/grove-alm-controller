@@ -84,6 +84,7 @@ contract UniswapV3TestBase is ForkTestBase {
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 1 days);
 
         vm.stopPrank();
 
@@ -204,7 +205,7 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
 
 
     function test_setUniswapv3AddLiquidityLowerTickBound_isTooLarge() public {
-        (, UniswapV3Lib.Tick memory tickBounds) = mainnetController.uniswapV3PoolParams(_getPool());
+        (, UniswapV3Lib.Tick memory tickBounds, ) = mainnetController.uniswapV3PoolParams(_getPool());
         int24 currentUpper = tickBounds.upper;
 
         vm.prank(GROVE_PROXY);
@@ -213,7 +214,7 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
     }
 
     function test_setUniswapv3AddLiquidityUpperTickBound_isTooSmall() public {
-        (, UniswapV3Lib.Tick memory tickBounds) = mainnetController.uniswapV3PoolParams(_getPool());
+        (, UniswapV3Lib.Tick memory tickBounds, ) = mainnetController.uniswapV3PoolParams(_getPool());
         int24 currentLower = tickBounds.lower;
 
         vm.prank(GROVE_PROXY);

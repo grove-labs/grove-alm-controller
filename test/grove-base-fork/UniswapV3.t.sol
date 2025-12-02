@@ -106,6 +106,8 @@ contract UniswapV3TestBase is ForkTestBase {
 
         foreignController.setMaxSlippage(_getPool(), 0.98e18);
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
+        // Pools are new so need a shorter twap for testing
+        foreignController.setUniswapV3TwapSecondsAgo(_getPool(), 1 hours);
         vm.stopPrank();
 
 
@@ -231,7 +233,7 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
     }
 
     function test_setUniswapv3AddLiquidityLowerTickBound_isTooLarge() public {
-        (, UniswapV3Lib.Tick memory tickBounds) = foreignController.uniswapV3PoolParams(_getPool());
+        (, UniswapV3Lib.Tick memory tickBounds,) = foreignController.uniswapV3PoolParams(_getPool());
         int24 currentUpper = tickBounds.upper;
 
         vm.prank(GROVE_EXECUTOR);
