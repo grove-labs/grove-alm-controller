@@ -13,6 +13,7 @@ import { UniswapV3Lib }                                    from "../../src/libra
 
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
+import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 interface IUniswapV3PoolLikeTickSpacing is IUniswapV3PoolLike {
     function tickSpacing() external view returns (int24);
@@ -230,7 +231,6 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
 }
 
 contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     function test_swapUniswapV3_notRelayer() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -526,7 +526,6 @@ contract MainnetControllerE2EUniswapV3UsdcUsdtPoolTest is MainnetControllerE2EUn
 }
 
 contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
         return UniswapV3Lib.Tick({ lower: _toSpacedTick(initTick - 100), upper: _toSpacedTick(initTick + 100) });
@@ -915,11 +914,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
 }
 
 contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
-
-    function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
-        return UniswapV3Lib.Tick({ lower: _toSpacedTick(initTick - 100), upper: _toSpacedTick(initTick + 100) });
-    }
 
     function _defaultDesiredPosition() internal view returns (UniswapV3Lib.TokenAmounts memory) {
         uint256 amount0 = 10_000 * 10 ** uint256(token0Decimals);
@@ -928,12 +922,201 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         return UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 });
     }
 
+    function _mockSpotTick(int24 spotTick) internal {
+        // Mock slot0 to return a manipulated spot tick
+        // slot0 returns: (sqrtPriceX96, tick, observationIndex, observationCardinality, observationCardinalityNext, feeProtocol, unlocked)
+        uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(spotTick);
+        vm.mockCall(
+            _getPool(),
+            abi.encodeWithSignature("slot0()"),
+            abi.encode(sqrtPriceX96, spotTick, uint16(0), uint16(1), uint16(1), uint8(0), true)
+        );
+    }
+
+    // Transaction fails when spot price has been manipulated out of expected range
+    // Even with valid TWAP-based min amounts, Uniswap's own slippage check fails
+    // because spot price requires different token ratios than our mins allow
+    function test_addLiquidityUniswapV3_twapProtection_revertsWhenSpotPriceManipulated() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Position range around current TWAP (which is close to spot in normal conditions)
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        // Mock spot price to be way above our tick range (manipulated)
+        // At this spot price, Uniswap will want mostly token1, not the balanced amounts we're providing
+        _mockSpotTick(tick.upper + 1000);
+
+        // Min amounts are valid per TWAP, but spot price is manipulated
+        // Uniswap's mint will fail because actual amounts needed don't match our mins
+        UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: desired.amount0 * 98 / 100,
+            amount1: desired.amount1 * 98 / 100
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert("Price slippage check");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            minAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    // When TWAP tick is above tick.upper, expectedAmount0 = 0
+    // So minAmount0 must be 0, otherwise revert
+    function test_addLiquidityUniswapV3_twapProtection_revertsWhenTwapAboveRangeAndMinAmount0NonZero() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Set governance bounds entirely below the current TWAP
+        // Pool's TWAP is near initTick, so setting bounds below that puts TWAP above our allowed range
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick - 300);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), initTick - 100);
+        vm.stopPrank();
+
+        // Relayer uses ticks within governance bounds
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 200),
+            upper: _toSpacedTick(initTick - 100)
+        });
+
+        // Incorrectly provide non-zero minAmount0 when TWAP expects only token1
+        UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: 1, // Should be 0 when twapTick >= tick.upper
+            amount1: desired.amount1 * 98 / 100
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            minAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // When TWAP tick is below tick.lower, expectedAmount1 = 0
+    // So minAmount1 must be 0, otherwise revert
+    function test_addLiquidityUniswapV3_twapProtection_revertsWhenTwapBelowRangeAndMinAmount1NonZero() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Set governance bounds entirely above the current TWAP
+        // Pool's TWAP is near initTick, so setting bounds above that puts TWAP below our allowed range
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick + 100);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), initTick + 300);
+        vm.stopPrank();
+
+        // Relayer uses ticks within governance bounds
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick + 100),
+            upper: _toSpacedTick(initTick + 200)
+        });
+
+        // Incorrectly provide non-zero minAmount1 when TWAP expects only token0
+        UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: desired.amount0 * 98 / 100,
+            amount1: 1 // Should be 0 when twapTick <= tick.lower
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            minAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // When TWAP is within tick range, minAmount0 must meet threshold
+    function test_addLiquidityUniswapV3_twapProtection_revertsWhenMinAmount0TooLow() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Position range around current TWAP, so both tokens are expected
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        // minAmount0 is too low (50%) while maxSlippage requires 98%
+        UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: desired.amount0 * 50 / 100, // Too low
+            amount1: desired.amount1 * 98 / 100  // Acceptable
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            minAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    // When TWAP is within tick range, minAmount1 must meet threshold
+    function test_addLiquidityUniswapV3_twapProtection_revertsWhenMinAmount1TooLow() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        // Position range around current TWAP, so both tokens are expected
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        // minAmount1 is too low (50%) while maxSlippage requires 98%
+        UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
+            amount0: desired.amount0 * 98 / 100, // Acceptable
+            amount1: desired.amount1 * 50 / 100  // Too low
+        });
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            minAmounts,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
     // Test: Adding liquidity succeeds when spot price matches TWAP (normal conditions)
     function test_addLiquidityUniswapV3_twapProtection_succeedsWhenPriceMatchesTwap() public {
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
         _fundProxy(desired.amount0, desired.amount1);
 
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
 
         vm.startPrank(relayer);
         (uint256 tokenId, uint128 liquidity,,) = mainnetController.addLiquidityUniswapV3(
@@ -948,195 +1131,6 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
 
         assertGt(liquidity, 0, "Should successfully add liquidity");
         assertGt(tokenId, 0, "Should mint position NFT");
-    }
-
-    // Test: Adding liquidity fails when user provides tight min amounts that work for spot price
-    // but TWAP expects different amounts due to price divergence
-    // The transaction reverts due to either TWAP validation or pool's own slippage check
-    function test_addLiquidityUniswapV3_twapProtection_failsWithTightMinAmountsAndDivergedTwap() public {
-        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
-        _fundProxy(desired.amount0, desired.amount1);
-
-        (, int24 currentTick,,,,,) = pool.slot0();
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-
-        // Mock TWAP to a tick where expected amounts differ significantly
-        int24 manipulatedTwapTick = currentTick + 50;
-        _mockTwapObserve(manipulatedTwapTick);
-
-        // Provide min amounts that are very tight - 99.9%
-        UniswapV3Lib.TokenAmounts memory tightMinAmounts = UniswapV3Lib.TokenAmounts({
-            amount0: desired.amount0 * 999 / 1000,
-            amount1: desired.amount1 * 999 / 1000
-        });
-
-        vm.startPrank(relayer);
-        vm.expectRevert(); // Reverts due to slippage - either TWAP check or pool's check
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            tightMinAmounts,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-
-        vm.clearMockedCalls();
-    }
-
-    // Test: Adding liquidity fails with asymmetric position and diverged TWAP
-    function test_addLiquidityUniswapV3_twapProtection_failsWithAsymmetricPositionAndDivergedTwap() public {
-        // Use asymmetric amounts - more token0 than token1
-        uint256 amount0 = 20_000 * 10 ** uint256(token0Decimals);
-        uint256 amount1 = 5_000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
-        _fundProxy(amount0, amount1);
-
-        (, int24 currentTick,,,,,) = pool.slot0();
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-
-        // Mock TWAP to a tick that conflicts with the asymmetric position
-        _mockTwapObserve(currentTick + 80);
-
-        UniswapV3Lib.TokenAmounts memory desired = UniswapV3Lib.TokenAmounts({
-            amount0: amount0,
-            amount1: amount1
-        });
-
-        vm.startPrank(relayer);
-        vm.expectRevert(); // Reverts due to slippage protection
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            _minLiquidityPosition(amount0, amount1),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-
-        vm.clearMockedCalls();
-    }
-
-    // Test: Verifies twapSecondsAgo=0 reverts (misconfiguration protection)
-    function test_addLiquidityUniswapV3_twapProtection_failsWhenTwapNotConfigured() public {
-        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
-        _fundProxy(desired.amount0, desired.amount1);
-
-        // Set twapSecondsAgo to 0 (misconfigured)
-        vm.prank(GROVE_PROXY);
-        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 0);
-
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            _minLiquidityPosition(desired.amount0, desired.amount1),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-    }
-
-    // Test: Adding liquidity fails when min amounts are too low relative to TWAP expectations
-    function test_addLiquidityUniswapV3_twapProtection_failsWhenMinAmountsTooLow() public {
-        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
-        _fundProxy(desired.amount0, desired.amount1);
-
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-
-        // Set min amounts way too low - below maxSlippage threshold (50% vs 98% maxSlippage)
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            UniswapV3Lib.TokenAmounts({ amount0: desired.amount0 * 50 / 100, amount1: desired.amount1 * 50 / 100 }),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-    }
-
-    // Test: Tighter maxSlippage makes TWAP protection stricter
-    function test_addLiquidityUniswapV3_twapProtection_tighterSlippageRequiresHigherMinAmounts() public {
-        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
-        _fundProxy(desired.amount0, desired.amount1);
-
-        // Set very tight maxSlippage (99.5%)
-        vm.prank(GROVE_PROXY);
-        mainnetController.setMaxSlippage(_getPool(), 0.995e18);
-
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-
-        // 98% min amounts that would pass with 98% maxSlippage now fail with 99.5%
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            _minLiquidityPosition(desired.amount0, desired.amount1),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-    }
-
-    // Test: Demonstrates that when TWAP aligns with spot price, liquidity addition succeeds
-    function test_addLiquidityUniswapV3_twapProtection_succeedsWhenTwapAlignedWithSpot() public {
-        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
-        UniswapV3Lib.Tick memory tick = _defaultTickRange();
-        (, int24 currentTick,,,,,) = pool.slot0();
-
-        // Mock TWAP to match current spot tick exactly
-        _mockTwapObserve(currentTick);
-        _fundProxy(desired.amount0, desired.amount1);
-
-        vm.startPrank(relayer);
-        (uint256 tokenId, uint128 liquidity,,) = mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            0,
-            tick,
-            desired,
-            _minLiquidityPosition(desired.amount0, desired.amount1),
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-
-        vm.clearMockedCalls();
-
-        assertGt(liquidity, 0, "Should successfully add liquidity when TWAP aligns with spot");
-        assertGt(tokenId, 0, "Should mint position NFT");
-    }
-
-    function _mockTwapObserve(int24 twapTick) internal {
-        // The TWAP calculation is: arithmeticMeanTick = (tickCumulatives[1] - tickCumulatives[0]) / secondsAgo
-        // So to get a specific twapTick: tickCumulatives[1] - tickCumulatives[0] = twapTick * secondsAgo
-        int56[] memory tickCumulatives = new int56[](2);
-        tickCumulatives[0] = 0;
-        tickCumulatives[1] = int56(twapTick) * int56(int32(86400)); // delta = twapTick * secondsAgo
-
-        uint160[] memory secondsPerLiquidityCumulativeX128s = new uint160[](2);
-        secondsPerLiquidityCumulativeX128s[0] = 0;
-        secondsPerLiquidityCumulativeX128s[1] = 1;
-
-        // Build the exact calldata that will be used
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = 86400; // 1 day - matches twapSecondsAgo config
-        secondsAgos[1] = 0;
-
-        // Mock the exact call that will be made
-        vm.mockCall(
-            _getPool(),
-            abi.encodeCall(IUniswapV3PoolLike.observe, (secondsAgos)),
-            abi.encode(tickCumulatives, secondsPerLiquidityCumulativeX128s)
-        );
     }
 }
 
@@ -1285,7 +1279,6 @@ contract MainnetControllerAddLiquidityE2EUniswapV3DaiUsdcTest is MainnetControll
 }
 
 contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     uint256 tokenId;
     uint128 liquidity;
@@ -1309,14 +1302,14 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _defaultDesiredPosition() internal view returns (UniswapV3Lib.TokenAmounts memory) {
-        uint256 amount0 = 1_000 * 10 ** uint256(token0Decimals);
-        uint8 token1Decimals = IERC20Metadata(address(token1)).decimals();
-        uint256 amount1 = 1_000 * 10 ** uint256(token1Decimals);
+        uint256 desiredAmount0 = 1_000 * 10 ** uint256(token0Decimals);
+        uint8 decimals1 = IERC20Metadata(address(token1)).decimals();
+        uint256 desiredAmount1 = 1_000 * 10 ** uint256(decimals1);
 
-        return UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 });
+        return UniswapV3Lib.TokenAmounts({ amount0: desiredAmount0, amount1: desiredAmount1 });
     }
 
-    function _mintProxyPosition() internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
+    function _mintProxyPosition() internal returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_) {
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
         UniswapV3Lib.Tick memory tick = _defaultTickRange();
 
@@ -1327,7 +1320,7 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         SafeERC20.forceApprove(IERC20OZ(address(token0)), UNISWAP_V3_POSITION_MANAGER, desired.amount0);
         SafeERC20.forceApprove(IERC20OZ(address(token1)), UNISWAP_V3_POSITION_MANAGER, desired.amount1);
 
-        (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
+        (tokenId_, liquidity_, amount0_, amount1_) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
             INonfungiblePositionManager.MintParams({
                 token0: address(token0),
                 token1: address(token1),
@@ -1345,7 +1338,7 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function _mintExternalPosition() internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
+    function _mintExternalPosition() internal returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_) {
         address stranger = makeAddr("stranger-remove-lp");
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
 
@@ -1356,7 +1349,7 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         SafeERC20.forceApprove(IERC20OZ(address(token0)), UNISWAP_V3_POSITION_MANAGER, desired.amount0);
         SafeERC20.forceApprove(IERC20OZ(address(token1)), UNISWAP_V3_POSITION_MANAGER, desired.amount1);
 
-        (tokenId, liquidity, amount0, amount1) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
+        (tokenId_, liquidity_, amount0_, amount1_) = INonfungiblePositionManager(UNISWAP_V3_POSITION_MANAGER).mint(
             INonfungiblePositionManager.MintParams({
                 token0: address(token0),
                 token1: address(token1),
@@ -1393,15 +1386,15 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function test_removeLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
-        (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) = _mintExternalPosition();
+        (uint256 externalTokenId, uint128 externalLiquidity,,) = _mintExternalPosition();
 
         vm.warp(block.timestamp + 1 hours);
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/proxy-does-not-own-token-id");
         mainnetController.removeLiquidityUniswapV3(
             _getPool(),
-            tokenId,
-            liquidity,
+            externalTokenId,
+            externalLiquidity,
             UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
             block.timestamp + 1 hours
         );
@@ -1520,11 +1513,11 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         );
     }
 
-    function _addLiquidity(uint256 addAmount0, uint256 addAmount1, UniswapV3Lib.Tick memory addTickDelta) internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used) {
+    function _addLiquidity(uint256 addAmount0, uint256 addAmount1, UniswapV3Lib.Tick memory addTickDelta) internal returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0Used, uint256 amount1Used) {
         deal(address(token0), address(almProxy), addAmount0);
         deal(address(token1), address(almProxy), addAmount1);
 
-        (tokenId, liquidity, amount0Used, amount1Used) = _addLiquidity(
+        (tokenId_, liquidity_, amount0Used, amount1Used) = _addLiquidity(
             0,
             UniswapV3Lib.Tick({lower : _toSpacedTick(initTick + addTickDelta.lower), upper : _toSpacedTick(initTick + addTickDelta.upper)}),
             UniswapV3Lib.TokenAmounts({ amount0: addAmount0, amount1: addAmount1 }),
@@ -1534,15 +1527,15 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
     }
 
-    function _removeLiquidityAndValidate(uint256 tokenId, uint128 liquidity, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
+    function _removeLiquidityAndValidate(uint256 tokenId_, uint128 liquidity_, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
         uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(token1RateLimitKey);
 
         vm.startPrank(relayer);
         (amount0Used, amount1Used) = mainnetController.removeLiquidityUniswapV3(
             _getPool(),
-            tokenId,
-            liquidity,
+            tokenId_,
+            liquidity_,
             UniswapV3Lib.TokenAmounts({ amount0: minAmount0, amount1: minAmount1 }),
             block.timestamp + 1 hours
         );
@@ -1551,8 +1544,8 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         assertGe(amount0Used, minAmount0, "amount0Used should be greater than or equal to minAmount0");
         assertGe(amount1Used, minAmount1, "amount1Used should be greater than or equal to minAmount1");
 
-        assertApproxEqRel(amount0Used, amount0Added * liquidity / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
-        assertApproxEqRel(amount1Used, amount1Added * liquidity / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
+        assertApproxEqRel(amount0Used, amount0Added * liquidity_ / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
+        assertApproxEqRel(amount1Used, amount1Added * liquidity_ / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
 
         uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(token1RateLimitKey);

@@ -2,8 +2,6 @@
 pragma solidity >=0.8.0;
 
 import { IERC20 }                 from "forge-std/interfaces/IERC20.sol";
-import { stdStorage, StdStorage } from "forge-std/StdStorage.sol";
-
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
@@ -249,7 +247,6 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
 }
 
 contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     function test_setUniswapV3PoolMaxTickDelta_notAdmin() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -321,7 +318,6 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
 }
 
 contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     function _defaultTickRange() internal view returns (UniswapV3Lib.Tick memory) {
         return UniswapV3Lib.Tick({ lower: initTick - 100, upper: initTick + 100 });
@@ -931,7 +927,6 @@ contract ForeignControllerAddLiquidityTickBoundsTest is ForeignControllerAddLiqu
 }
 
 contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
-    using stdStorage for StdStorage;
 
     uint256 tokenId;
     uint128 liquidity;
