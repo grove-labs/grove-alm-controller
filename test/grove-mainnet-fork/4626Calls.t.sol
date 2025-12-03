@@ -70,6 +70,10 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
 
         mainnetController.mintUSDS(5_000_000e18);
 
+        // Warp to get back above rate limit
+        skip(1 minutes);
+        mainnetController.mintUSDS(100e18);
+
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         mainnetController.depositERC4626(address(susds), 5_000_000e18 + 1);
 
