@@ -81,6 +81,14 @@ library UniswapV3Lib {
         uint256                     deadline;
     }
 
+    struct TwapParams {
+        uint32       twapSecondsAgo;
+        Tick         tick;
+        TokenAmounts target;
+        TokenAmounts min;
+
+    }
+
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
@@ -91,6 +99,14 @@ library UniswapV3Lib {
 
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
+        require(params.twapSecondsAgo != 0,                             "UniswapV3Lib/zero-twap-seconds");
+
+        _validateMinAmountsTwap(context, TwapParams({
+            twapSecondsAgo : params.twapSecondsAgo,
+            tick           : params.tick,
+            target         : params.target,
+            min            : params.min
+        }));
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
@@ -126,7 +142,12 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
-        _validateAddLiquidityMinAmounts(context, params);
+        _validateMinAmountsTwap(context, TwapParams({
+            twapSecondsAgo : params.twapSecondsAgo,
+            tick           : params.tick,
+            target         : params.target,
+            min            : params.min
+        }));
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
@@ -384,7 +405,7 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+    function _validateMinAmountsTwap(UniV3Context calldata context, TwapParams calldata params) internal view {
         // Fetch twap tick
         (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
 
