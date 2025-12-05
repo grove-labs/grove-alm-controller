@@ -81,7 +81,6 @@ library UniswapV3Lib {
         uint256                     deadline;
     }
 
-
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
@@ -128,12 +127,7 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
-        _validateMinAmountsTwap(context, TwapParams({
-            twapSecondsAgo : params.twapSecondsAgo,
-            tick           : params.tick,
-            target         : params.target,
-            min            : params.min
-        }));
+        _validateAddLiquidityMinAmounts(context, params);
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
@@ -231,17 +225,17 @@ library UniswapV3Lib {
             "UniswapV3Lib/invalid-token-pair"
         );
 
-        // Fetch twap tick as the current tick
-        (int24 currentTick, ) = UniswapV3OracleLib.consult(context.pool, params.poolParams.twapSecondsAgo);
+        // Fetch twap tick
+        (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.poolParams.twapSecondsAgo);
 
         cache.tokenOut = params.tokenIn == token0 ? token1 : token0;
 
         int24 delta = int24(params.tickDelta);
         int24 limitTick;
         if (params.tokenIn == token0) {
-            limitTick = MathLib._max(currentTick - delta, TickMath.MIN_TICK);
+            limitTick = MathLib._max(twapTick - delta, TickMath.MIN_TICK);
         } else {
-            limitTick = MathLib._min(currentTick + delta, TickMath.MAX_TICK);
+            limitTick = MathLib._min(twapTick + delta, TickMath.MAX_TICK);
         }
 
         cache.sqrtPriceLimitX96 = TickMath.getSqrtRatioAtTick(limitTick);
@@ -392,7 +386,7 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateMinAmountsTwap(UniV3Context calldata context, TwapParams calldata params) internal view {
+    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
         // Fetch twap tick
         (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
 
