@@ -81,16 +81,6 @@ library UniswapV3Lib {
         uint256                     deadline;
     }
 
-<<<<<<< HEAD
-    struct TwapParams {
-        uint32       twapSecondsAgo;
-        Tick         tick;
-        TokenAmounts target;
-        TokenAmounts min;
-
-    }
-=======
->>>>>>> 0600a3c (use twap tick for swap)
 
     /**********************************************************************************************/
     /*** External functions                                                                     ***/
@@ -100,20 +90,9 @@ library UniswapV3Lib {
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
-<<<<<<< HEAD
-        require(params.twapSecondsAgo != 0,                             "UniswapV3Lib/zero-twap-seconds");
-
-        _validateMinAmountsTwap(context, TwapParams({
-            twapSecondsAgo : params.twapSecondsAgo,
-            tick           : params.tick,
-            target         : params.target,
-            min            : params.min
-        }));
-=======
         require(params.poolParams.twapSecondsAgo != 0,                  "UniswapV3Lib/zero-twap-seconds");
 
         SwapCache memory cache = _populateSwapCache(context, params);
->>>>>>> 0600a3c (use twap tick for swap)
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
