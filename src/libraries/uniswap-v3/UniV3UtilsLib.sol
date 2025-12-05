@@ -55,22 +55,20 @@ library UniV3UtilsLib {
         uint128 liquidity,
         bool    roundUp
     ) internal pure returns (uint256 amount0) {
-        unchecked {
-            if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
-            uint256 numerator1 = uint256(liquidity) << FixedPoint96.RESOLUTION;
-            uint256 numerator2 = sqrtRatioBX96 - sqrtRatioAX96;
+        uint256 numerator1 = uint256(liquidity) << FixedPoint96.RESOLUTION;
+        uint256 numerator2 = sqrtRatioBX96 - sqrtRatioAX96;
 
-            require(sqrtRatioAX96 > 0);
+        require(sqrtRatioAX96 > 0);
 
-            return
-                roundUp
-                    ? divRoundingUp(
-                        FullMath.mulDivRoundingUp(numerator1, numerator2, sqrtRatioBX96),
-                        sqrtRatioAX96
-                    )
-                    : FullMath.mulDiv(numerator1, numerator2, sqrtRatioBX96) / sqrtRatioAX96;
-        }
+        return
+            roundUp
+                ? divRoundingUp(
+                    FullMath.mulDivRoundingUp(numerator1, numerator2, sqrtRatioBX96),
+                    sqrtRatioAX96
+                )
+                : FullMath.mulDiv(numerator1, numerator2, sqrtRatioBX96) / sqrtRatioAX96;
     }
 
     // https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/libraries/SqrtPriceMath.sol#L182
@@ -80,14 +78,12 @@ library UniV3UtilsLib {
         uint128 liquidity,
         bool    roundUp
     ) internal pure returns (uint256 amount1) {
-        unchecked {
-            if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
-            return
-                roundUp
-                    ? FullMath.mulDivRoundingUp(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96)
-                    : FullMath.mulDiv(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
-        }
+        return
+            roundUp
+                ? FullMath.mulDivRoundingUp(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96)
+                : FullMath.mulDiv(liquidity, sqrtRatioBX96 - sqrtRatioAX96, FixedPoint96.Q96);
     }
 
     // https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/libraries/SqrtPriceMath.sol#L201
@@ -96,12 +92,10 @@ library UniV3UtilsLib {
         uint160 sqrtRatioBX96,
         int128  liquidity
     ) internal pure returns (int256 amount0) {
-        unchecked {
-            return
-                liquidity < 0
-                    ? -getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
-                    : getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
-        }
+        return
+            liquidity < 0
+                ? -getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
+                : getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
     }
 
     // https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/libraries/SqrtPriceMath.sol#L217C7-L217C7
@@ -110,11 +104,9 @@ library UniV3UtilsLib {
         uint160 sqrtRatioBX96,
         int128  liquidity
     ) internal pure returns (int256 amount1) {
-        unchecked {
-            return
-                liquidity < 0
-                    ? -getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
-                    : getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
-        }
+        return
+            liquidity < 0
+                ? -getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
+                : getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
     }
 }
