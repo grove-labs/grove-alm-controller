@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+// Use dss-allocator instead of Uniswap implementations to be compatible with Solidity 0.8.xx
 import { FullMath } from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { TickMath } from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
@@ -15,7 +16,7 @@ library UniswapV3OracleLib {
     /// @return harmonicMeanLiquidity The harmonic mean liquidity from (block.timestamp - secondsAgo) to block.timestamp
     /// Changes: changed the require message, explicitly cast secondsAgo to int32, and UniswapV3PoolLike to IUniswapV3PoolLike
     function consult(address pool, uint32 secondsAgo)
-        external
+        internal
         view
         returns (int24 arithmeticMeanTick, uint128 harmonicMeanLiquidity)
     {
@@ -52,7 +53,7 @@ library UniswapV3OracleLib {
         uint128 baseAmount,
         address baseToken,
         address quoteToken
-    ) external pure returns (uint256 quoteAmount) {
+    ) internal pure returns (uint256 quoteAmount) {
         uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
 
         // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
