@@ -582,7 +582,7 @@ contract MainnetController is AccessControl {
             maxSlippage        : maxSlippages[pool]
         }));
     }
-    
+
     /**********************************************************************************************/
     /*** Relayer UniswapV3 functions                                                            ***/
     /**********************************************************************************************/
@@ -758,6 +758,8 @@ contract MainnetController is AccessControl {
     /*** Relayer Pendle functions                                                               ***/
     /**********************************************************************************************/
 
+    // NOTE: DO NOT use for non-standard for markets with non-standard SYs without targeted testing
+    //       (Non-standard SYs: ePENDLE, mPENDLE, aTokens (aUSDC, aUSDT))
     function redeemPendlePT(
         address pendleMarket,
         uint256 pyAmountIn,
