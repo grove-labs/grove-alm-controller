@@ -11,6 +11,8 @@ import { SafeERC20 }          from "openzeppelin-contracts/contracts/token/ERC20
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
 
+import { ISwapRouter } from "../../src/interfaces/UniswapV3Interfaces.sol";
+
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
@@ -71,10 +73,10 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiSwapKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcSwapKey,  1_000_000e6,  uint256(1_000_000e6)  / 1 days);
 
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcAddLiquidityKey, 1_000_000e6,  uint256(1_000_000e6) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtAddLiquidityKey, 1_000_000e6,  uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcAddLiquidityKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtAddLiquidityKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
         rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_DaiAddLiquidityKey,   1_000_000e18, uint256(1_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey,  1_000_000e6,  uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey,  1_000_000e6,  uint256(1_000_000e6)  / 1 days);
 
         rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
         rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
@@ -85,7 +87,7 @@ contract UniswapV3TestBase is ForkTestBase {
         mainnetController.setMaxSlippage(_getPool(), 0.98e18);
         // All trades must have no more than 200 ticks impact on the pool. For most stablecoin pools, a tick is 1bps
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
-        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 1 days);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(),   1 days);
 
         vm.stopPrank();
 
@@ -119,7 +121,7 @@ contract UniswapV3TestBase is ForkTestBase {
         return UNISWAP_V3_USDC_USDT_POOL;
     }
 
-    function _getBlock() internal pure override returns (uint256) {
+    function _getBlock() internal pure virtual override returns (uint256) {
         return 23677743;  // Oct 28, 2025
     }
 
@@ -1630,5 +1632,115 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3DaiUsdcTest is MainnetContr
             uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey,
             uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey
         );
+    }
+}
+
+// Adapted from Certora's findings: https://gist.github.com/3docSec/616413000a6ebb154211db74589e0782
+contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
+    function setUp() public override {
+        super.setUp();
+    }
+
+    function _getPool() internal pure override returns (address) {
+        return UNISWAP_V3_DAI_USDC_POOL;
+    }
+
+    function _getBlock() internal pure override returns (uint256) {
+        return 22181045; // Apr 02, 2025
+    }
+    
+    function test_uniswapV3_sandwichRisk_withoutTWAP() public {
+        address pool                    = _getPool();
+        IUniswapV3PoolLike poolContract = IUniswapV3PoolLike(pool);
+        uint24 fee                      = poolContract.fee();
+
+        // Victim intends to swap 1M USDC -> DAI via the controller.
+        uint256 victimAmountIn = 1_000_000e6;
+
+        // Configure rate limits and Uniswap params for this pool.
+        bytes32 swapKey = RateLimitHelpers.makeAssetDestinationKey(
+            mainnetController.LIMIT_UNISWAP_V3_SWAP(),
+            address(usdc),
+            pool
+        );
+
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setUnlimitedRateLimitData(swapKey);
+        // Allow up to ~1% local slippage
+        mainnetController.setMaxSlippage(pool, 0.99e18);
+        // Allow a moderate max tick move per swap.
+        mainnetController.setUniswapV3PoolMaxTickDelta(pool, 500);
+        vm.stopPrank();
+
+        // Front-run leg: USDC -> DAI in the same direction as the forthcoming victim swap.
+        uint256 attackerInitialUsdc = 10_000_000e6;
+        deal(address(usdc), address(this), attackerInitialUsdc);
+        IERC20(address(usdc)).approve(UNISWAP_V3_ROUTER, attackerInitialUsdc);
+
+        ISwapRouter.ExactInputSingleParams memory frontParams = ISwapRouter.ExactInputSingleParams({
+            tokenIn           : address(usdc),
+            tokenOut          : address(dai),
+            fee               : fee,
+            recipient         : address(this),
+            amountIn          : attackerInitialUsdc,
+            amountOutMinimum  : 0,
+            sqrtPriceLimitX96 : 0
+        });
+
+        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(frontParams);
+
+        // Victim swap via the controller at the manipulated spot price (USDC -> DAI).
+        deal(address(usdc), address(almProxy), victimAmountIn);
+
+        uint256 victimDaiBalanceBefore = dai.balanceOf(address(almProxy));
+
+        vm.startPrank(relayer);
+        uint256[] memory minAmountOut = new uint256[](8);
+
+        minAmountOut[0] = 5.2e13;
+        minAmountOut[1] = 5.1e13;
+        minAmountOut[2] = 4.95e13;
+        minAmountOut[3] = 4.82e13;
+        minAmountOut[4] = 4.70e13;
+        minAmountOut[5] = 4.60e13;
+        minAmountOut[6] = 4.48e13;
+        minAmountOut[7] = 3.69e13;
+
+        for (uint256 i = 0; i < 1; i++) {
+            uint256 amountIn = usdc.balanceOf(address(almProxy));
+
+            // This should be triggered since we calculate `sqrtPriceLimitX96` using the TWAP
+            vm.expectRevert(bytes("SPL"));
+            mainnetController.swapUniswapV3(
+                pool,
+                address(usdc),
+                amountIn,
+                minAmountOut[i],
+                500
+            );
+        }
+        vm.stopPrank();
+
+        // Back-run leg: attacker sells all received DAI back to USDC after victim restores price.
+        uint256 attackerDaiBalance = dai.balanceOf(address(this));
+        IERC20(address(dai)).approve(UNISWAP_V3_ROUTER, attackerDaiBalance);
+
+        ISwapRouter.ExactInputSingleParams memory backParams = ISwapRouter.ExactInputSingleParams({
+            tokenIn           : address(dai),
+            tokenOut          : address(usdc),
+            fee               : fee,
+            recipient         : address(this),
+            amountIn          : attackerDaiBalance,
+            amountOutMinimum  : 0,
+            sqrtPriceLimitX96 : 0
+        });
+
+        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(backParams);
+
+        uint256 attackerFinalUsdc = usdc.balanceOf(address(this));
+
+        assertLe(attackerFinalUsdc,                attackerInitialUsdc,               "attacker should have lower or same balance of USDC as before attack");
+        assertEq(victimAmountIn,                   usdc.balanceOf(address(almProxy)), "proxy should have same balance of USDC as before attack");
+        assertEq(dai.balanceOf(address(almProxy)), victimDaiBalanceBefore,            "proxy should have same balance of DAI as before attack");
     }
 }
