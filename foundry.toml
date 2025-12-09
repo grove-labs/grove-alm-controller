@@ -10,10 +10,6 @@ fs_permissions = [
     { access = "read-write", path = "./script/output/"}
 ]
 evm_version = 'cancun'
-ignored_warnings_from = [
-    "lib",
-    "test"
-]
 remappings = [
     '@layerzerolabs/oft-evm/=lib/devtools/packages/oft-evm/',
     'layerzerolabs/oapp-evm/=lib/devtools/packages/oapp-evm/',
@@ -26,9 +22,6 @@ remappings = [
 
 [fuzz]
 runs = 1000
-
-[lint]
-lint_on_build = false
 
 [invariant]
 runs = 1
