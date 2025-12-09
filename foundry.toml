@@ -19,7 +19,19 @@ remappings = [
     'solidity-bytes-utils/=lib/solidity-bytes-utils/',
     'forge-std/=lib/forge-std/src/',
     'dss-allocator/=lib/dss-allocator/',
-    'spark-psm/=lib/spark-psm/'
+    'spark-psm/=lib/spark-psm/',
+    'dss-test/=lib/dss-allocator/lib/dss-test/src/',
+    'erc20-helpers/=lib/spark-psm/lib/erc20-helpers/src/',
+    # Explicit mappings for Solar linting compatibility
+    'src/AllocatorOracle.sol=lib/dss-allocator/src/AllocatorOracle.sol',
+    'src/AllocatorRoles.sol=lib/dss-allocator/src/AllocatorRoles.sol',
+    'src/AllocatorRegistry.sol=lib/dss-allocator/src/AllocatorRegistry.sol',
+    'src/AllocatorBuffer.sol=lib/dss-allocator/src/AllocatorBuffer.sol',
+    'src/AllocatorVault.sol=lib/dss-allocator/src/AllocatorVault.sol',
+    'src/funnels/=lib/dss-allocator/src/funnels/',
+    'src/PSM3.sol=lib/spark-psm/src/PSM3.sol',
+    'src/interfaces/IPSM3.sol=lib/spark-psm/src/interfaces/IPSM3.sol',
+    'src/interfaces/IRateProviderLike.sol=lib/spark-psm/src/interfaces/IRateProviderLike.sol'
 ]
 
 [fuzz]
