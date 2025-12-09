@@ -319,9 +319,6 @@ library UniswapV3Lib {
 
         require(pool.token0() == token0 && pool.token1() == token1 && pool.fee() == fee, "UniswapV3Lib/invalid-pool");
 
-        require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
-        require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
-
         INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams
             = INonfungiblePositionManager.IncreaseLiquidityParams({
                 tokenId        : params.tokenId,

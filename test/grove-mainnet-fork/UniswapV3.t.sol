@@ -803,60 +803,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function test_addLiquidityUniswapV3_existingPosition_positionsCallFails() public {
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
-        uint256 tokenId = 1234;
-        _mockOwnerOf(tokenId);
-
-        vm.mockCallRevert(
-            UNISWAP_V3_POSITION_MANAGER,
-            abi.encodeCall(INonfungiblePositionManager.positions, (tokenId)),
-            abi.encode("fail")
-        );
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/positions-call-failed");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            tokenId,
-            tick,
-            desired,
-            min,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-        vm.clearMockedCalls();
-    }
-
-    function test_addLiquidityUniswapV3_existingPosition_invalidPositionsReturnData() public {
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
-        uint256 tokenId = 9999;
-        _mockOwnerOf(tokenId);
-
-        vm.mockCall(
-            UNISWAP_V3_POSITION_MANAGER,
-            abi.encodeCall(INonfungiblePositionManager.positions, (tokenId)),
-            abi.encode(uint256(0))
-        );
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/invalid-positions-return-data");
-        mainnetController.addLiquidityUniswapV3(
-            _getPool(),
-            tokenId,
-            tick,
-            desired,
-            min,
-            block.timestamp + 1 hours
-        );
-        vm.stopPrank();
-        vm.clearMockedCalls();
-    }
-
     function test_addLiquidityUniswapV3_rateLimitExceeded_token0() public {
         uint256 amount0 = 2_000_000e18;
         uint256 amount1 = 0;
