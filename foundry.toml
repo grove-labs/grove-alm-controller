@@ -18,8 +18,10 @@ remappings = [
     '@layerzerolabs/lz-evm-messagelib-v2/=lib/layerzero-v2/packages/layerzero-v2/evm/messagelib/',
     'solidity-bytes-utils/=lib/solidity-bytes-utils/',
     'forge-std/=lib/forge-std/src/',
-    'lib/dss-allocator/src/=lib/dss-allocator/src/',
-    'lib/spark-psm/src/=lib/spark-psm/src/'
+    'dss-allocator/=lib/dss-allocator/',
+    'spark-psm/=lib/spark-psm/',
+    'dss-allocator:src/=lib/dss-allocator/src/',
+    'spark-psm:src/=lib/spark-psm/src/'
 ]
 
 [fuzz]
