@@ -7,6 +7,7 @@ import { IERC20 } from "forge-std/interfaces/IERC20.sol";
 import { IERC20Metadata }     from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { IERC20 as IERC20OZ } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 }          from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC721 }            from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
@@ -50,8 +51,12 @@ contract UniswapV3TestBase is ForkTestBase {
     int24              internal initTick;
     int24              internal tickSpacing;
 
+    address internal stranger;
+
     function setUp() public virtual override  {
         super.setUp();
+
+        stranger = makeAddr("stranger");
 
         uniswapV3_UsdcUsdtPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
         uniswapV3_UsdcUsdtPool_UsdtSwapKey            = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
@@ -417,7 +422,6 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
     }
 }
 
-
 contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
     function _e2e_swapUniswapV3(uint256 swapAmount, IERC20 tokenIn, IERC20 tokenOut, bytes32 swapKey) internal {
         deal(address(tokenIn), address(almProxy), swapAmount);
@@ -591,7 +595,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _mintExternalPosition() internal returns (uint256 tokenId) {
-        address stranger = makeAddr("stranger-lp");
         uint256 amount0 = 5 * 10 ** uint256(token0Decimals);
         uint8 token1Decimals = IERC20Metadata(address(token1)).decimals();
         uint256 amount1 = 5 * 10 ** uint256(token1Decimals);
@@ -909,6 +912,34 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
                 amount0: amount0 * 98 / 100,
                 amount1: amount1 * 98 / 100
             }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addliquidityUniswapV3_invalidPoolForPosition() public {
+        // Set arbitrary value
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_DAI_USDC_POOL, 99 * 1e18);
+
+        // Mint a USDC-USDT position and transfer it to the relayer
+        uint256 usdcUsdtTokenId = _mintExternalPosition();
+
+        vm.prank(stranger);
+        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(almProxy), usdcUsdtTokenId);
+
+        vm.warp(block.timestamp + 1 hours);
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/invalid-pool");
+        mainnetController.addLiquidityUniswapV3(
+            UNISWAP_V3_DAI_USDC_POOL,
+            usdcUsdtTokenId, // USDC-UgSDT pool token ID
+            tick,
+            desired,
+            min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1341,7 +1372,6 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _mintExternalPosition() internal returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_) {
-        address stranger = makeAddr("stranger-remove-lp");
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
 
         deal(address(token0), stranger, desired.amount0);

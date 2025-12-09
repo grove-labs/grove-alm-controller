@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 import { IERC20 }                 from "forge-std/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import { IERC721 }        from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 
 import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
@@ -64,8 +65,12 @@ contract UniswapV3TestBase is ForkTestBase {
     uint8   internal token0Decimals;
     int24   internal initTick;
 
+    address internal stranger;
+
     function setUp() public virtual override  {
         super.setUp();
+
+        stranger = makeAddr("stranger");
 
         ausdBase  = IERC20(address(new ERC20Mock()));
 
@@ -352,7 +357,6 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _mintExternalPosition() internal returns (uint256 tokenId) {
-        address stranger = makeAddr("stranger-lp");
         uint256 amount0 = 5 * 10 ** uint256(token0Decimals);
         uint8 token1Decimals = IERC20Metadata(address(token1)).decimals();
         uint256 amount1 = 5 * 10 ** uint256(token1Decimals);
@@ -591,6 +595,34 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
                 amount0: amount0 * 98 / 100,
                 amount1: amount1 * 98 / 100
             }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addliquidityUniswapV3_invalidPoolForPosition() public {
+        // Set arbitrary value
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxSlippage(usdsAusdPool, 99 * 1e18);
+
+        // Mint a USDS-USDC position and transfer it to the relayer
+        uint256 usdsUsdcTokenId = _mintExternalPosition();
+
+        vm.prank(stranger);
+        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(almProxy), usdsUsdcTokenId);
+
+        vm.warp(block.timestamp + 1 hours);
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/invalid-pool");
+        foreignController.addLiquidityUniswapV3(
+            usdsAusdPool,
+            usdsUsdcTokenId, // USDS-USDC pool token ID
+            tick,
+            desired,
+            min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
@@ -1207,7 +1239,6 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function _mintExternalPosition() internal returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
-        address stranger = makeAddr("stranger-remove-lp");
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
 
         deal(address(token0), stranger, desired.amount0);

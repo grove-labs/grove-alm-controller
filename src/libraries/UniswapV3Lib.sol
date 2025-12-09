@@ -265,12 +265,6 @@ library UniswapV3Lib {
     }
 
     //-- Add liquidity functions
-
-    function _validateAddLiquidityParams(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
-        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
-        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
-    }
-
     function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
@@ -312,8 +306,11 @@ library UniswapV3Lib {
     {
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
-
         (address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, ) = _fetchPositionData(params.tokenId, params.positionManager);
+
+        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
+
+        require(pool.token0() == token0 && pool.token1() == token1 && pool.fee() == fee, "UniswapV3Lib/invalid-pool");
 
         require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
         require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
