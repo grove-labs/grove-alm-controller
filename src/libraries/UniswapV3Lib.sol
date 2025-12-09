@@ -2,7 +2,6 @@
 pragma solidity ^0.8.21;
 
 import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
@@ -85,7 +84,7 @@ library UniswapV3Lib {
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
 
-    // Rate limit decreased by value of token1
+    // Rate limit decreased by value of tokenIn
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
@@ -266,6 +265,12 @@ library UniswapV3Lib {
     }
 
     //-- Add liquidity functions
+
+    function _validateAddLiquidityParams(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
+        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
+    }
+
     function _mintLiquidity(UniV3Context calldata context, AddLiquidityParams calldata params)
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
@@ -308,7 +313,7 @@ library UniswapV3Lib {
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
 
 
-        (, , , int24 tickLower, int24 tickUpper, ) = _fetchPositionData(params.tokenId, params.positionManager);
+        (address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, ) = _fetchPositionData(params.tokenId, params.positionManager);
 
         require(params.tick.lower >= tickLower, "UniswapV3Lib/invalid-tick-lower");
         require(params.tick.upper <= tickUpper, "UniswapV3Lib/invalid-tick-upper");
