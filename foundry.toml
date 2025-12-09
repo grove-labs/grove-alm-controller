@@ -19,9 +19,7 @@ remappings = [
     'solidity-bytes-utils/=lib/solidity-bytes-utils/',
     'forge-std/=lib/forge-std/src/',
     'dss-allocator/=lib/dss-allocator/',
-    'spark-psm/=lib/spark-psm/',
-    'dss-allocator:src/=lib/dss-allocator/src/',
-    'spark-psm:src/=lib/spark-psm/src/'
+    'spark-psm/=lib/spark-psm/'
 ]
 
 [fuzz]
