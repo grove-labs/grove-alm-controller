@@ -17,7 +17,9 @@ remappings = [
     '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
     '@layerzerolabs/lz-evm-messagelib-v2/=lib/layerzero-v2/packages/layerzero-v2/evm/messagelib/',
     'solidity-bytes-utils/=lib/solidity-bytes-utils/',
-    'forge-std/=lib/forge-std/src/'
+    'forge-std/=lib/forge-std/src/',
+    'lib/dss-allocator/src/=lib/dss-allocator/src/',
+    'lib/spark-psm/src/=lib/spark-psm/src/'
 ]
 
 [fuzz]
