@@ -416,6 +416,76 @@ contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
             "swap rate limit should decrease by normalized value"
         );
     }
+
+   function test_swapUniswapV3_whenNotAllTokensInAreUsed() public {
+        bytes32 swapKey = _getSwapKey(address(token0));
+
+        // Set maxSlippage to near 0, and set infinite rate limit
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(_getPool(), 1);
+
+        rateLimits.setRateLimitData(
+            swapKey,
+            type(uint256).max - 1,
+            type(uint256).max / 1 days
+        );
+        vm.stopPrank();
+
+        uint256 amountIn = 1_000_000_000_000e6;
+        _fundProxy(amountIn, 0);
+
+
+        uint256 swapLimitBefore    = rateLimits.getCurrentRateLimit(swapKey);
+        uint256 token0BalanceBefore = token0.balanceOf(address(almProxy));
+        uint256 token1BalanceBefore = token1.balanceOf(address(almProxy));
+
+        vm.startPrank(relayer);
+        uint256 amountOut = mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            1e6,      // minAmountOut: very small amount
+            1         // tickDelta: 1 tick
+        );
+        vm.stopPrank();
+
+        uint256 token0BalanceAfter  = token0.balanceOf(address(almProxy));
+        uint256 token1BalanceAfter  = token1.balanceOf(address(almProxy));
+        uint256 swapLimitAfter      = rateLimits.getCurrentRateLimit(swapKey);
+
+        // Net amount of token0 actually spent (after any refunds)
+        uint256 spent = token0BalanceBefore - token0BalanceAfter;
+
+        // Sanity checks: we spent some, but not all, of amountIn
+        assertGt(spent, 0, "proxy should spend some token0");
+        assertGt(amountOut, 0, "swap should return some token1");
+        assertLt(
+            spent,
+            amountIn,
+            "not all input tokens should be used (partial fill due to price limit)"
+        );
+
+        // Proxy should receive amountOut of token1
+        assertEq(
+            token1BalanceAfter,
+            token1BalanceBefore + amountOut,
+            "proxy should receive token1"
+        );
+
+        // (a) Rate limit decreased by the actual amount spent, not by amountIn
+        assertEq(
+            swapLimitBefore - swapLimitAfter,
+            spent,
+            "swap rate limit should decrease by the actual token0 spent"
+        );
+
+        // (b) Approvals to the router should be cleared back to zero
+        assertEq(
+            token0.allowance(address(almProxy), UNISWAP_V3_ROUTER),
+            0,
+            "router allowance for token0 should be cleared after swap"
+        );
+    }
 }
 
 contract MainnetControllerE2EUniswapV3Test is UniswapV3TestBase {
