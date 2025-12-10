@@ -18,10 +18,6 @@ import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
-interface IUniswapV3PoolLikeTickSpacing is IUniswapV3PoolLike {
-    function tickSpacing() external view returns (int24);
-}
-
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_USDC_USDT_POOL   = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
     address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700;
@@ -102,7 +98,7 @@ contract UniswapV3TestBase is ForkTestBase {
         poolFee            = pool.fee();
         token0Decimals     = IERC20Metadata(address(token0)).decimals();
         (, initTick, ,,,,) = pool.slot0();
-        tickSpacing        = IUniswapV3PoolLikeTickSpacing(address(pool)).tickSpacing();
+        tickSpacing        = IUniswapV3PoolLike(address(pool)).tickSpacing();
 
         vm.startPrank(GROVE_PROXY);
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick - 1000);
@@ -1017,6 +1013,72 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
             tick,
             desired,
             min,
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_failsIfLowerTickNotMultipleOfSpacing() public {
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_DAI_USDC_POOL, 0.000001 * 1e18);
+        mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        vm.stopPrank();
+
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/invalid-lower-tick");
+        mainnetController.addLiquidityUniswapV3(
+            UNISWAP_V3_DAI_USDC_POOL,
+            0,
+            UniswapV3Lib.Tick({
+                lower: _toSpacedTick(-123), // invalid tick spacing
+                upper: _toSpacedTick(10000)
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 1,
+                amount1: 1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 0,
+                amount1: 0
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_failsIfUpperTickNotMultipleOfSpacing() public {
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_DAI_USDC_POOL, 0.000001 * 1e18);
+        mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        vm.stopPrank();
+
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/invalid-upper-tick");
+        mainnetController.addLiquidityUniswapV3(
+            UNISWAP_V3_DAI_USDC_POOL,
+            0,
+            UniswapV3Lib.Tick({
+                lower: _toSpacedTick(-10000),
+                upper: _toSpacedTick(123) // invalid tick spacing
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 1,
+                amount1: 1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 0,
+                amount1: 0
+            }),
             block.timestamp + 1 hours
         );
         vm.stopPrank();

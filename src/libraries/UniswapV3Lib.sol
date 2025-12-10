@@ -275,6 +275,12 @@ library UniswapV3Lib {
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
+        int24 tickSpacing = pool.tickSpacing();
+
+        // Validate that lower and upper ticks are correctly spaced
+        require(params.tick.lower % tickSpacing == 0, "UniswapV3Lib/invalid-lower-tick");
+        require(params.tick.upper % tickSpacing == 0, "UniswapV3Lib/invalid-upper-tick");
+
         INonfungiblePositionManager.MintParams memory mintParams
             = INonfungiblePositionManager.MintParams({
                 token0         : pool.token0(),
