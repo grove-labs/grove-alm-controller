@@ -453,7 +453,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         tick.lower = initTick - 2000;
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/invalid-tick-lower");
+        vm.expectRevert("UniswapV3Lib/lower-tick-outside-bounds");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
@@ -471,7 +471,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         tick.upper = initTick + 2000;
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/invalid-tick-upper");
+        vm.expectRevert("UniswapV3Lib/upper-tick-outside-bounds");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
@@ -600,10 +600,14 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    function test_addliquidityUniswapV3_invalidPoolForPosition() public {
-        // Set arbitrary value
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMaxSlippage(usdsAusdPool, 99 * 1e18);
+    function test_addLiquidityUniswapV3_invalidPoolForPosition() public {
+        // Set arbitrary values
+        vm.startPrank(GROVE_EXECUTOR);
+        foreignController.setMaxSlippage(usdsAusdPool, 0.000001 * 1e18);
+        foreignController.setUniswapV3TwapSecondsAgo(usdsAusdPool, 1 seconds);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(usdsAusdPool, -100000);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(usdsAusdPool, 100000);
+        vm.stopPrank();
 
         // Mint a USDS-USDC position and transfer it to the relayer
         uint256 usdsUsdcTokenId = _mintExternalPosition();
@@ -612,17 +616,90 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(almProxy), usdsUsdcTokenId);
 
         vm.warp(block.timestamp + 1 hours);
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("UniswapV3Lib/invalid-pool");
         foreignController.addLiquidityUniswapV3(
             usdsAusdPool,
             usdsUsdcTokenId, // USDS-USDC pool token ID
+            UniswapV3Lib.Tick({
+                lower: -10000,
+                upper: 10000
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 1,
+                amount1: 1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: 0,
+                amount1: 0
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_failsAfterLowerTickBoundChanges() public {
+        // Create new default position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, )
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(ALM_RELAYER);
+        (uint256 tokenId, , ,) = foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
             tick,
             desired,
-            min,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+
+        // Change tick bounds
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), tick.lower + 100);
+
+        // Adding liquidity with the same tick bounds before the change should fail
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/lower-tick-outside-bounds");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_failsAfterUpperTickBoundChanges() public {
+        // Create new default position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, )
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(ALM_RELAYER);
+        (uint256 tokenId, , ,) = foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+
+        // Change tick bounds
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), tick.upper - 100);
+
+        // Adding liquidity with the same tick bounds before the change should fail
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/upper-tick-outside-bounds");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
             block.timestamp + 1 hours
         );
         vm.stopPrank();

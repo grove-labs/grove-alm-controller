@@ -118,6 +118,9 @@ library UniswapV3Lib {
         require(params.maxSlippage > 0,     "UniswapV3Lib/max-slippage-not-set");
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
 
+        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/lower-tick-outside-bounds");
+        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/upper-tick-outside-bounds");
+
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         address token0 = pool.token0();
@@ -269,8 +272,6 @@ library UniswapV3Lib {
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
-        require(params.tick.lower >= params.tickBounds.lower, "UniswapV3Lib/invalid-tick-lower");
-        require(params.tick.upper <= params.tickBounds.upper, "UniswapV3Lib/invalid-tick-upper");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
