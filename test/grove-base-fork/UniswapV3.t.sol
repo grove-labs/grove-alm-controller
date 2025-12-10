@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
-import { IERC20 }                 from "forge-std/interfaces/IERC20.sol";
+import { IERC20 }         from "forge-std/interfaces/IERC20.sol";
 import { IERC20Metadata } from "openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import { IERC721 }        from "openzeppelin-contracts/contracts/token/ERC721/IERC721.sol";
 
