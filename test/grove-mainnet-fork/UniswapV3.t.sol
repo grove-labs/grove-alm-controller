@@ -353,6 +353,26 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         );
         vm.stopPrank();
     }
+
+    function test_swapUniswapV3_zeroTwapSeconds() public {
+        uint256 amountIn = 100_000e6;
+        _fundProxy(amountIn, 0);
+
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 0);
+        vm.stopPrank();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
+        mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            0,
+            0
+        );
+        vm.stopPrank();
+    }
 }
 
 contract MainnetControllerSwapUniswapV3SuccessTests is UniswapV3TestBase {
@@ -1088,6 +1108,38 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
             UniswapV3Lib.TokenAmounts({
                 amount0: 0,
                 amount1: 0
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_zeroTwapSecondsAgo() public {
+        uint256 amount0 = 0;
+        uint256 amount1 = 2_000_000e6;
+
+        _fundProxy(amount0, amount1);
+
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 0);
+        vm.stopPrank();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/zero-twap-seconds");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            UniswapV3Lib.Tick({
+                lower: _toSpacedTick(initTick-100),
+                upper: _toSpacedTick(initTick-50)
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0,
+                amount1: amount1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0 * 98 / 100,
+                amount1: amount1 * 98 / 100
             }),
             block.timestamp + 1 hours
         );
