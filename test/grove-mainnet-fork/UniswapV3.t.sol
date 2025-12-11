@@ -620,7 +620,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
     function _prepareDefaultAddLiquidity()
         internal
         returns (
-            UniswapV3Lib.Tick memory tick,
+            UniswapV3Lib.Tick         memory tick,
             UniswapV3Lib.TokenAmounts memory desired,
             UniswapV3Lib.TokenAmounts memory min
         )
@@ -1042,9 +1042,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
         vm.stopPrank();
 
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
-
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/invalid-lower-tick");
         mainnetController.addLiquidityUniswapV3(
@@ -1074,9 +1071,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
         vm.stopPrank();
-
-        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
-            = _prepareDefaultAddLiquidity();
 
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/invalid-upper-tick");
