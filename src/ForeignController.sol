@@ -125,6 +125,9 @@ contract ForeignController is AccessControl {
     // ERC4626 exchange rate thresholds (1e36 precision)
     mapping(address token => uint256 maxExchangeRate) public maxExchangeRates;
 
+    // Stores UniswapV3 tokenIds that were created by this controller
+    mapping(uint256 tokenId => bool minted) public wasMintedByController;
+
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
     /**********************************************************************************************/
@@ -898,6 +901,8 @@ contract ForeignController is AccessControl {
     {
         _checkRole(RELAYER);
 
+        require(tokenId == 0 || wasMintedByController[tokenId], "ForeignController/invalid-token-id");
+
         UniswapV3Lib.UniswapV3PoolParams memory poolParams = uniswapV3PoolParams[pool];
         uint256 maxSlippage                                = maxSlippages[pool];
 
@@ -920,6 +925,10 @@ contract ForeignController is AccessControl {
                 twapSecondsAgo  : poolParams.twapSecondsAgo
             })
         );
+
+        if (tokenId == 0) {
+            wasMintedByController[tokenId_] = true;
+        }
     }
 
     function removeLiquidityUniswapV3(
