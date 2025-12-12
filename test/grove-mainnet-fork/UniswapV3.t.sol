@@ -854,11 +854,23 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function test_addLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
-        uint256 tokenId = _mintExternalPosition();
-
-        vm.warp(block.timestamp + 1 hours);
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
+            
+        (uint256 tokenId,,,) = _addLiquidity(
+            0,
+            tick,
+            desired,
+            min
+        );
+
+        vm.startPrank(address(almProxy));
+        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(address(almProxy), stranger, tokenId);
+        vm.stopPrank();
+
+        assertEq(IERC721(UNISWAP_V3_POSITION_MANAGER).ownerOf(tokenId), stranger, "Token should be owned by stranger");
+
+        vm.warp(block.timestamp + 1 hours);
 
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/proxy-does-not-own-token-id");
@@ -938,11 +950,16 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
         vm.stopPrank();
 
-        // Mint a USDC-USDT position and transfer it to the relayer
-        uint256 usdcUsdtTokenId = _mintExternalPosition();
-
-        vm.prank(stranger);
-        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(almProxy), usdcUsdtTokenId);
+        // Mint a USDC-USDT position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+            
+        (uint256 usdcUsdtTokenId,,,) = _addLiquidity(
+            0,
+            tick,
+            desired,
+            min
+        );
 
         vm.warp(block.timestamp + 1 hours);
 
@@ -1095,6 +1112,24 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
                 amount0: 0,
                 amount1: 0
             }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_invalidTokenId() public {
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+            
+
+        vm.startPrank(relayer);
+        vm.expectRevert("MainnetController/invalid-token-id");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            123,
+            tick,
+            desired,
+            min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();

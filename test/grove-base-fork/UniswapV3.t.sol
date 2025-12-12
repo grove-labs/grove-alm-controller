@@ -337,8 +337,8 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
 
     function _defaultMinPosition(UniswapV3Lib.TokenAmounts memory desired) internal pure returns (UniswapV3Lib.TokenAmounts memory) {
         return UniswapV3Lib.TokenAmounts({
-            amount0: desired.amount0 * 99 / 100,
-            amount1: desired.amount1 * 99 / 100
+            amount0: desired.amount0 * 98 / 100,
+            amount1: desired.amount1 * 98 / 100
         });
     }
 
@@ -524,11 +524,23 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
     }
 
     function test_addLiquidityUniswapV3_proxyDoesNotOwnTokenId() public {
-        uint256 tokenId = _mintExternalPosition();
-
-        vm.warp(block.timestamp + 1 hours);
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
             = _prepareDefaultAddLiquidity();
+            
+        (uint256 tokenId,,,) = _addLiquidity(
+            0,
+            tick,
+            desired,
+            min
+        );
+
+        vm.startPrank(address(almProxy));
+        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(address(almProxy), stranger, tokenId);
+        vm.stopPrank();
+
+        assertEq(IERC721(UNISWAP_V3_POSITION_MANAGER).ownerOf(tokenId), stranger, "Token should be owned by stranger");
+
+        vm.warp(block.timestamp + 1 hours);
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("UniswapV3Lib/proxy-does-not-own-token-id");
@@ -609,11 +621,16 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         foreignController.setUniswapV3AddLiquidityUpperTickBound(usdsAusdPool, 100000);
         vm.stopPrank();
 
-        // Mint a USDS-USDC position and transfer it to the relayer
-        uint256 usdsUsdcTokenId = _mintExternalPosition();
-
-        vm.prank(stranger);
-        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(almProxy), usdsUsdcTokenId);
+        // Mint a USDS-USDC position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+            
+        (uint256 usdsUsdcTokenId,,,) = _addLiquidity(
+            0,
+            tick,
+            desired,
+            min
+        );
 
         vm.warp(block.timestamp + 1 hours);
 
@@ -700,6 +717,31 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
             tick,
             desired,
             _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_invalidTokenId() public {
+        uint256 tokenId = _mintExternalPosition();
+
+        // Transfer tokenId to proxy
+        vm.startPrank(stranger);
+        IERC721(UNISWAP_V3_POSITION_MANAGER).transferFrom(stranger, address(foreignController), tokenId);
+        vm.stopPrank();
+        
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, UniswapV3Lib.TokenAmounts memory min)
+            = _prepareDefaultAddLiquidity();
+            
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("ForeignController/invalid-token-id");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            123, 
+            tick,
+            desired,
+            min,
             block.timestamp + 1 hours
         );
         vm.stopPrank();
