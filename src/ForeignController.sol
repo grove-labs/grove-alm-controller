@@ -820,7 +820,7 @@ contract ForeignController is AccessControl {
 
     function reallocateMorpho(address morphoVault, MarketAllocation[] calldata allocations)
         external
-        onlyRole(RELAYER)
+        onlyRole(DEFAULT_ADMIN_ROLE)
         rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_4626_DEPOSIT, morphoVault))
     {
         proxy.doCall(

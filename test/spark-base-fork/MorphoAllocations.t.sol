@@ -162,17 +162,19 @@ contract MorphoUpdateWithdrawQueueMorphoSuccessTests is MorphoTestBase {
 
 contract MorphoReallocateMorphoFailureTests is MorphoTestBase {
 
-    function test_reallocateMorpho_notRelayer() external {
+    function test_reallocateMorpho_notAdmin() external {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            RELAYER
+            relayer,
+            DEFAULT_ADMIN_ROLE
         ));
+
+        vm.prank(relayer);
         foreignController.reallocateMorpho(address(morphoVault), new MarketAllocation[](0));
     }
 
     function test_reallocateMorpho_invalidVault() external {
-        vm.prank(relayer);
+        vm.prank(Base.SPARK_EXECUTOR);
         vm.expectRevert("ForeignController/invalid-action");
         foreignController.reallocateMorpho(makeAddr("fake-vault"), new MarketAllocation[](0));
     }
@@ -235,7 +237,7 @@ contract MorphoReallocateMorphoSuccessTests is MorphoTestBase {
             assets       : 1_000_000e6
         });
 
-        vm.prank(relayer);
+        vm.prank(Base.SPARK_EXECUTOR);
         foreignController.reallocateMorpho(address(morphoVault), reallocations);
 
         // NOTE: No interest is accrued because deposit coverered all markets and is atomic
@@ -256,7 +258,7 @@ contract MorphoReallocateMorphoSuccessTests is MorphoTestBase {
             assets       : positionCBBTC + 400_000e6
         });
 
-        vm.prank(relayer);
+        vm.prank(Base.SPARK_EXECUTOR);
         foreignController.reallocateMorpho(address(morphoVault), reallocations);
 
         assertEq(positionAssets(usdcCBBTC), positionCBBTC + 400_000e6);
