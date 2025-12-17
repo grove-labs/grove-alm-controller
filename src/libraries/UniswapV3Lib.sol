@@ -6,8 +6,11 @@ import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
 
-import { UniV3UtilsLib, TickMath, LiquidityAmounts, FullMath } from "./uniswap-v3/UniV3UtilsLib.sol";
+import { UniV3UtilsLib, FullMath }                             from "./uniswap-v3/UniV3UtilsLib.sol";
 import { UniswapV3OracleLib }                                  from "./uniswap-v3/UniV3OracleLib.sol";
+
+import { TickMath }         from "dss-allocator/src/funnels/uniV3/TickMath.sol";
+import { LiquidityAmounts } from "dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
 
 import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";

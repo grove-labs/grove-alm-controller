@@ -2,8 +2,7 @@
 // From dss-allocator/test/funnels/UniV3Utils.sol
 pragma solidity ^0.8.16;
 
-import {LiquidityAmounts, FixedPoint96} from "dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
-import {TickMath}                       from "dss-allocator/src/funnels/uniV3/TickMath.sol";
+import {FixedPoint96} from "dss-allocator/src/funnels/uniV3/LiquidityAmounts.sol";
 import {FullMath}                       from "dss-allocator/src/funnels/uniV3/FullMath.sol";
 
 interface UniV3PoolLike {
@@ -33,10 +32,12 @@ library SafeCast {
 
     function toInt256(uint256 y) internal pure returns (int256 z) {
         require(y < 2**255);
+        /// forge-lint: disable-next-line(unsafe-typecast)
         z = int256(y);
     }
 }
 
+/// forge-lint: disable-start(mixed-case-variable)
 library UniV3UtilsLib {
     using SafeCast for uint256;
     using SafeCast for int256;
@@ -93,9 +94,11 @@ library UniV3UtilsLib {
         int128  liquidity
     ) internal pure returns (int256 amount0) {
         return
+            /// forge-lint: disable-start(unsafe-typecast)
             liquidity < 0
                 ? -getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
                 : getAmount0Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
+            /// forge-lint: disable-end(unsafe-typecast)
     }
 
     // https://github.com/Uniswap/v3-core/blob/d8b1c635c275d2a9450bd6a78f3fa2484fef73eb/contracts/libraries/SqrtPriceMath.sol#L217C7-L217C7
@@ -105,8 +108,11 @@ library UniV3UtilsLib {
         int128  liquidity
     ) internal pure returns (int256 amount1) {
         return
+            /// forge-lint: disable-start(unsafe-typecast)
             liquidity < 0
                 ? -getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(-liquidity), false).toInt256()
                 : getAmount1Delta(sqrtRatioAX96, sqrtRatioBX96, uint128(liquidity), true).toInt256();
+            /// forge-lint: disable-end(unsafe-typecast)
     }
 }
+/// forge-lint: disable-end(mixed-case-variable)
