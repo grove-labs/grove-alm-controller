@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import { Ethereum } from "lib/grove-address-registry/src/Ethereum.sol";
 
-import "./ForkTestBase.t.sol";
+import { ForkTestBase } from "./ForkTestBase.t.sol";
 
 interface IMerklDistributorLike {
     function toggleOperator(address user, address operator) external;
