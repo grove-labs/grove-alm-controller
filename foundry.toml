@@ -36,7 +36,7 @@ exclude_lints = [
 ignore = [
     "./**/*.t.sol",
     "./**/mocks/*.sol",
-    "./lib/**/*.sol"
+    "./lib/**"
 ]
 
 [fuzz]
