@@ -30,7 +30,7 @@ jobs:
 
       - name: Run forge lint
         run: |
-          forge lint
+          FOUNDRY_PROFILE=default forge lint
 
   test:
     runs-on: ubuntu-latest
