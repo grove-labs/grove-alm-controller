@@ -32,12 +32,15 @@ library UniswapV3OracleLib {
         int56 tickCumulativesDelta                  = tickCumulatives[1] - tickCumulatives[0];
         uint160 secondsPerLiquidityCumulativesDelta = secondsPerLiquidityCumulativeX128s[1] - secondsPerLiquidityCumulativeX128s[0];
 
+        /// forge-lint: disable-start(unsafe-typecast)
         arithmeticMeanTick = int24(tickCumulativesDelta / int32(secondsAgo));
         // Always round to negative infinity
         if (tickCumulativesDelta < 0 && (tickCumulativesDelta % int32(secondsAgo) != 0)) arithmeticMeanTick--;
+        /// forge-lint: disable-end(unsafe-typecast)
 
         // We are multiplying here instead of shifting to ensure that harmonicMeanLiquidity doesn't overflow uint128
         uint192 secondsAgoX160 = uint192(secondsAgo) * type(uint160).max;
+        /// forge-lint: disable-next-line(unsafe-typecast)
         harmonicMeanLiquidity  = uint128(secondsAgoX160 / (uint192(secondsPerLiquidityCumulativesDelta) << 32));
     }
 
