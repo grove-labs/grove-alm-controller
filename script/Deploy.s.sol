@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import { ScriptTools } from "dss-test/ScriptTools.sol";
 
-import "forge-std/Script.sol";
+import { Script, stdJson, console } from "forge-std/Script.sol";
 
 import { ControllerInstance } from "../deploy/ControllerInstance.sol";
 
@@ -15,8 +15,10 @@ contract DeployMainnetFull is Script {
     using ScriptTools for string;
 
     function run() external {
+        /// forge-lint: disable-start(unsafe-cheatcode)
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
+        /// forge-lint: disable-end(unsafe-cheatcode)
 
         vm.createSelectFork(getChain("mainnet").rpcUrl);
 
@@ -57,8 +59,10 @@ contract DeployMainnetController is Script {
     using ScriptTools for string;
 
     function run() external {
+        /// forge-lint: disable-start(unsafe-cheatcode)
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
+        /// forge-lint: disable-end(unsafe-cheatcode)
 
         vm.createSelectFork(getChain("mainnet").rpcUrl);
 
@@ -123,8 +127,10 @@ contract DeployForeignFull is ForeignScript {
     function run() external {
         setUpNonStandardChains();
 
+        /// forge-lint: disable-start(unsafe-cheatcode)
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
+        /// forge-lint: disable-end(unsafe-cheatcode)
 
         string memory chainName = vm.envString("CHAIN");
         string memory fileSlug  = string(abi.encodePacked(chainName, "-", vm.envString("ENV")));
@@ -167,8 +173,10 @@ contract DeployForeignController is ForeignScript {
     function run() external {
         setUpNonStandardChains();
 
+        /// forge-lint: disable-start(unsafe-cheatcode)
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
+        /// forge-lint: disable-end(unsafe-cheatcode)
 
         string memory chainName = vm.envString("CHAIN");
         string memory fileSlug  = string(abi.encodePacked(chainName, "-", vm.envString("ENV")));
