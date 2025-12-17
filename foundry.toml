@@ -34,9 +34,9 @@ exclude_lints = [
     "pascal-case-struct"
 ]
 ignore = [
-    "**/*.t.sol",
-    "**/mocks/*.sol",
-    "lib/**/*.sol"
+    "./**/*.t.sol",
+    "./**/mocks/*.sol",
+    "./lib/**/*.sol"
 ]
 
 [fuzz]

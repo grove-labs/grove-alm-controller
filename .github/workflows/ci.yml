@@ -11,7 +11,7 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  build:
+  build-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
