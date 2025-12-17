@@ -19,7 +19,7 @@ import { IPendleMarket }                            from "./interfaces/PendleInt
 import { IRateLimits }                              from "./interfaces/IRateLimits.sol";
 import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
-import "./interfaces/ILayerZero.sol";
+import { ILayerZero, SendParam, OFTReceipt, MessagingFee } from "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";

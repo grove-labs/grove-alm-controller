@@ -28,7 +28,7 @@ import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
 
-import "./interfaces/ILayerZero.sol";
+import { ILayerZero, SendParam, OFTReceipt, MessagingFee } from "./interfaces/ILayerZero.sol";
 
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
