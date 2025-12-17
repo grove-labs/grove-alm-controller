@@ -14,9 +14,6 @@ import {
     VaultLike
 } from "dss-allocator/deploy/AllocatorInit.sol";
 
-import { AllocatorBuffer } from "dss-allocator/src/AllocatorBuffer.sol";
-import { AllocatorVault }  from "dss-allocator/src/AllocatorVault.sol";
-
 import { ScriptTools } from "dss-test/ScriptTools.sol";
 
 import { IERC20 }  from "forge-std/interfaces/IERC20.sol";
@@ -118,8 +115,10 @@ contract FullStagingDeploy is Script {
     address deployer;
     bytes32 ilk;
 
+    /// forge-lint: disable-start(mixed-case-variable)
     uint256 USDC_UNIT_SIZE;
     uint256 USDS_UNIT_SIZE;
+    /// forge-lint: disable-end(mixed-case-variable)
 
     Domain mainnet;
     Domain arbitrum;
@@ -157,6 +156,7 @@ contract FullStagingDeploy is Script {
         //       the DAI balance of the PSM to check if it should fill or not. Filling with DAI
         //       fills the live PSM NOT the wrapper, so the while loop will continue until the
         //       function reverts. Dealing DAI into the wrapper will prevent fill from being called.
+        ///      forge-lint: disable-next-line(erc20-unchecked-transfer)
         IERC20(dai).transfer(psm, USDS_UNIT_SIZE);
 
         // Step 2: Deploy mocked MCD contracts
@@ -169,6 +169,7 @@ contract FullStagingDeploy is Script {
 
         require(IERC20(usds).balanceOf(deployer) >= USDS_UNIT_SIZE, "USDS balance too low");
 
+        /// forge-lint: disable-next-line(erc20-unchecked-transfer)
         IERC20(usds).transfer(usdsJoin, USDS_UNIT_SIZE);
 
         vm.stopBroadcast();
@@ -341,7 +342,7 @@ contract FullStagingDeploy is Script {
             pendleRouter             : domain.input.readAddress(".pendleRouter"),
             uniswapV3Router          : domain.input.readAddress(".uniswapV3Router"),
             uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager")
-            
+
             // susds : domain.input.readAddress(".susds"),
             // usds  : domain.input.readAddress(".usds")
         });
@@ -542,8 +543,10 @@ contract FullStagingDeploy is Script {
     /**********************************************************************************************/
 
     function run() public {
+        /// forge-lint: disable-start(unsafe-cheatcode)
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
+        /// forge-lint: disable-end(unsafe-cheatcode)
 
         deployer = msg.sender;
 
