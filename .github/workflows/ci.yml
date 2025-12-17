@@ -28,6 +28,10 @@ jobs:
           forge --version
           forge build --sizes ./src
 
+      - name: Run forge lint
+        run: |
+          forge lint
+
   test:
     runs-on: ubuntu-latest
     steps:
