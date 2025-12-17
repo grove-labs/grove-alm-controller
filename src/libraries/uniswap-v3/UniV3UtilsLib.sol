@@ -37,7 +37,6 @@ library SafeCast {
     }
 }
 
-/// forge-lint: disable-start(mixed-case-variable)
 library UniV3UtilsLib {
     using SafeCast for uint256;
     using SafeCast for int256;
@@ -115,4 +114,3 @@ library UniV3UtilsLib {
             /// forge-lint: disable-end(unsafe-typecast)
     }
 }
-/// forge-lint: disable-end(mixed-case-variable)

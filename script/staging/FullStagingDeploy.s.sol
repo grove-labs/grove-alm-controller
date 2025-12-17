@@ -115,10 +115,8 @@ contract FullStagingDeploy is Script {
     address deployer;
     bytes32 ilk;
 
-    /// forge-lint: disable-start(mixed-case-variable)
     uint256 USDC_UNIT_SIZE;
     uint256 USDS_UNIT_SIZE;
-    /// forge-lint: disable-end(mixed-case-variable)
 
     Domain mainnet;
     Domain arbitrum;
