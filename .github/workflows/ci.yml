@@ -18,6 +18,8 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
 
       - name: Install dependencies
         run: |
@@ -30,7 +32,7 @@ jobs:
 
       - name: Run forge lint
         run: |
-          FOUNDRY_PROFILE=default forge lint
+          forge lint
 
   test:
     runs-on: ubuntu-latest
