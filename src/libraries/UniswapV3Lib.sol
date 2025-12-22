@@ -51,7 +51,6 @@ library UniswapV3Lib {
         uint256             amountIn;
         uint256             minAmountOut;
         uint24              tickDelta; // The maximum that the tick can move by after completing the swap; cannot exceed MAX_TICK_DELTA
-        uint256             maxSlippage;
     }
 
     struct SwapCache {
@@ -86,9 +85,9 @@ library UniswapV3Lib {
 
     // Rate limit decreased by value of tokenIn (the amount actually spent)
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
-        require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
         require(params.poolParams.twapSecondsAgo != 0,                  "UniswapV3Lib/zero-twap-seconds");
+        require(params.minAmountOut > 0,                                "UniswapV3Lib/min-amount-not-set");
 
         SwapCache memory cache = _populateSwapCache(context, params);
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
@@ -96,7 +95,6 @@ library UniswapV3Lib {
         uint256 startingBalance = IERC20(params.tokenIn).balanceOf(address(context.proxy));
         amountOut               = _callSwap(context, params, cache);
         uint256 endingBalance   = IERC20(params.tokenIn).balanceOf(address(context.proxy));
-        require(params.minAmountOut >= amountOut * params.maxSlippage / 1e18 , "UniswapV3Lib/min-amount-not-met");
 
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
@@ -129,9 +127,6 @@ library UniswapV3Lib {
 
         _validateAddLiquidityMinAmounts(context, params);
 
-        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
-        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
-
         if (params.tokenId == 0) {
             (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
         } else {
@@ -139,14 +134,6 @@ library UniswapV3Lib {
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
-
-        {
-            uint256 balanceDiff0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
-            uint256 balanceDiff1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
-
-            require(params.min.amount0 >= balanceDiff0 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-            require(params.min.amount1 >= balanceDiff1 * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-        }
 
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);

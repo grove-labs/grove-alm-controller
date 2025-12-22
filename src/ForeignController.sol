@@ -837,7 +837,6 @@ contract ForeignController is AccessControl {
                 tokenIn      : tokenIn,
                 amountIn     : amountIn,
                 minAmountOut : minAmountOut,
-                maxSlippage  : maxSlippages[pool],
                 tickDelta    : swapMaxTickDelta,
                 poolParams   : uniswapV3PoolParams[pool]
             })

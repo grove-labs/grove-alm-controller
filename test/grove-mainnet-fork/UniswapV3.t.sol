@@ -250,25 +250,6 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         );
     }
 
-    function test_swapUniswapV3_maxSlippageNotSet() public {
-        uint256 amountIn = 100_000e6;
-        _fundProxy(amountIn, 0);
-
-        vm.prank(GROVE_PROXY);
-        mainnetController.setMaxSlippage(_getPool(), 0);
-
-        vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
-        mainnetController.swapUniswapV3(
-            _getPool(),
-            address(token0),
-            amountIn,
-            0,
-            200
-        );
-        vm.stopPrank();
-    }
-
     function test_swapUniswapV3_invalidTokenIn() public {
         uint256 amountIn = 100_000e6;
         deal(address(dai), address(almProxy), amountIn);
@@ -279,7 +260,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             _getPool(),
             address(dai),
             amountIn,
-            0,
+            1,
             200
         );
         vm.stopPrank();
@@ -343,7 +324,7 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         _fundProxy(amountIn, 0);
 
         vm.startPrank(relayer);
-        vm.expectRevert("UniswapV3Lib/min-amount-not-met");
+        vm.expectRevert("UniswapV3Lib/min-amount-not-set");
         mainnetController.swapUniswapV3(
             _getPool(),
             address(token0),
