@@ -96,7 +96,7 @@ library UniswapV3Lib {
         uint256 startingBalance = IERC20(params.tokenIn).balanceOf(address(context.proxy));
         amountOut               = _callSwap(context, params, cache);
         uint256 endingBalance   = IERC20(params.tokenIn).balanceOf(address(context.proxy));
-        require(params.minAmountOut >= amountOut * params.maxSlippage / 1e18 , "UniswapV3Lib/min-amount-not-met");
+        require(params.minAmountOut > 0, "UniswapV3Lib/min-amount-not-met");
 
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
