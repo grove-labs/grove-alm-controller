@@ -87,6 +87,7 @@ library UniswapV3Lib {
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
         require(params.poolParams.twapSecondsAgo != 0,                  "UniswapV3Lib/zero-twap-seconds");
+        require(params.minAmountOut > 0,                                "UniswapV3Lib/min-amount-not-set");
 
         SwapCache memory cache = _populateSwapCache(context, params);
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
@@ -94,7 +95,6 @@ library UniswapV3Lib {
         uint256 startingBalance = IERC20(params.tokenIn).balanceOf(address(context.proxy));
         amountOut               = _callSwap(context, params, cache);
         uint256 endingBalance   = IERC20(params.tokenIn).balanceOf(address(context.proxy));
-        require(params.minAmountOut > 0, "UniswapV3Lib/min-amount-not-met");
 
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
