@@ -620,6 +620,76 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
+
+    function test_addLiquidityUniswapV3_lowerTickDoesNotMatchPosition() public {
+         // Create new default position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, )
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(ALM_RELAYER);
+        (uint256 tokenId, , ,) = foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+
+        vm.warp(block.timestamp + 2 hours);
+
+        // Adding liquidity with the different lower tick bound should fail
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/lower-tick-does-not-match-position");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            UniswapV3Lib.Tick({
+                lower: tick.lower + 1,
+                upper: tick.upper
+            }),
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_upperTickDoesNotMatchPosition() public {
+         // Create new default position
+        (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, )
+            = _prepareDefaultAddLiquidity();
+
+        vm.prank(ALM_RELAYER);
+        (uint256 tokenId, , ,) = foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+
+        vm.warp(block.timestamp + 2 hours);
+
+        // Adding liquidity with the different upper tick bound should fail
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/upper-tick-does-not-match-position");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            UniswapV3Lib.Tick({
+                lower: tick.lower,
+                upper: tick.upper + 1
+            }),
+            desired,
+            _minLiquidityPosition(desired.amount0, desired.amount1),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+
     function test_addLiquidityUniswapV3_failsAfterLowerTickBoundChanges() public {
         // Create new default position
         (UniswapV3Lib.Tick memory tick, UniswapV3Lib.TokenAmounts memory desired, )
