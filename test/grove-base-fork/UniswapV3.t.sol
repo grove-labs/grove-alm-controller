@@ -289,25 +289,6 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         );
     }
 
-    function test_swapUniswapV3_maxSlippageNotSet() public {
-        uint256 amountIn = 100_000e6;
-        _fundProxy(amountIn, 0);
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMaxSlippage(_getPool(), 0);
-
-        vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
-        foreignController.swapUniswapV3(
-            _getPool(),
-            address(token0),
-            amountIn,
-            0,
-            200
-        );
-        vm.stopPrank();
-    }
-
     function test_swapUniswapV3_invalidTokenIn() public {
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("UniswapV3Lib/invalid-token-pair");

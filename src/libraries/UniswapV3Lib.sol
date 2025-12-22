@@ -51,7 +51,6 @@ library UniswapV3Lib {
         uint256             amountIn;
         uint256             minAmountOut;
         uint24              tickDelta; // The maximum that the tick can move by after completing the swap; cannot exceed MAX_TICK_DELTA
-        uint256             maxSlippage;
     }
 
     struct SwapCache {
@@ -86,7 +85,6 @@ library UniswapV3Lib {
 
     // Rate limit decreased by value of tokenIn (the amount actually spent)
     function swap(UniV3Context calldata context, SwapParams calldata params) external returns (uint256 amountOut) {
-        require(params.maxSlippage > 0,                                 "UniswapV3Lib/max-slippage-not-set");
         require(params.tickDelta <= params.poolParams.swapMaxTickDelta, "UniswapV3Lib/invalid-max-tick-delta");
         require(params.poolParams.twapSecondsAgo != 0,                  "UniswapV3Lib/zero-twap-seconds");
 
