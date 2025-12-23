@@ -307,6 +307,9 @@ library UniswapV3Lib {
 
         require(pool.token0() == token0 && pool.token1() == token1 && pool.fee() == fee, "UniswapV3Lib/invalid-pool");
 
+        require(tickLower == params.tick.lower, "UniswapV3Lib/lower-tick-does-not-match-position");
+        require(tickUpper == params.tick.upper, "UniswapV3Lib/upper-tick-does-not-match-position");
+
         // Check that existing position's bounds are still within governance set range
         require(tickLower >= params.tickBounds.lower, "UniswapV3Lib/lower-tick-outside-bounds");
         require(tickUpper <= params.tickBounds.upper, "UniswapV3Lib/upper-tick-outside-bounds");
