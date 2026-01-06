@@ -18,12 +18,13 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { CurveLib }     from "./libraries/CurveLib.sol";
-import { MerklLib }     from "./libraries/MerklLib.sol";
-import { PendleLib }    from "./libraries/PendleLib.sol";
-import { CCTPLib }      from "./libraries/CCTPLib.sol";
-import { ERC20Lib }     from "./libraries/common/ERC20Lib.sol";
-import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
+import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
+import { CurveLib }      from "./libraries/CurveLib.sol";
+import { MerklLib }      from "./libraries/MerklLib.sol";
+import { PendleLib }     from "./libraries/PendleLib.sol";
+import { CCTPLib }       from "./libraries/CCTPLib.sol";
+import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
+import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
@@ -615,34 +616,15 @@ contract ForeignController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
-
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "FC/id-not-configured");
-
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
-
-        // Initiate cross-chain transfer via the specific spoke address
-        proxy.doCallWithValue{value: msg.value}(
-            spoke,
-            abi.encodeCall(
-                ISpokeLike(spoke).crosschainTransferShares,
-                (
-                    destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
-                    amount,
-                    0
-                )
-            ),
-            msg.value
-        );
+        CentrifugeLib.transferSharesCentrifuge(CentrifugeLib.CentrifugeTransferParams({
+            proxy                   : proxy,
+            rateLimits              : rateLimits,
+            token                   : token,
+            amount                  : amount,
+            recipient               : centrifugeRecipients[destinationCentrifugeId],
+            destinationCentrifugeId : destinationCentrifugeId,
+            rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+        }));
     }
 
     /**********************************************************************************************/
