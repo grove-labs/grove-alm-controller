@@ -89,7 +89,7 @@ library CentrifugeLib {
             params.amount
         );
 
-        require(params.recipient != 0, "CentrifugeLib/centrifuge-id-not-configured");
+        require(params.recipient != 0, "CentrifugeLib/id-not-configured");
 
         ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(params.token);
 

@@ -1012,7 +1012,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         deal(ALM_RELAYER, 1 ether);  // Gas cost for Centrifuge
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("FC/centrifuge-id-not-configured");
+        vm.expectRevert("FC/id-not-configured");
         foreignController.transferSharesCentrifuge{value: 0.5 ether}(
             CENTRIFUGE_VAULT,
             10_000_000e6,
