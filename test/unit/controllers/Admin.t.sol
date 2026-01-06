@@ -183,7 +183,7 @@ contract MainnetControllerSetMaxSlippageTests is MainnetControllerAdminTestBase 
 
     function test_setMaxSlippage_outOfBounds() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/max-slippage-out-of-bounds");
+        vm.expectRevert("MC/max-slippage-oob");
         mainnetController.setMaxSlippage(makeAddr("pool"), 1e18 + 1);
     }
 }
@@ -209,13 +209,13 @@ contract MainnetControllerSetUniswapV3PoolMaxTickDeltaTests is MainnetController
 
     function test_setUniswapV3PoolMaxTickDelta_zeroMaxTickDelta() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("MC/max-tick-delta-oob");
         mainnetController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_exceedsMaxTickDelta() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("MC/max-tick-delta-oob");
         mainnetController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 887273); // MAX_TICK_DELTA + 1
     }
 
@@ -265,7 +265,7 @@ contract MainnetControllerSetUniswapV3AddLiquidityLowerTickBoundTests is Mainnet
 
     function test_setUniswapV3AddLiquidityLowerTickBound_belowMinTick() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        vm.expectRevert("MC/lower-tick-oob");
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(makeAddr("pool"), -887273); // MIN_TICK - 1
     }
 
@@ -278,11 +278,11 @@ contract MainnetControllerSetUniswapV3AddLiquidityLowerTickBoundTests is Mainnet
 
         // Try to set lower tick at or above the upper tick
         vm.prank(admin);
-        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        vm.expectRevert("MC/lower-tick-oob");
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(pool, 1000);
 
         vm.prank(admin);
-        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        vm.expectRevert("MC/lower-tick-oob");
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(pool, 1001);
     }
 
@@ -338,7 +338,7 @@ contract MainnetControllerSetUniswapV3AddLiquidityUpperTickBoundTests is Mainnet
 
     function test_setUniswapV3AddLiquidityUpperTickBound_aboveMaxTick() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        vm.expectRevert("MC/upper-tick-oob");
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(makeAddr("pool"), 887273); // MAX_TICK + 1
     }
 
@@ -353,11 +353,11 @@ contract MainnetControllerSetUniswapV3AddLiquidityUpperTickBoundTests is Mainnet
 
         // Try to set upper tick at or below the lower tick
         vm.prank(admin);
-        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        vm.expectRevert("MC/upper-tick-oob");
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(pool, 1000);
 
         vm.prank(admin);
-        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        vm.expectRevert("MC/upper-tick-oob");
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(pool, 999);
     }
 
@@ -411,10 +411,10 @@ contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAd
     function test_setUniswapV3TwapSecondsAgo_outOfBounds() public {
         vm.startPrank(admin);
 
-        vm.expectRevert("MainnetController/twap-seconds-ago-out-of-bounds");
+        vm.expectRevert("MC/twap-seconds-ago-oob");
         mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), uint32(type(int32).max));
 
-        vm.expectRevert("MainnetController/twap-seconds-ago-out-of-bounds");
+        vm.expectRevert("MC/twap-seconds-ago-oob");
         mainnetController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), type(uint32).max);
 
         vm.stopPrank();
@@ -612,7 +612,7 @@ contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase 
 
     function test_setMaxSlippage_outOfBounds() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/max-slippage-out-of-bounds");
+        vm.expectRevert("FC/max-slippage-oob");
         foreignController.setMaxSlippage(makeAddr("pool"), 1e18 + 1);
     }
 }
@@ -638,13 +638,13 @@ contract ForeignControllerSetUniswapV3PoolMaxTickDeltaTests is ForeignController
 
     function test_setUniswapV3PoolMaxTickDelta_zeroMaxTickDelta() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_exceedsMaxTickDelta() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(makeAddr("pool"), 887273); // MAX_TICK_DELTA + 1
     }
 
@@ -694,7 +694,7 @@ contract ForeignControllerSetUniswapV3AddLiquidityLowerTickBoundTests is Foreign
 
     function test_setUniswapV3AddLiquidityLowerTickBound_belowMinTick() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(makeAddr("pool"), -887273); // MIN_TICK - 1
     }
 
@@ -707,11 +707,11 @@ contract ForeignControllerSetUniswapV3AddLiquidityLowerTickBoundTests is Foreign
 
         // Try to set lower tick at or above the upper tick
         vm.prank(admin);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, 1000);
 
         vm.prank(admin);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(pool, 1001);
     }
 
@@ -767,7 +767,7 @@ contract ForeignControllerSetUniswapV3AddLiquidityUpperTickBoundTests is Foreign
 
     function test_setUniswapV3AddLiquidityUpperTickBound_aboveMaxTick() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        vm.expectRevert("FC/upper-tick-oob");
         foreignController.setUniswapV3AddLiquidityUpperTickBound(makeAddr("pool"), 887273); // MAX_TICK + 1
     }
 
@@ -782,11 +782,11 @@ contract ForeignControllerSetUniswapV3AddLiquidityUpperTickBoundTests is Foreign
 
         // Try to set upper tick at or below the lower tick
         vm.prank(admin);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        vm.expectRevert("FC/upper-tick-oob");
         foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 1000);
 
         vm.prank(admin);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        vm.expectRevert("FC/upper-tick-oob");
         foreignController.setUniswapV3AddLiquidityUpperTickBound(pool, 999);
     }
 
@@ -864,10 +864,10 @@ contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAd
     function test_setUniswapV3TwapSecondsAgo_outOfBounds() public {
         vm.startPrank(admin);
 
-        vm.expectRevert("ForeignController/twap-seconds-ago-out-of-bounds");
+        vm.expectRevert("FC/twap-seconds-ago-oob");
         foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), uint32(type(int32).max));
 
-        vm.expectRevert("ForeignController/twap-seconds-ago-out-of-bounds");
+        vm.expectRevert("FC/twap-seconds-ago-oob");
         foreignController.setUniswapV3TwapSecondsAgo(makeAddr("pool"), type(uint32).max);
 
         vm.stopPrank();

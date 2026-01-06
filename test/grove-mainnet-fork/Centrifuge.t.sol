@@ -182,7 +182,7 @@ contract MainnetControllerClaimDepositERC7540FailureTests is CentrifugeTestBase 
 
     function test_claimDepositERC7540_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("MC/invalid-action");
         mainnetController.claimDepositERC7540(makeAddr("fake-vault"));
     }
 
@@ -331,7 +331,7 @@ contract MainnetControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
 
     function test_cancelCentrifugeDepositRequest_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         mainnetController.cancelCentrifugeDepositRequest(makeAddr("fake-vault"));
     }
 
@@ -387,7 +387,7 @@ contract MainnetControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
 
     function test_claimCentrifugeCancelDepositRequest_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         mainnetController.claimCentrifugeCancelDepositRequest(makeAddr("fake-vault"));
     }
 
@@ -575,7 +575,7 @@ contract MainnetControllerClaimRedeemERC7540FailureTests is CentrifugeTestBase {
 
     function test_claimRedeemERC7540_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("MC/invalid-action");
         mainnetController.claimRedeemERC7540(makeAddr("fake-vault"));
     }
 
@@ -740,7 +740,7 @@ contract MainnetControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
 
     function test_cancelCentrifugeRedeemRequest_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         mainnetController.cancelCentrifugeRedeemRequest(makeAddr("fake-vault"));
     }
 
@@ -800,7 +800,7 @@ contract MainnetControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
 
     function test_claimCentrifugeCancelRedeemRequest_invalidVault() external {
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         mainnetController.claimCentrifugeCancelRedeemRequest(makeAddr("fake-vault"));
     }
 

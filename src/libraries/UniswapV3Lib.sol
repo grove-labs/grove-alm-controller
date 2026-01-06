@@ -464,7 +464,7 @@ library UniswapV3Lib {
         ) = _fetchPositionData(params.tokenId, params.positionManager);
 
         require(positionToken0 == token0 && positionToken1 == token1 && positionFee == fee, "UniswapV3Lib/invalid-pool");
-        require(params.liquidity > 0 && params.liquidity <= positionLiquidity,              "UniswapV3Lib/liquidity-out-of-bounds");
+        require(params.liquidity > 0 && params.liquidity <= positionLiquidity,              "UniswapV3Lib/liquidity-oob");
     }
 
     function _decreaseLiquidityCall(

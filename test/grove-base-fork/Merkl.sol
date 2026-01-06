@@ -29,7 +29,7 @@ contract MerklBaseTest is ForkTestBase {
 contract ForeignControllerToggleOperatorMerklFailureTests is MerklBaseTest {
 
     function test_toggleOperatorMerkl_merklDistributorNotSet() external {
-        vm.expectRevert("ForeignController/merkl-distributor-not-set");
+        vm.expectRevert("FC/merkl-distributor-not-set");
 
         vm.prank(relayer);
         foreignController.toggleOperatorMerkl(operator1);

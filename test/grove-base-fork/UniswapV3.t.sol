@@ -219,19 +219,19 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
 
     function test_setUniswapV3PoolMaxTickDelta_isZero() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_isTooLarge() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
     }
 
     function test_setUniswapV3AddLiquidityLowerTickBound_isTooSmall() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
     }
 
@@ -240,13 +240,13 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
         int24 currentUpper = tickBounds.upper;
 
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
     }
 
     function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        vm.expectRevert("FC/upper-tick-oob");
         foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), MAX_UNISWAP_TICK + 1);
     }
 }
@@ -264,13 +264,13 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
 
     function test_setUniswapV3PoolMaxTickDelta_zeroTickDelta() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_outOfBounds() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
     }
 
@@ -1244,7 +1244,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_zeroLiquidity() public {
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/liquidity-out-of-bounds");
+        vm.expectRevert("UniswapV3Lib/liquidity-oob");
         foreignController.removeLiquidityUniswapV3(
             _getPool(),
             tokenId,
@@ -1257,7 +1257,7 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
 
     function test_removeLiquidityUniswapV3_liquidityTooHigh() public {
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/liquidity-out-of-bounds");
+        vm.expectRevert("UniswapV3Lib/liquidity-oob");
         foreignController.removeLiquidityUniswapV3(
             _getPool(),
             tokenId,
