@@ -286,7 +286,7 @@ contract MainnetController is AccessControl {
         int24   tickUpperMax,
         uint24  maxTickSpacing
     )
-        external nonReentrant
+        external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
@@ -776,7 +776,7 @@ contract MainnetController is AccessControl {
         uint256 amount0Max,
         uint256 amount1Max
     )
-        external nonReentrant
+        external
     {
         _checkRole(RELAYER);
 
@@ -800,7 +800,7 @@ contract MainnetController is AccessControl {
         uint256 amount0Max,
         uint256 amount1Max
     )
-        external nonReentrant
+        external
     {
         _checkRole(RELAYER);
 
@@ -823,7 +823,7 @@ contract MainnetController is AccessControl {
         uint256 amount0Min,
         uint256 amount1Min
     )
-        external nonReentrant
+        external
     {
         _checkRole(RELAYER);
 
@@ -844,7 +844,7 @@ contract MainnetController is AccessControl {
         uint128 amountIn,
         uint128 amountOutMin
     )
-        external nonReentrant
+        external
     {
         _checkRole(RELAYER);
 
