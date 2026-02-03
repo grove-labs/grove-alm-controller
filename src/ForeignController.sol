@@ -550,62 +550,48 @@ contract ForeignController is AccessControl {
 
     // NOTE: These cancelation methods are compatible with ERC-7887
 
-    function cancelCentrifugeDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        // NOTE: While the cancelation is pending, no new deposit request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function cancelCentrifugeRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        // NOTE: While the cancelation is pending, no new redeem request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
     function transferSharesCentrifuge(

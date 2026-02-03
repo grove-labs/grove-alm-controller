@@ -343,7 +343,7 @@ contract ForeignControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
 
     function test_cancelCentrifugeDepositRequest_invalidVault() external {
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("FC/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         foreignController.cancelCentrifugeDepositRequest(makeAddr("fake-vault"));
     }
 
@@ -399,7 +399,7 @@ contract ForeignControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
 
     function test_claimCentrifugeCancelDepositRequest_invalidVault() external {
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("FC/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         foreignController.claimCentrifugeCancelDepositRequest(makeAddr("fake-vault"));
     }
 
@@ -795,7 +795,7 @@ contract ForeignControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
 
     function test_cancelCentrifugeRedeemRequest_invalidVault() external {
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("FC/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         foreignController.cancelCentrifugeRedeemRequest(makeAddr("fake-vault"));
     }
 
@@ -855,7 +855,7 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
 
     function test_claimCentrifugeCancelRedeemRequest_invalidVault() external {
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("FC/invalid-action");
+        vm.expectRevert("CentrifugeLib/invalid-action");
         foreignController.claimCentrifugeCancelRedeemRequest(makeAddr("fake-vault"));
     }
 
