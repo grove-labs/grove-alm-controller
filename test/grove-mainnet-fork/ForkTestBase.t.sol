@@ -32,7 +32,8 @@ import { ALMProxy }          from "../../src/ALMProxy.sol";
 import { RateLimits }        from "../../src/RateLimits.sol";
 import { MainnetController } from "../../src/MainnetController.sol";
 
-import { RateLimitHelpers }  from "../../src/RateLimitHelpers.sol";
+import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
 interface IChainlogLike {
     function getAddress(bytes32) external view returns (address);
@@ -286,14 +287,14 @@ contract ForkTestBase is DssTest {
         uint256 usdcSlope     = uint256(1_000_000e6) / 4 hours;
 
         bytes32 domainKeyAvalanche = RateLimitHelpers.makeDomainKey(
-            mainnetController.LIMIT_USDC_TO_DOMAIN(),
+            RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN,
             CCTPForwarder.DOMAIN_ID_CIRCLE_AVALANCHE
         );
 
         // NOTE: Using minimal config for test base setup
-        rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_MINT(),    usdsMaxAmount, usdsSlope);
-        rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_TO_USDC(), usdcMaxAmount, usdcSlope);
-        rateLimits.setRateLimitData(mainnetController.LIMIT_USDC_TO_CCTP(), usdcMaxAmount, usdcSlope);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDS_MINT,    usdsMaxAmount, usdsSlope);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDS_TO_USDC, usdcMaxAmount, usdcSlope);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDC_TO_CCTP, usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(domainKeyAvalanche,                     usdcMaxAmount, usdcSlope);
 
         vm.stopPrank();

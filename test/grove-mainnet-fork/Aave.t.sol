@@ -3,6 +3,8 @@ pragma solidity >=0.8.0;
 
 import { IAToken } from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract AaveV3MainMarketBaseTest is ForkTestBase {
@@ -24,7 +26,7 @@ contract AaveV3MainMarketBaseTest is ForkTestBase {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_AAVE_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_AAVE_DEPOSIT,
                 ATOKEN_USDS
             ),
             25_000_000e18,
@@ -32,7 +34,7 @@ contract AaveV3MainMarketBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_AAVE_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_AAVE_DEPOSIT,
                 ATOKEN_USDC
             ),
             25_000_000e6,
@@ -40,7 +42,7 @@ contract AaveV3MainMarketBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_AAVE_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
                 ATOKEN_USDS
             ),
             10_000_000e18,
@@ -48,7 +50,7 @@ contract AaveV3MainMarketBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_AAVE_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
                 ATOKEN_USDC
             ),
             10_000_000e6,
@@ -189,7 +191,7 @@ contract AaveV3MainMarketWithdrawFailureTests is AaveV3MainMarketBaseTest {
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_AAVE_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
                 ATOKEN_USDC
             ),
             0,
@@ -239,7 +241,7 @@ contract AaveV3MainMarketWithdrawSuccessTests is AaveV3MainMarketBaseTest {
 
     function test_withdrawAave_usds() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDS
         );
 
@@ -285,7 +287,7 @@ contract AaveV3MainMarketWithdrawSuccessTests is AaveV3MainMarketBaseTest {
 
     function test_withdrawAave_usds_unlimitedRateLimit() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDS
         );
         vm.prank(Ethereum.GROVE_PROXY);
@@ -320,7 +322,7 @@ contract AaveV3MainMarketWithdrawSuccessTests is AaveV3MainMarketBaseTest {
 
     function test_withdrawAave_usdc() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDC
         );
         deal(Ethereum.USDC, address(almProxy), 1_000_000e6);
@@ -365,7 +367,7 @@ contract AaveV3MainMarketWithdrawSuccessTests is AaveV3MainMarketBaseTest {
 
     function test_withdrawAave_usdc_unlimitedRateLimit() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDC
         );
         vm.prank(Ethereum.GROVE_PROXY);

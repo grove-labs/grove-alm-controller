@@ -5,6 +5,8 @@ import { MockERC20Decimals } from "../unit/mocks/MockTokens.sol";
 
 import { ICurvePoolLike as ICurvePoolLikeLib } from "../../src/libraries/CurveLib.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 interface ICurvePoolLike is ICurvePoolLikeLib {
@@ -56,9 +58,9 @@ contract CurveTestBase is ForkTestBase {
             ICurvePoolLike(CURVE_POOL).add_liquidity(amounts, 1e18, address(this));
         }
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveSwapKey     = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveSwapKey     = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_SWAP,     CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(curveDepositKey,  2_000_000e18, uint256(2_000_000e18) / 1 days);
@@ -215,7 +217,7 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
     }
 
     function test_addLiquidityCurve_zeroMaxAmount() public {
-        bytes32 curveDeposit = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_DEPOSIT(), CURVE_POOL);
+        bytes32 curveDeposit = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_DEPOSIT, CURVE_POOL);
 
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(curveDeposit, 0, 0);
@@ -511,7 +513,7 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
     }
 
     function test_removeLiquidityCurve_zeroMaxAmount() public {
-        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(curveWithdraw, 0, 0);
@@ -540,7 +542,7 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
 
         vm.revertToState(id);
 
-        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
         // Set to below boundary
         vm.prank(GROVE_EXECUTOR);
@@ -708,7 +710,7 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
     }
 
     function test_swapCurve_zeroMaxAmount() public {
-        bytes32 curveSwap = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_SWAP(), CURVE_POOL);
+        bytes32 curveSwap = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_CURVE_SWAP, CURVE_POOL);
 
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(curveSwap, 0, 0);

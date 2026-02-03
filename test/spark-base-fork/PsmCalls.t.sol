@@ -3,6 +3,8 @@ pragma solidity >=0.8.0;
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract ForeignControllerPSMSuccessTestBase is ForkTestBase {
@@ -92,7 +94,7 @@ contract ForeignControllerDepositPSMFailureTests is ForkTestBase {
 contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase {
 
     function test_depositPSM_depositUsds() external {
-        bytes32 key = foreignController.LIMIT_PSM_DEPOSIT();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_DEPOSIT;
 
         deal(address(usdsBase), address(almProxy), 100e18);
 
@@ -125,7 +127,7 @@ contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase
     }
 
     function test_depositPSM_depositUsdc() external {
-        bytes32 key = foreignController.LIMIT_PSM_DEPOSIT();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_DEPOSIT;
 
         deal(address(usdcBase), address(almProxy), 100e6);
 
@@ -158,7 +160,7 @@ contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase
     }
 
     function test_depositPSM_depositSUsds() external {
-        bytes32 key = foreignController.LIMIT_PSM_DEPOSIT();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_DEPOSIT;
 
         deal(address(susdsBase), address(almProxy), 100e18);
 
@@ -204,7 +206,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_usdcZeroMaxAmount() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(usdcBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -216,7 +218,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_usdsZeroMaxAmount() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(usdsBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -228,7 +230,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_susdsZeroMaxAmount() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(susdsBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -240,7 +242,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_usdcRateLimitedBoundary() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(usdcBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -258,7 +260,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_usdsRateLimitedBoundary() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(usdsBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -276,7 +278,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
     }
 
     function test_withdrawPSM_susdsRateLimitedBoundary() external {
-        bytes32 withdrawKey      = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 withdrawKey      = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
         bytes32 withdrawAssetKey = RateLimitHelpers.makeAssetKey(withdrawKey, address(susdsBase));
 
         vm.prank(SPARK_EXECUTOR);
@@ -301,7 +303,7 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
 contract ForeignControllerWithdrawPSMTests is ForeignControllerPSMSuccessTestBase {
 
     function test_withdrawPSM_withdrawUsds() external {
-        bytes32 key = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
 
         deal(address(usdsBase), address(almProxy), 100e18);
         vm.prank(relayer);
@@ -336,7 +338,7 @@ contract ForeignControllerWithdrawPSMTests is ForeignControllerPSMSuccessTestBas
     }
 
     function test_withdrawPSM_withdrawUsdc() external {
-        bytes32 key = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
 
         deal(address(usdcBase), address(almProxy), 100e6);
         vm.prank(relayer);
@@ -371,7 +373,7 @@ contract ForeignControllerWithdrawPSMTests is ForeignControllerPSMSuccessTestBas
     }
 
     function test_withdrawPSM_withdrawSUsds() external {
-        bytes32 key = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 key = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
 
         deal(address(susdsBase), address(almProxy), 100e18);
         vm.prank(relayer);

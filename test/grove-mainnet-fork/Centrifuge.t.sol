@@ -5,8 +5,9 @@ import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
 import { ICentrifugeV3VaultLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
 
-import "./ForkTestBase.t.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
+import "./ForkTestBase.t.sol";
 
 interface IRestrictionManager {
     function updateMember(address token, address user, uint64 validUntil) external;
@@ -100,7 +101,7 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_7540_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_7540_DEPOSIT,
                 address(jTreasuryVault)
             ),
             1_000_000e6,
@@ -132,7 +133,7 @@ contract MainnetControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
         restrictionManager.updateMember(address(jTreasuryToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(jTreasuryVault)
         );
 
@@ -199,7 +200,7 @@ contract MainnetControllerClaimDepositERC7540SuccessTests is CentrifugeTestBase 
         restrictionManager.updateMember(address(jTreasuryToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(jTreasuryVault)
         );
 
@@ -348,7 +349,7 @@ contract MainnetControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestB
         restrictionManager.updateMember(address(jTreasuryToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(jTreasuryVault)
         );
 
@@ -404,7 +405,7 @@ contract MainnetControllerClaimCentrifugeCancelDepositSuccessTests is Centrifuge
         restrictionManager.updateMember(address(jTreasuryToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(jTreasuryVault)
         );
 
@@ -485,7 +486,7 @@ contract MainnetControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_7540_REDEEM(),
+                RateLimitKeysLib.LIMIT_7540_REDEEM,
                 address(jTreasuryVault)
             ),
             1_000_000e6,
@@ -524,7 +525,7 @@ contract MainnetControllerRequestRedeemERC7540SuccessTests is CentrifugeTestBase
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(jTreasuryVault)
         );
 
@@ -593,7 +594,7 @@ contract MainnetControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(jTreasuryVault)
         );
 
@@ -758,7 +759,7 @@ contract MainnetControllerCancelCentrifugeRedeemRequestSuccessTests is Centrifug
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(jTreasuryVault)
         );
 
@@ -818,7 +819,7 @@ contract MainnetControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(jTreasuryVault)
         );
 

@@ -8,6 +8,7 @@ import { MarketParamsLib }       from "morpho-blue/src/libraries/MarketParamsLib
 import { IMorpho, MarketParams } from "morpho-blue/src/interfaces/IMorpho.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -69,7 +70,7 @@ contract MorphoBaseTest is ForkTestBase {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_4626_DEPOSIT,
                 MORPHO_VAULT_USDS
             ),
             25_000_000e18,
@@ -77,7 +78,7 @@ contract MorphoBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_4626_DEPOSIT,
                 MORPHO_VAULT_USDC
             ),
             25_000_000e6,
@@ -85,7 +86,7 @@ contract MorphoBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_4626_WITHDRAW,
                 MORPHO_VAULT_USDS
             ),
             10_000_000e18,
@@ -93,7 +94,7 @@ contract MorphoBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_4626_WITHDRAW,
                 MORPHO_VAULT_USDC
             ),
             10_000_000e6,
@@ -309,7 +310,7 @@ contract MorphoRedeemFailureTests is MorphoBaseTest {
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_4626_WITHDRAW,
                 MORPHO_VAULT_USDS
             ),
             0,

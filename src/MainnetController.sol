@@ -27,6 +27,7 @@ import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { MerklLib }                       from "./libraries/MerklLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
+import { RateLimitKeysLib }               from "./libraries/RateLimitKeysLib.sol";
 import { ERC20Lib }                       from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
 
@@ -82,30 +83,6 @@ contract MainnetController is AccessControl {
 
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
-
-    bytes32 public LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT         = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM          = keccak256("LIMIT_7540_REDEEM");
-    bytes32 public LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public LIMIT_CENTRIFUGE_TRANSFER  = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
-    bytes32 public LIMIT_CURVE_DEPOSIT        = keccak256("LIMIT_CURVE_DEPOSIT");
-    bytes32 public LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
-    bytes32 public LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
-    bytes32 public LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_PENDLE_PT_REDEEM     = keccak256("LIMIT_PENDLE_PT_REDEEM");
-    bytes32 public LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
-    bytes32 public LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
-    bytes32 public LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
-    bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
-    bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
-    bytes32 public LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
-    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -282,7 +259,7 @@ contract MainnetController is AccessControl {
 
     function mintUSDS(uint256 usdsAmount) external {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDS_MINT, usdsAmount);
+        _rateLimited(RateLimitKeysLib.LIMIT_USDS_MINT, usdsAmount);
 
         // Mint USDS into the buffer
         proxy.doCall(
@@ -299,7 +276,7 @@ contract MainnetController is AccessControl {
 
     function burnUSDS(uint256 usdsAmount) external {
         _checkRole(RELAYER);
-        _cancelRateLimit(LIMIT_USDS_MINT, usdsAmount);
+        _cancelRateLimit(RateLimitKeysLib.LIMIT_USDS_MINT, usdsAmount);
 
         // Transfer USDS from the proxy to the buffer
         ERC20Lib.transfer(proxy, address(usds), buffer, usdsAmount);
@@ -318,7 +295,7 @@ contract MainnetController is AccessControl {
     function transferAsset(address asset, address destination, uint256 amount) external {
         _checkRole(RELAYER);
         _rateLimited(
-            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
+            RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_ASSET_TRANSFER, asset, destination),
             amount
         );
 
@@ -331,7 +308,7 @@ contract MainnetController is AccessControl {
 
     function depositERC4626(address token, uint256 amount) external returns (uint256 shares) {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_4626_DEPOSIT, token, amount);
+        _rateLimitedAsset(RateLimitKeysLib.LIMIT_4626_DEPOSIT, token, amount);
 
         // Note that whitelist is done by rate limits
         IERC20 asset = IERC20(IERC4626(token).asset());
@@ -356,7 +333,7 @@ contract MainnetController is AccessControl {
 
     function withdrawERC4626(address token, uint256 amount) external returns (uint256 shares) {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_4626_WITHDRAW, token, amount);
+        _rateLimitedAsset(RateLimitKeysLib.LIMIT_4626_WITHDRAW, token, amount);
 
         // Withdraw asset from a token, decode resulting shares.
         // Assumes proxy has adequate token shares.
@@ -384,7 +361,7 @@ contract MainnetController is AccessControl {
         );
 
         rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, token),
+            RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_4626_WITHDRAW, token),
             assets
         );
     }
@@ -395,7 +372,7 @@ contract MainnetController is AccessControl {
 
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_7540_DEPOSIT, token, amount);
+        _rateLimitedAsset(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token, amount);
 
         // Note that whitelist is done by rate limits
         IERC20 asset = IERC20(IERC7540(token).asset());
@@ -412,7 +389,7 @@ contract MainnetController is AccessControl {
 
     function claimDepositERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token));
+        _rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token));
 
         uint256 shares = IERC7540(token).maxMint(address(proxy));
 
@@ -426,7 +403,7 @@ contract MainnetController is AccessControl {
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
         _rateLimitedAsset(
-            LIMIT_7540_REDEEM,
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             token,
             IERC7540(token).convertToAssets(shares)
         );
@@ -440,7 +417,7 @@ contract MainnetController is AccessControl {
 
     function claimRedeemERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token));
+        _rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_REDEEM, token));
 
         uint256 assets = IERC7540(token).maxWithdraw(address(proxy));
 
@@ -493,7 +470,7 @@ contract MainnetController is AccessControl {
                 amount                  : amount,
                 recipient               : centrifugeRecipients[destinationCentrifugeId],
                 destinationCentrifugeId : destinationCentrifugeId,
-                rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+                rateLimitId             : RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER
             })
         );
     }
@@ -504,7 +481,7 @@ contract MainnetController is AccessControl {
 
     function depositAave(address aToken, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount);
+        _rateLimitedAsset(RateLimitKeysLib.LIMIT_AAVE_DEPOSIT, aToken, amount);
 
         require(maxSlippages[aToken] != 0, "MC/max-slippage-not-set");
 
@@ -553,7 +530,7 @@ contract MainnetController is AccessControl {
         );
 
         rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
+            RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_AAVE_WITHDRAW, aToken),
             amountWithdrawn
         );
     }
@@ -577,7 +554,7 @@ contract MainnetController is AccessControl {
             proxy        : proxy,
             rateLimits   : rateLimits,
             pool         : pool,
-            rateLimitId  : LIMIT_CURVE_SWAP,
+            rateLimitId  : RateLimitKeysLib.LIMIT_CURVE_SWAP,
             inputIndex   : inputIndex,
             outputIndex  : outputIndex,
             amountIn     : amountIn,
@@ -599,8 +576,8 @@ contract MainnetController is AccessControl {
             proxy                   : proxy,
             rateLimits              : rateLimits,
             pool                    : pool,
-            addLiquidityRateLimitId : LIMIT_CURVE_DEPOSIT,
-            swapRateLimitId         : LIMIT_CURVE_SWAP,
+            addLiquidityRateLimitId : RateLimitKeysLib.LIMIT_CURVE_DEPOSIT,
+            swapRateLimitId         : RateLimitKeysLib.LIMIT_CURVE_SWAP,
             minLpAmount             : minLpAmount,
             maxSlippage             : maxSlippages[pool],
             depositAmounts          : depositAmounts
@@ -620,7 +597,7 @@ contract MainnetController is AccessControl {
             proxy              : proxy,
             rateLimits         : rateLimits,
             pool               : pool,
-            rateLimitId        : LIMIT_CURVE_WITHDRAW,
+            rateLimitId        : RateLimitKeysLib.LIMIT_CURVE_WITHDRAW,
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
@@ -645,7 +622,7 @@ contract MainnetController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,
                 pool        : pool
             }),
             UniswapV3Lib.SwapParams({
@@ -679,7 +656,7 @@ contract MainnetController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,
                 pool        : pool
             }),
             UniswapV3Lib.AddLiquidityParams({
@@ -711,7 +688,7 @@ contract MainnetController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW,
                 pool        : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({
@@ -751,19 +728,19 @@ contract MainnetController is AccessControl {
     // Note that Ethena's mint/redeem per-block limits include other users
     function prepareUSDeMint(uint256 usdcAmount) external {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDE_MINT, usdcAmount);
+        _rateLimited(RateLimitKeysLib.LIMIT_USDE_MINT, usdcAmount);
         ERC20Lib.approve(proxy, address(usdc), address(ethenaMinter), usdcAmount);
     }
 
     function prepareUSDeBurn(uint256 usdeAmount) external {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDE_BURN, usdeAmount);
+        _rateLimited(RateLimitKeysLib.LIMIT_USDE_BURN, usdeAmount);
         ERC20Lib.approve(proxy, address(usde), address(ethenaMinter), usdeAmount);
     }
 
     function cooldownAssetsSUSDe(uint256 usdeAmount) external {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_SUSDE_COOLDOWN, usdeAmount);
+        _rateLimited(RateLimitKeysLib.LIMIT_SUSDE_COOLDOWN, usdeAmount);
 
         proxy.doCall(
             address(susde),
@@ -786,7 +763,7 @@ contract MainnetController is AccessControl {
             (uint256)
         );
 
-        rateLimits.triggerRateLimitDecrease(LIMIT_SUSDE_COOLDOWN, cooldownAmount);
+        rateLimits.triggerRateLimitDecrease(RateLimitKeysLib.LIMIT_SUSDE_COOLDOWN, cooldownAmount);
     }
 
     function unstakeSUSDe() external {
@@ -815,7 +792,7 @@ contract MainnetController is AccessControl {
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
+            rateLimitId  : RateLimitKeysLib.LIMIT_PENDLE_PT_REDEEM,
             pendleMarket : IPendleMarket(pendleMarket),
             pendleRouter : Ethereum.PENDLE_ROUTER,
             pyAmountIn   : pyAmountIn,
@@ -871,7 +848,7 @@ contract MainnetController is AccessControl {
             psm                     : psm,
             usds                    : usds,
             dai                     : dai,
-            rateLimitId             : LIMIT_USDS_TO_USDC,
+            rateLimitId             : RateLimitKeysLib.LIMIT_USDS_TO_USDC,
             usdcAmount              : usdcAmount,
             psmTo18ConversionFactor : psmTo18ConversionFactor
         }));
@@ -887,7 +864,7 @@ contract MainnetController is AccessControl {
             psm                     : psm,
             dai                     : dai,
             usdc                    : usdc,
-            rateLimitId             : LIMIT_USDS_TO_USDC,
+            rateLimitId             : RateLimitKeysLib.LIMIT_USDS_TO_USDC,
             usdcAmount              : usdcAmount,
             psmTo18ConversionFactor : psmTo18ConversionFactor
         }));
@@ -905,7 +882,7 @@ contract MainnetController is AccessControl {
     {
         _checkRole(RELAYER);
         _rateLimited(
-            keccak256(abi.encode(LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
+            keccak256(abi.encode(RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
             amount
         );
 
@@ -967,8 +944,8 @@ contract MainnetController is AccessControl {
             rateLimits        : rateLimits,
             cctp              : cctp,
             usdc              : usdc,
-            domainRateLimitId : LIMIT_USDC_TO_DOMAIN,
-            cctpRateLimitId   : LIMIT_USDC_TO_CCTP,
+            domainRateLimitId : RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN,
+            cctpRateLimitId   : RateLimitKeysLib.LIMIT_USDC_TO_CCTP,
             mintRecipient     : mintRecipients[destinationDomain],
             destinationDomain : destinationDomain,
             usdcAmount        : usdcAmount
@@ -1009,7 +986,7 @@ contract MainnetController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
+            rateLimitId : RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             requestId   : CENTRIFUGE_REQUEST_ID
         });
     }
@@ -1021,7 +998,7 @@ contract MainnetController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
+            rateLimitId : RateLimitKeysLib.LIMIT_7540_REDEEM,
             requestId   : CENTRIFUGE_REQUEST_ID
         });
     }

@@ -28,6 +28,8 @@ import "src/interfaces/ILayerZero.sol";
 
 import { CCTPv2Forwarder as CCTPForwarder } from "xchain-helpers/forwarders/CCTPv2Forwarder.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 contract MainnetControllerLayerZeroTestBase is ForkTestBase {
 
     uint32 constant destinationEndpointId = 30110;  // Arbitrum EID
@@ -57,7 +59,7 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
         vm.startPrank(SPARK_PROXY);
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+                RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
                 USDT_OFT,
                 destinationEndpointId
             )),
@@ -78,7 +80,7 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+                RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
                 USDT_OFT,
                 destinationEndpointId
             )),
@@ -141,7 +143,7 @@ contract MainnetControllerTransferLayerZeroSuccessTests is MainnetControllerLaye
         vm.startPrank(SPARK_PROXY);
 
         bytes32 key = keccak256(abi.encode(
-            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
             USDT_OFT,
             destinationEndpointId
         ));
@@ -358,7 +360,7 @@ contract ForeignControllerTransferLayerZeroFailureTests is ArbitrumChainLayerZer
         vm.startPrank(SPARK_EXECUTOR);
         foreignRateLimits.setRateLimitData(
             keccak256(abi.encode(
-                foreignController.LIMIT_LAYERZERO_TRANSFER(),
+                RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
                 USDT_OFT,
                 destinationEndpointId
             )),
@@ -379,7 +381,7 @@ contract ForeignControllerTransferLayerZeroFailureTests is ArbitrumChainLayerZer
 
         foreignRateLimits.setRateLimitData(
             keccak256(abi.encode(
-                foreignController.LIMIT_LAYERZERO_TRANSFER(),
+                RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
                 USDT_OFT,
                 destinationEndpointId
             )),
@@ -452,7 +454,7 @@ contract ForeignControllerTransferLayerZeroSuccessTests is ArbitrumChainLayerZer
         vm.startPrank(SPARK_EXECUTOR);
 
         bytes32 key = keccak256(abi.encode(
-            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER,
             USDT_OFT,
             destinationEndpointId
         ));

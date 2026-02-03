@@ -3,6 +3,8 @@ pragma solidity >=0.8.0;
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 interface ICentrifugeV3ShareLike is IERC20 {
@@ -90,7 +92,7 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_7540_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_7540_DEPOSIT,
                 address(centrifugeV3Vault)
             ),
             1_000_000e6,
@@ -122,7 +124,7 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
         vaultTokenHook.updateMember(address(vaultToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(centrifugeV3Vault)
         );
 
@@ -189,7 +191,7 @@ contract ForeignControllerClaimDepositERC7540SuccessTests is CentrifugeTestBase 
         vaultTokenHook.updateMember(address(vaultToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(centrifugeV3Vault)
         );
 
@@ -360,7 +362,7 @@ contract ForeignControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestB
         vaultTokenHook.updateMember(address(vaultToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(centrifugeV3Vault)
         );
 
@@ -416,7 +418,7 @@ contract ForeignControllerClaimCentrifugeCancelDepositSuccessTests is Centrifuge
         vaultTokenHook.updateMember(address(vaultToken), address(almProxy), type(uint64).max);
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_DEPOSIT(),
+            RateLimitKeysLib.LIMIT_7540_DEPOSIT,
             address(centrifugeV3Vault)
         );
 
@@ -503,7 +505,7 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_7540_REDEEM(),
+                RateLimitKeysLib.LIMIT_7540_REDEEM,
                 address(centrifugeV3Vault)
             ),
             500_000e6,
@@ -541,7 +543,7 @@ contract ForeignControllerRequestRedeemERC7540SuccessTests is CentrifugeTestBase
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(centrifugeV3Vault)
         );
 
@@ -610,7 +612,7 @@ contract ForeignControllerClaimRedeemERC7540SuccessTests is CentrifugeTestBase {
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(centrifugeV3Vault)
         );
 
@@ -813,7 +815,7 @@ contract ForeignControllerCancelCentrifugeRedeemRequestSuccessTests is Centrifug
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(centrifugeV3Vault)
         );
 
@@ -873,7 +875,7 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
         vm.stopPrank();
 
         key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_7540_REDEEM(),
+            RateLimitKeysLib.LIMIT_7540_REDEEM,
             address(centrifugeV3Vault)
         );
 
@@ -961,7 +963,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
@@ -997,7 +999,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
@@ -1040,7 +1042,7 @@ contract ForeignControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),

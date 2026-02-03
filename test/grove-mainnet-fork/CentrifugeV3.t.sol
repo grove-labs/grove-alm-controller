@@ -5,6 +5,8 @@ import { IERC20 } from "forge-std/interfaces/IERC20.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract CentrifugeTestBase is ForkTestBase {
@@ -66,7 +68,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
@@ -102,7 +104,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),
@@ -145,7 +147,7 @@ contract MainnetControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
 
         rateLimits.setRateLimitData(
             keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+                RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER,
                 CENTRIFUGE_VAULT,
                 DESTINATION_CENTRIFUGE_ID
             )),

@@ -5,6 +5,8 @@ import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 import { MockTokenReturnFalse, MockTokenReturnNull } from "../unit/mocks/MockTokens.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract TransferAssetBaseTest is ForkTestBase {
@@ -18,7 +20,7 @@ contract TransferAssetBaseTest is ForkTestBase {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                foreignController.LIMIT_ASSET_TRANSFER(),
+                RateLimitKeysLib.LIMIT_ASSET_TRANSFER,
                 address(usdcBase),
                 receiver
             ),
@@ -65,7 +67,7 @@ contract ForeignControllerTransferAssetFailureTests is TransferAssetBaseTest {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                foreignController.LIMIT_ASSET_TRANSFER(),
+                RateLimitKeysLib.LIMIT_ASSET_TRANSFER,
                 address(token),
                 receiver
             ),
@@ -106,7 +108,7 @@ contract ForeignControllerTransferAssetSuccessTests is TransferAssetBaseTest {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                foreignController.LIMIT_ASSET_TRANSFER(),
+                RateLimitKeysLib.LIMIT_ASSET_TRANSFER,
                 address(token),
                 receiver
             ),

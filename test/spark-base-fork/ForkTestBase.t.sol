@@ -26,6 +26,7 @@ import { ForeignController } from "../../src/ForeignController.sol";
 import { RateLimits }        from "../../src/RateLimits.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
 contract ForkTestBase is Test {
 
@@ -170,11 +171,11 @@ contract ForkTestBase is Test {
         uint256 usdsMaxAmount = 5_000_000e18;
         uint256 usdsSlope     = uint256(1_000_000e18) / 4 hours;
 
-        bytes32 depositKey  = foreignController.LIMIT_PSM_DEPOSIT();
-        bytes32 withdrawKey = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 depositKey  = RateLimitKeysLib.LIMIT_PSM_DEPOSIT;
+        bytes32 withdrawKey = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
 
         bytes32 domainKeyEthereum = RateLimitHelpers.makeDomainKey(
-            foreignController.LIMIT_USDC_TO_DOMAIN(),
+            RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN,
             CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM
         );
 
@@ -183,7 +184,7 @@ contract ForkTestBase is Test {
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, address(usdcBase)),  usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  address(usdsBase)),  usdsMaxAmount, usdsSlope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  address(susdsBase)), usdsMaxAmount, usdsSlope);
-        rateLimits.setRateLimitData(foreignController.LIMIT_USDC_TO_CCTP(),                         usdcMaxAmount, usdcSlope);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDC_TO_CCTP,                         usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(domainKeyEthereum,                                              usdcMaxAmount, usdcSlope);
 
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, address(usdsBase)));

@@ -3,6 +3,8 @@ pragma solidity ^0.8.21;
 
 import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract PendleTestBase is ForkTestBase {
@@ -18,7 +20,7 @@ contract PendleTestBase is ForkTestBase {
         super.setUp();
 
         redeemKey = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_PENDLE_PT_REDEEM(),
+            RateLimitKeysLib.LIMIT_PENDLE_PT_REDEEM,
             address(pendleMarket)
         );
 

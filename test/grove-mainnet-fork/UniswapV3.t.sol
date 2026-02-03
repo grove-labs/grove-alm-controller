@@ -18,6 +18,8 @@ import { UniV3Utils } from "lib/dss-allocator/test/funnels/UniV3Utils.sol";
 import { FullMath }   from "lib/dss-allocator/src/funnels/uniV3/FullMath.sol";
 import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 contract UniswapV3TestBase is ForkTestBase {
     address constant UNISWAP_V3_USDC_USDT_POOL   = 0x3416cF6C708Da44DB2624D63ea0AAef7113527C6;
     address constant UNISWAP_V3_DAI_USDC_POOL    = 0x6c6Bc977E13Df9b0de53b251522280BB72383700;
@@ -54,19 +56,19 @@ contract UniswapV3TestBase is ForkTestBase {
 
         stranger = makeAddr("stranger");
 
-        uniswapV3_UsdcUsdtPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtSwapKey            = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdt), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdc), UNISWAP_V3_USDC_USDT_POOL);
-        uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,     address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtSwapKey            = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,     address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdt), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdc), UNISWAP_V3_USDC_USDT_POOL);
+        uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdt), UNISWAP_V3_USDC_USDT_POOL);
 
-        uniswapV3_DaiUsdcPool_DaiSwapKey             = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(dai),  UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(),     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_DaiAddLiquidityKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(dai),  UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdc), UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), address(dai),  UNISWAP_V3_DAI_USDC_POOL);
-        uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiSwapKey             = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,     address(dai),  UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,     address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiAddLiquidityKey     = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,  address(dai),  UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdc), UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey  = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW, address(dai),  UNISWAP_V3_DAI_USDC_POOL);
+        uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdc), UNISWAP_V3_DAI_USDC_POOL);
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(uniswapV3_UsdcUsdtPool_UsdcSwapKey, 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
@@ -108,7 +110,7 @@ contract UniswapV3TestBase is ForkTestBase {
 
 
     function _getSwapKey(address tokenIn) internal view returns (bytes32) {
-        return RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
+        return RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP, tokenIn, _getPool());
     }
 
     function _label() internal {
@@ -1860,7 +1862,7 @@ contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
     function _getBlock() internal pure override returns (uint256) {
         return 22181045; // Apr 02, 2025
     }
-    
+
     function test_uniswapV3_sandwichRisk_withoutTWAP() public {
         address pool                    = _getPool();
         IUniswapV3PoolLike poolContract = IUniswapV3PoolLike(pool);
@@ -1871,7 +1873,7 @@ contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
 
         // Configure rate limits and Uniswap params for this pool.
         bytes32 swapKey = RateLimitHelpers.makeAssetDestinationKey(
-            mainnetController.LIMIT_UNISWAP_V3_SWAP(),
+            RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,
             address(usdc),
             pool
         );

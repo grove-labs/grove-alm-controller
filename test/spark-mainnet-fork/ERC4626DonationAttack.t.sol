@@ -6,6 +6,8 @@ import { IMetaMorpho, Id } from "metamorpho/interfaces/IMetaMorpho.sol";
 import { MarketParamsLib }               from "morpho-blue/src/libraries/MarketParamsLib.sol";
 import { IMorpho, MarketParams, Market } from "morpho-blue/src/interfaces/IMorpho.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract ERC4626DonationAttackTestBase is ForkTestBase {
@@ -36,8 +38,8 @@ contract ERC4626DonationAttackTestBase is ForkTestBase {
 
         morpho = morphoVault.MORPHO();
 
-        bytes32 depositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_DEPOSIT(),  address(morphoVault));
-        bytes32 withdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_WITHDRAW(), address(morphoVault));
+        bytes32 depositKey  = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_4626_DEPOSIT,  address(morphoVault));
+        bytes32 withdrawKey = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_4626_WITHDRAW, address(morphoVault));
 
         // Basic validation
         assertEq(keccak256(abi.encode(morphoVault.symbol())), keccak256(abi.encode("sparkUSDS")));

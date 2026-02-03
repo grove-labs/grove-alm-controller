@@ -23,6 +23,8 @@ import {ForeignController} from "../../src/ForeignController.sol";
 import {RateLimits} from "../../src/RateLimits.sol";
 import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
@@ -186,7 +188,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         );
 
         destinationRateLimitKey =
-            keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), usdt0OftPlasma, sourceEndpointId));
+            keccak256(abi.encode(RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER, usdt0OftPlasma, sourceEndpointId));
 
         uint256 usdt0PlasmaMaxAmount = 5_000_000e6;
         uint256 usdt0PlasmaSlope     = uint256(1_000_000e6) / 4 hours;
@@ -208,7 +210,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         vm.startPrank(Ethereum.GROVE_PROXY);
         sourceRateLimitKey =
-            keccak256(abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), usdtOft, destinationEndpointId));
+            keccak256(abi.encode(RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER, usdtOft, destinationEndpointId));
         uint256 usdtMaxAmount = 5_000_000e6;
         uint256 usdtSlope     = uint256(1_000_000e6) / 4 hours;
 

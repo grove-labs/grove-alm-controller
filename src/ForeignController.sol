@@ -18,13 +18,14 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
-import { CurveLib }      from "./libraries/CurveLib.sol";
-import { MerklLib }      from "./libraries/MerklLib.sol";
-import { PendleLib }     from "./libraries/PendleLib.sol";
-import { CCTPLib }       from "./libraries/CCTPLib.sol";
-import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
-import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
+import { CentrifugeLib }    from "./libraries/CentrifugeLib.sol";
+import { CurveLib }         from "./libraries/CurveLib.sol";
+import { MerklLib }         from "./libraries/MerklLib.sol";
+import { PendleLib }        from "./libraries/PendleLib.sol";
+import { RateLimitKeysLib } from "./libraries/RateLimitKeysLib.sol";
+import { CCTPLib }          from "./libraries/CCTPLib.sol";
+import { ERC20Lib }         from "./libraries/common/ERC20Lib.sol";
+import { UniswapV3Lib }     from "./libraries/UniswapV3Lib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
@@ -75,27 +76,6 @@ contract ForeignController is AccessControl {
 
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
-
-    bytes32 public LIMIT_4626_DEPOSIT        = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public LIMIT_4626_WITHDRAW       = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT        = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
-    bytes32 public LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
-    bytes32 public LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
-    bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
-    bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
-    bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
-    bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
-    bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
-    bytes32 public LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
-    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT  = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public LIMIT_UNISWAP_V3_SWAP     = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -284,7 +264,7 @@ contract ForeignController is AccessControl {
     function depositPSM(address asset, uint256 amount)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_PSM_DEPOSIT, asset, amount)
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_PSM_DEPOSIT, asset, amount)
         returns (uint256 shares)
     {
         // Approve `asset` to PSM from the proxy (assumes the proxy has enough `asset`).
@@ -323,7 +303,7 @@ contract ForeignController is AccessControl {
         );
 
         rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_PSM_WITHDRAW, asset),
+            RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_PSM_WITHDRAW, asset),
             assetsWithdrawn
         );
     }
@@ -340,8 +320,8 @@ contract ForeignController is AccessControl {
             rateLimits        : rateLimits,
             cctp              : cctp,
             usdc              : usdc,
-            domainRateLimitId : LIMIT_USDC_TO_DOMAIN,
-            cctpRateLimitId   : LIMIT_USDC_TO_CCTP,
+            domainRateLimitId : RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN,
+            cctpRateLimitId   : RateLimitKeysLib.LIMIT_USDC_TO_CCTP,
             mintRecipient     : mintRecipients[destinationDomain],
             destinationDomain : destinationDomain,
             usdcAmount        : usdcAmount
@@ -360,7 +340,7 @@ contract ForeignController is AccessControl {
     {
         _checkRole(RELAYER);
         _rateLimited(
-            keccak256(abi.encode(LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
+            keccak256(abi.encode(RateLimitKeysLib.LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
             amount
         );
 
@@ -403,7 +383,7 @@ contract ForeignController is AccessControl {
     function transferAsset(address asset, address destination, uint256 amount) external {
         _checkRole(RELAYER);
         _rateLimited(
-            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
+            RateLimitHelpers.makeAssetDestinationKey(RateLimitKeysLib.LIMIT_ASSET_TRANSFER, asset, destination),
             amount
         );
 
@@ -417,7 +397,7 @@ contract ForeignController is AccessControl {
     function depositERC4626(address token, uint256 amount)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_4626_DEPOSIT, token, amount)
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_4626_DEPOSIT, token, amount)
         returns (uint256 shares)
     {
         // Note that whitelist is done by rate limits.
@@ -444,7 +424,7 @@ contract ForeignController is AccessControl {
     function withdrawERC4626(address token, uint256 amount)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_4626_WITHDRAW, token, amount)
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_4626_WITHDRAW, token, amount)
         returns (uint256 shares)
     {
         // Withdraw asset from a token, decode resulting shares.
@@ -475,7 +455,7 @@ contract ForeignController is AccessControl {
         );
 
         rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, token),
+            RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_4626_WITHDRAW, token),
             assets
         );
     }
@@ -487,7 +467,7 @@ contract ForeignController is AccessControl {
     function requestDepositERC7540(address token, uint256 amount)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_7540_DEPOSIT, token, amount)
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token, amount)
     {
 
         // Note that whitelist is done by rate limits
@@ -506,7 +486,7 @@ contract ForeignController is AccessControl {
     function claimDepositERC7540(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token))
     {
 
         uint256 shares = IERC7540(token).maxMint(address(proxy));
@@ -521,7 +501,7 @@ contract ForeignController is AccessControl {
     function requestRedeemERC7540(address token, uint256 shares)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_7540_REDEEM, token, IERC7540(token).convertToAssets(shares))
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_7540_REDEEM, token, IERC7540(token).convertToAssets(shares))
     {
         // Submit redeem request by transferring shares
         proxy.doCall(
@@ -533,7 +513,7 @@ contract ForeignController is AccessControl {
     function claimRedeemERC7540(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_REDEEM, token))
     {
         uint256 assets = IERC7540(token).maxWithdraw(address(proxy));
 
@@ -553,7 +533,7 @@ contract ForeignController is AccessControl {
     function cancelCentrifugeDepositRequest(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token))
     {
         // NOTE: While the cancelation is pending, no new deposit request can be submitted
         proxy.doCall(
@@ -568,7 +548,7 @@ contract ForeignController is AccessControl {
     function claimCentrifugeCancelDepositRequest(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_DEPOSIT, token))
     {
         proxy.doCall(
             token,
@@ -582,7 +562,7 @@ contract ForeignController is AccessControl {
     function cancelCentrifugeRedeemRequest(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_REDEEM, token))
     {
         // NOTE: While the cancelation is pending, no new redeem request can be submitted
         proxy.doCall(
@@ -597,7 +577,7 @@ contract ForeignController is AccessControl {
     function claimCentrifugeCancelRedeemRequest(address token)
         external
         onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
+        rateLimitExists(RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_7540_REDEEM, token))
     {
         proxy.doCall(
             token,
@@ -623,7 +603,7 @@ contract ForeignController is AccessControl {
             amount                  : amount,
             recipient               : centrifugeRecipients[destinationCentrifugeId],
             destinationCentrifugeId : destinationCentrifugeId,
-            rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+            rateLimitId             : RateLimitKeysLib.LIMIT_CENTRIFUGE_TRANSFER
         }));
     }
 
@@ -634,7 +614,7 @@ contract ForeignController is AccessControl {
     function depositAave(address aToken, uint256 amount)
         external
         onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount)
+        rateLimitedAsset(RateLimitKeysLib.LIMIT_AAVE_DEPOSIT, aToken, amount)
     {
         require(maxSlippages[aToken] != 0, "FC/max-slippage-not-set");
 
@@ -682,7 +662,7 @@ contract ForeignController is AccessControl {
         );
 
         rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
+            RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_AAVE_WITHDRAW, aToken),
             amountWithdrawn
         );
     }
@@ -706,7 +686,7 @@ contract ForeignController is AccessControl {
             proxy        : proxy,
             rateLimits   : rateLimits,
             pool         : pool,
-            rateLimitId  : LIMIT_CURVE_SWAP,
+            rateLimitId  : RateLimitKeysLib.LIMIT_CURVE_SWAP,
             inputIndex   : inputIndex,
             outputIndex  : outputIndex,
             amountIn     : amountIn,
@@ -728,8 +708,8 @@ contract ForeignController is AccessControl {
             proxy                   : proxy,
             rateLimits              : rateLimits,
             pool                    : pool,
-            addLiquidityRateLimitId : LIMIT_CURVE_DEPOSIT,
-            swapRateLimitId         : LIMIT_CURVE_SWAP,
+            addLiquidityRateLimitId : RateLimitKeysLib.LIMIT_CURVE_DEPOSIT,
+            swapRateLimitId         : RateLimitKeysLib.LIMIT_CURVE_SWAP,
             minLpAmount             : minLpAmount,
             maxSlippage             : maxSlippages[pool],
             depositAmounts          : depositAmounts
@@ -749,7 +729,7 @@ contract ForeignController is AccessControl {
             proxy              : proxy,
             rateLimits         : rateLimits,
             pool               : pool,
-            rateLimitId        : LIMIT_CURVE_WITHDRAW,
+            rateLimitId        : RateLimitKeysLib.LIMIT_CURVE_WITHDRAW,
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
@@ -785,7 +765,7 @@ contract ForeignController is AccessControl {
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
+            rateLimitId  : RateLimitKeysLib.LIMIT_PENDLE_PT_REDEEM,
             pendleMarket : IPendleMarket(pendleMarket),
             pendleRouter : pendleRouter,
             pyAmountIn   : pyAmountIn,
@@ -811,7 +791,7 @@ contract ForeignController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_SWAP,
                 pool        : pool
             }),
             UniswapV3Lib.SwapParams({
@@ -846,7 +826,7 @@ contract ForeignController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_DEPOSIT,
                 pool        : pool
             }),
             UniswapV3Lib.AddLiquidityParams({
@@ -878,7 +858,7 @@ contract ForeignController is AccessControl {
             UniswapV3Lib.UniV3Context({
                 proxy       : proxy,
                 rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
+                rateLimitId : RateLimitKeysLib.LIMIT_UNISWAP_V3_WITHDRAW,
                 pool        : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({

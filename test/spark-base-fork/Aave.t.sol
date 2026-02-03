@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import { IAToken } from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -24,7 +25,7 @@ contract AaveV3BaseMarketTestBase is ForkTestBase {
         // NOTE: Hit SUPPLY_CAP_EXCEEDED when using 25m
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_DEPOSIT(),
+                RateLimitKeysLib.LIMIT_AAVE_DEPOSIT,
                 ATOKEN_USDC
             ),
             1_000_000e6,
@@ -32,7 +33,7 @@ contract AaveV3BaseMarketTestBase is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
                 ATOKEN_USDC
             ),
             1_000_000e6,
@@ -141,7 +142,7 @@ contract AaveV3BaseMarketWithdrawFailureTests is AaveV3BaseMarketTestBase {
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_WITHDRAW(),
+                RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
                 ATOKEN_USDC
             ),
             0,
@@ -180,7 +181,7 @@ contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
 
     function test_withdrawAave_usdc() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDC
         );
 
@@ -227,7 +228,7 @@ contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
 
     function test_withdrawAave_usdc_unlimitedRateLimit() public {
         bytes32 key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_AAVE_WITHDRAW(),
+            RateLimitKeysLib.LIMIT_AAVE_WITHDRAW,
             ATOKEN_USDC
         );
         vm.prank(Base.SPARK_EXECUTOR);

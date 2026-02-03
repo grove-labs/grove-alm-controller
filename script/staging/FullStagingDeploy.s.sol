@@ -42,6 +42,7 @@ import { MainnetControllerInit } from "../../deploy/MainnetControllerInit.sol";
 import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+import { RateLimitKeysLib } from "../../src/libraries/RateLimitKeysLib.sol";
 
 import { MockJug }          from "./mocks/MockJug.sol";
 import { MockUsdsJoin }     from "./mocks/MockUsdsJoin.sol";
@@ -414,23 +415,23 @@ contract FullStagingDeploy is Script {
 
         vm.startBroadcast();
 
-        bytes32 susdeDepositKey = RateLimitHelpers.makeAssetKey(controller.LIMIT_4626_DEPOSIT(), address(controller.susde()));
+        bytes32 susdeDepositKey = RateLimitHelpers.makeAssetKey(RateLimitKeysLib.LIMIT_4626_DEPOSIT, address(controller.susde()));
 
-        bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
-        bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
+        bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
+        bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
 
         // USDS mint/burn and cross-chain transfer rate limits
-        rateLimits.setRateLimitData(domainKeyBase,                   maxAmount6,  slope6);
-        rateLimits.setRateLimitData(domainKeyArbitrum,               maxAmount6,  slope6);
-        rateLimits.setRateLimitData(controller.LIMIT_USDS_MINT(),    maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDS_TO_USDC(), maxAmount6,  slope6);
+        rateLimits.setRateLimitData(domainKeyBase,                        maxAmount6,  slope6);
+        rateLimits.setRateLimitData(domainKeyArbitrum,                    maxAmount6,  slope6);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDS_MINT,    maxAmount18, slope18);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDS_TO_USDC, maxAmount6,  slope6);
 
-        rateLimits.setUnlimitedRateLimitData(controller.LIMIT_USDC_TO_CCTP());
+        rateLimits.setUnlimitedRateLimitData(RateLimitKeysLib.LIMIT_USDC_TO_CCTP);
 
         // Ethena-specific rate limits
-        rateLimits.setRateLimitData(controller.LIMIT_SUSDE_COOLDOWN(), maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDE_BURN(),      maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDE_MINT(),      maxAmount6,  slope6);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_SUSDE_COOLDOWN, maxAmount18, slope18);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDE_BURN,      maxAmount18, slope18);
+        rateLimits.setRateLimitData(RateLimitKeysLib.LIMIT_USDE_MINT,      maxAmount6,  slope6);
         rateLimits.setRateLimitData(susdeDepositKey,                   maxAmount18, slope18);
 
         vm.stopBroadcast();
@@ -444,11 +445,11 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        bytes32 psmDepositKey  = foreignController.LIMIT_PSM_DEPOSIT();
-        bytes32 psmWithdrawKey = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 psmDepositKey  = RateLimitKeysLib.LIMIT_PSM_DEPOSIT;
+        bytes32 psmWithdrawKey = RateLimitKeysLib.LIMIT_PSM_WITHDRAW;
 
         bytes32 domainKeyEthereum = RateLimitHelpers.makeDomainKey(
-            foreignController.LIMIT_USDC_TO_DOMAIN(),
+            RateLimitKeysLib.LIMIT_USDC_TO_DOMAIN,
             CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM
         );
 
@@ -467,7 +468,7 @@ contract FullStagingDeploy is Script {
 
         // CCTP rate limits
         rateLimits.setRateLimitData(domainKeyEthereum, maxAmount6, slope6);
-        rateLimits.setUnlimitedRateLimitData(foreignController.LIMIT_USDC_TO_CCTP());
+        rateLimits.setUnlimitedRateLimitData(RateLimitKeysLib.LIMIT_USDC_TO_CCTP);
 
         vm.stopBroadcast();
     }
@@ -502,8 +503,8 @@ contract FullStagingDeploy is Script {
         vm.startBroadcast();
 
         // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
-        bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_AAVE_DEPOSIT();
-        bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_AAVE_WITHDRAW();
+        bytes32 depositKey  = RateLimitKeysLib.LIMIT_AAVE_DEPOSIT;
+        bytes32 withdrawKey = RateLimitKeysLib.LIMIT_AAVE_WITHDRAW;
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
@@ -526,8 +527,8 @@ contract FullStagingDeploy is Script {
         vm.startBroadcast();
 
         // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
-        bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_4626_DEPOSIT();
-        bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_4626_WITHDRAW();
+        bytes32 depositKey  = RateLimitKeysLib.LIMIT_4626_DEPOSIT;
+        bytes32 withdrawKey = RateLimitKeysLib.LIMIT_4626_WITHDRAW;
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
