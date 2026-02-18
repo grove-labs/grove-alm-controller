@@ -114,9 +114,6 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
     bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
     bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
-    bytes32 public LIMIT_UNISWAP_V4_DEPOSIT   = UniswapV4Lib.LIMIT_DEPOSIT;
-    bytes32 public LIMIT_UNISWAP_V4_WITHDRAW  = UniswapV4Lib.LIMIT_WITHDRAW;
-    bytes32 public LIMIT_UNISWAP_V4_SWAP      = UniswapV4Lib.LIMIT_SWAP;
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
