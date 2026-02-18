@@ -25,6 +25,7 @@ import { PendleLib }     from "./libraries/PendleLib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
 import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
+import { UniswapV4Lib }  from "./libraries/UniswapV4Lib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
@@ -66,6 +67,12 @@ contract ForeignController is AccessControl {
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
     event UniswapV3PoolTwapSecondsAgoUpdated(address indexed pool, uint32 twapSecondsAgo);
+    event UniswapV4TickLimitsSet(
+        bytes32 indexed poolId,
+        int24           tickLowerMin,
+        int24           tickUpperMax,
+        uint24          maxTickSpacing
+    );
 
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
@@ -123,6 +130,9 @@ contract ForeignController is AccessControl {
 
     // ERC4626 exchange rate thresholds (1e36 precision)
     mapping(address token => uint256 maxExchangeRate) public maxExchangeRates;
+
+    // Uniswap V4 tick ranges
+    mapping(bytes32 poolId => UniswapV4Lib.TickLimits tickLimits) public uniswapV4TickLimits;
 
     /**********************************************************************************************/
     /*** Initialization                                                                         ***/
@@ -266,6 +276,31 @@ contract ForeignController is AccessControl {
             token,
             maxExchangeRates[token] = _getExchangeRate(shares, maxExpectedAssets)
         );
+    }
+
+    function setUniswapV4TickLimits(
+        bytes32 poolId,
+        int24   tickLowerMin,
+        int24   tickUpperMax,
+        uint24  maxTickSpacing
+    )
+        external
+    {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(
+            ((tickLowerMin == 0) && (tickUpperMax == 0) && (maxTickSpacing == 0)) ||
+            ((maxTickSpacing > 0) && (tickLowerMin < tickUpperMax)),
+            "FC/invalid-ticks"
+        );
+
+        uniswapV4TickLimits[poolId] = UniswapV4Lib.TickLimits({
+            tickLowerMin   : tickLowerMin,
+            tickUpperMax   : tickUpperMax,
+            maxTickSpacing : maxTickSpacing
+        });
+
+        emit UniswapV4TickLimitsSet(poolId, tickLowerMin, tickUpperMax, maxTickSpacing);
     }
 
     /**********************************************************************************************/
@@ -877,7 +912,101 @@ contract ForeignController is AccessControl {
             })
         );
     }
+    
+    /**********************************************************************************************/
+    /*** Uniswap V4 functions                                                                   ***/
+    /**********************************************************************************************/
 
+    function mintPositionUniswapV4(
+        bytes32 poolId,
+        int24   tickLower,
+        int24   tickUpper,
+        uint128 liquidity,
+        uint256 amount0Max,
+        uint256 amount1Max
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.mintPosition({
+            proxy      : address(proxy),
+            rateLimits : address(rateLimits),
+            poolId     : poolId,
+            tickLower  : tickLower,
+            tickUpper  : tickUpper,
+            liquidity  : liquidity,
+            amount0Max : amount0Max,
+            amount1Max : amount1Max,
+            tickLimits : uniswapV4TickLimits
+        });
+    }
+
+    function increaseLiquidityUniswapV4(
+        bytes32 poolId,
+        uint256 tokenId,
+        uint128 liquidityIncrease,
+        uint256 amount0Max,
+        uint256 amount1Max
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.increasePosition({
+            proxy             : address(proxy),
+            rateLimits        : address(rateLimits),
+            poolId            : poolId,
+            tokenId           : tokenId,
+            liquidityIncrease : liquidityIncrease,
+            amount0Max        : amount0Max,
+            amount1Max        : amount1Max,
+            tickLimits        : uniswapV4TickLimits
+        });
+    }
+
+    function decreaseLiquidityUniswapV4(
+        bytes32 poolId,
+        uint256 tokenId,
+        uint128 liquidityDecrease,
+        uint256 amount0Min,
+        uint256 amount1Min
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.decreasePosition({
+            proxy             : address(proxy),
+            rateLimits        : address(rateLimits),
+            poolId            : poolId,
+            tokenId           : tokenId,
+            liquidityDecrease : liquidityDecrease,
+            amount0Min        : amount0Min,
+            amount1Min        : amount1Min
+        });
+    }
+
+    function swapUniswapV4(
+        bytes32 poolId,
+        address tokenIn,
+        uint128 amountIn,
+        uint128 amountOutMin
+    )
+        external
+    {
+        _checkRole(RELAYER);
+
+        UniswapV4Lib.swap({
+            proxy        : address(proxy),
+            rateLimits   : address(rateLimits),
+            poolId       : poolId,
+            tokenIn      : tokenIn,
+            amountIn     : amountIn,
+            amountOutMin : amountOutMin,
+            maxSlippage  : maxSlippages[address(uint160(uint256(poolId)))]
+        });
+    }
 
     /**********************************************************************************************/
     /*** Internal helper functions                                                              ***/
