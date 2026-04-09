@@ -311,9 +311,6 @@ contract AvalancheChainUSDeToLayerZeroTestBase is LayerZeroCallsTestBase {
     }
 }
 
-// NOTE: Failure tests (notRelayer, rateLimitExceeded, zeroMaxAmount, rateLimitedBoundary) are
-// covered in spark-mainnet-fork/LayerZero.t.sol for both MainnetController and ForeignController.
-// These paths are token-agnostic — they revert before reaching any OFT-specific logic.
 
 contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBase {
     using DomainHelpers for *;
