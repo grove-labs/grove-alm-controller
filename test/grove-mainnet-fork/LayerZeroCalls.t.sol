@@ -25,8 +25,8 @@ import {ForeignController} from "../../src/ForeignController.sol";
 import {RateLimits} from "../../src/RateLimits.sol";
 import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 
-import {OFTMock} from "@layerzerolabs/oft-evm/test/mocks/OFTMock.sol";
-import {OFTAdapterMock} from "@layerzerolabs/oft-evm/test/mocks/OFTAdapterMock.sol";
+import {MyOFT} from "lib/devtools/examples/oft/contracts/MyOFT.sol";
+import {MyOFTAdapter} from "lib/devtools/examples/oft-adapter/contracts/MyOFTAdapter.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -297,17 +297,17 @@ contract AvalancheChainUSDeToLayerZeroTestBase is LayerZeroCallsTestBase {
     }
 
     function _labelAddresses() internal override {
-        vm.label(address(usdsAvalanche),            "usdsAvalanche");
-        vm.label(address(susdsAvalanche),          "susdsAvalanche");
-        vm.label(address(usdeAvalanche),            "usdeAvalanche");
-        vm.label(address(usdeOft),                       "usdeOft");
-        vm.label(address(usde),                             "usde");
-        vm.label(address(mainnetController),   "mainnetController");
-        vm.label(address(foreignAlmProxy),       "foreignAlmProxy");
-        vm.label(address(foreignRateLimits),   "foreignRateLimits");
-        vm.label(address(foreignController),   "foreignController");
-        vm.label(address(rateLimits),                 "rateLimits");
-        vm.label(address(almProxy),                     "almProxy");
+        vm.label(address(usdsAvalanche),     "usdsAvalanche");
+        vm.label(address(susdsAvalanche),    "susdsAvalanche");
+        vm.label(address(usdeAvalanche),     "usdeAvalanche");
+        vm.label(address(usdeOft),           "usdeOft");
+        vm.label(address(usde),              "usde");
+        vm.label(address(mainnetController), "mainnetController");
+        vm.label(address(foreignAlmProxy),   "foreignAlmProxy");
+        vm.label(address(foreignRateLimits), "foreignRateLimits");
+        vm.label(address(foreignController), "foreignController");
+        vm.label(address(rateLimits),        "rateLimits");
+        vm.label(address(almProxy),          "almProxy");
     }
 }
 
@@ -472,7 +472,7 @@ contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBas
 
 /**********************************************************************************************/
 /***                                                                                        ***/
-/***    ETH/WETH tests (deployed OFTMock/OFTAdapterMock with full relay)                    ***/
+/***       ETH/WETH tests (deployed MyOFT/MyOFTAdapter with full relay)                     ***/
 /***                                                                                        ***/
 /**********************************************************************************************/
 
@@ -491,11 +491,11 @@ contract AvalancheChainETHToLayerZeroTestBase is LayerZeroCallsTestBase {
     /*** OFT deployments                                                                        ***/
     /**********************************************************************************************/
 
-    // Source: OFTMock on mainnet (approvalRequired == false, burns/mints)
-    OFTMock oftMockMainnet;
+    // Source: MyOFT on mainnet (approvalRequired == false, burns/mints)
+    MyOFT oftMockMainnet;
 
-    // Destination: OFTAdapterMock wrapping WETH on Avalanche (approvalRequired == true, locks/unlocks)
-    OFTAdapterMock oftAdapterAvalanche;
+    // Destination: MyOFTAdapter wrapping WETH on Avalanche (approvalRequired == true, locks/unlocks)
+    MyOFTAdapter oftAdapterAvalanche;
 
     /**********************************************************************************************/
     /*** Casted addresses for testing                                                           ***/
@@ -516,8 +516,8 @@ contract AvalancheChainETHToLayerZeroTestBase is LayerZeroCallsTestBase {
     function _setupDestinationTokens() internal override {
         wethAvalanche = IERC20(WETH_AVALANCHE);
 
-        // Deploy OFTAdapterMock wrapping WETH (approvalRequired == true)
-        oftAdapterAvalanche = new OFTAdapterMock(
+        // Deploy MyOFTAdapter wrapping WETH (approvalRequired == true)
+        oftAdapterAvalanche = new MyOFTAdapter(
             address(wethAvalanche),
             LZForwarder.ENDPOINT_AVALANCHE,
             address(this)
@@ -533,8 +533,8 @@ contract AvalancheChainETHToLayerZeroTestBase is LayerZeroCallsTestBase {
     }
 
     function _setupSourceTokens() internal override {
-        // Deploy OFTMock on mainnet (the OFT IS the token, approvalRequired == false)
-        oftMockMainnet = new OFTMock(
+        // Deploy MyOFT on mainnet (the OFT IS the token, approvalRequired == false)
+        oftMockMainnet = new MyOFT(
             "Mock ETH OFT",
             "mETH",
             LZForwarder.ENDPOINT_ETHEREUM,
@@ -554,7 +554,7 @@ contract AvalancheChainETHToLayerZeroTestBase is LayerZeroCallsTestBase {
         destination.selectFork();
         oftAdapterAvalanche.setPeer(sourceEndpointId, bytes32(uint256(uint160(address(oftMockMainnet)))));
 
-        // Seed OFTAdapterMock with WETH (simulates prior bridge deposits for unlocking)
+        // Seed MyOFTAdapter with WETH (simulates prior bridge deposits for unlocking)
         WETH_ADAPTER_BALANCE = 10_000_000e18;
         deal(address(wethAvalanche), address(oftAdapterAvalanche), WETH_ADAPTER_BALANCE);
 
@@ -562,15 +562,15 @@ contract AvalancheChainETHToLayerZeroTestBase is LayerZeroCallsTestBase {
     }
 
     function _labelAddresses() internal override {
-        vm.label(address(oftMockMainnet),          "oftMockMainnet");
-        vm.label(address(oftAdapterAvalanche),  "oftAdapterAvalanche");
-        vm.label(address(wethAvalanche),          "wethAvalanche");
-        vm.label(address(mainnetController),    "mainnetController");
-        vm.label(address(foreignAlmProxy),        "foreignAlmProxy");
-        vm.label(address(foreignRateLimits),    "foreignRateLimits");
-        vm.label(address(foreignController),    "foreignController");
-        vm.label(address(rateLimits),                "rateLimits");
-        vm.label(address(almProxy),                    "almProxy");
+        vm.label(address(oftMockMainnet),      "oftMockMainnet");
+        vm.label(address(oftAdapterAvalanche), "oftAdapterAvalanche");
+        vm.label(address(wethAvalanche),       "wethAvalanche");
+        vm.label(address(mainnetController),   "mainnetController");
+        vm.label(address(foreignAlmProxy),     "foreignAlmProxy");
+        vm.label(address(foreignRateLimits),   "foreignRateLimits");
+        vm.label(address(foreignController),   "foreignController");
+        vm.label(address(rateLimits),          "rateLimits");
+        vm.label(address(almProxy),            "almProxy");
     }
 }
 
@@ -587,74 +587,7 @@ contract ETHToLayerZeroSourceToDestinationTests is AvalancheChainETHToLayerZeroT
     );
 
     function test_transferETHToLZ_sourceToDestination() external {
-        oftMockMainnet.mint(address(almProxy), 1e18);
-
-        assertEq(oftMockMainnet.balanceOf(address(almProxy)), 1e18, "ALM Proxy balance should be 1e18 before transfer");
-        assertEq(
-            oftMockMainnet.balanceOf(address(mainnetController)),
-            0,
-            "Mainnet Controller balance should be 0 before transfer"
-        );
-        assertEq(oftMockMainnet.totalSupply(), 1e18, "OFT total supply should be 1e18 before transfer");
-
-        // approvalRequired == false: no approval should be set
-        assertEq(
-            oftMockMainnet.allowance(address(almProxy), address(oftMockMainnet)),
-            0,
-            "No allowance should exist before transfer (approvalRequired == false)"
-        );
-
-        _expectEthereumOftEmit(1e18);
-
-        vm.prank(relayer);
-        mainnetController.transferTokenLayerZero(address(oftMockMainnet), 1e18, destinationEndpointId);
-
-        // approvalRequired == false: allowance should still be zero (no approval was made)
-        assertEq(
-            oftMockMainnet.allowance(address(almProxy), address(oftMockMainnet)),
-            0,
-            "No allowance should exist after transfer (approvalRequired == false)"
-        );
-
-        // OFT tokens burned from almProxy (approvalRequired == false path: no approval needed)
-        assertEq(oftMockMainnet.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 after transfer");
-        assertEq(
-            oftMockMainnet.balanceOf(address(mainnetController)),
-            0,
-            "Mainnet Controller balance should be 0 after transfer"
-        );
-        assertEq(oftMockMainnet.totalSupply(), 0, "OFT total supply should be 0 after transfer (burned)");
-
-        destination.selectFork();
-
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignAlmProxy)),
-            0,
-            "Foreign ALM Proxy WETH balance should be 0 before message relay"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(oftAdapterAvalanche)),
-            WETH_ADAPTER_BALANCE,
-            "OFT Adapter WETH balance should be WETH_ADAPTER_BALANCE before message relay"
-        );
-
-        bridge.relayMessagesToDestination(true, address(oftMockMainnet), address(oftAdapterAvalanche));
-
-        // WETH unlocked from adapter to foreignAlmProxy
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignAlmProxy)),
-            1e18,
-            "Foreign ALM Proxy WETH balance should be 1e18 after message relay"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(oftAdapterAvalanche)),
-            WETH_ADAPTER_BALANCE - 1e18,
-            "OFT Adapter WETH balance should decrease by 1e18 after message relay"
-        );
-    }
-
-    function test_transferETHToLZ_sourceToDestination_bigTransfer() external {
-        oftMockMainnet.mint(address(almProxy), 2_900_000e18);
+        deal(address(oftMockMainnet), address(almProxy), 2_900_000e18, true);
 
         assertEq(
             oftMockMainnet.balanceOf(address(almProxy)),
@@ -712,71 +645,6 @@ contract ETHToLayerZeroDestinationToSourceTests is AvalancheChainETHToLayerZeroT
     );
 
     function test_transferETHToLZ_destinationToSource() external {
-        destination.selectFork();
-
-        deal(address(wethAvalanche), address(foreignAlmProxy), 1e18);
-
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignAlmProxy)),
-            1e18,
-            "Foreign ALM Proxy WETH balance should be 1e18 before transfer"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller WETH balance should be 0 before transfer"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(oftAdapterAvalanche)),
-            WETH_ADAPTER_BALANCE,
-            "OFT Adapter WETH balance should be WETH_ADAPTER_BALANCE before transfer"
-        );
-
-        // approvalRequired == true: expect Approval from foreignAlmProxy to adapter for WETH
-        vm.expectEmit(true, true, true, true, address(wethAvalanche));
-        emit Approval(address(foreignAlmProxy), address(oftAdapterAvalanche), 1e18);
-
-        _expectAvalancheOftEmit(1e18);
-
-        vm.prank(relayer);
-        foreignController.transferTokenLayerZero(address(oftAdapterAvalanche), 1e18, sourceEndpointId);
-
-        // WETH locked in adapter (approvalRequired == true path: controller approved WETH for adapter)
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignAlmProxy)),
-            0,
-            "Foreign ALM Proxy WETH balance should be 0 after transfer"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller WETH balance should be 0 after transfer"
-        );
-        assertEq(
-            wethAvalanche.balanceOf(address(oftAdapterAvalanche)),
-            WETH_ADAPTER_BALANCE + 1e18,
-            "OFT Adapter WETH balance should increase by 1e18 after transfer (locked)"
-        );
-
-        source.selectFork();
-
-        assertEq(oftMockMainnet.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 before relay");
-        assertEq(
-            oftMockMainnet.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 before relay"
-        );
-        assertEq(oftMockMainnet.totalSupply(), 0, "OFT total supply should be 0 before relay");
-
-        bridge.relayMessagesToSource(true, address(oftAdapterAvalanche), address(oftMockMainnet));
-
-        // OFT tokens minted to almProxy
-        assertEq(oftMockMainnet.balanceOf(address(almProxy)), 1e18, "ALM Proxy balance should be 1e18 after relay");
-        assertEq(
-            oftMockMainnet.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 after relay"
-        );
-        assertEq(oftMockMainnet.totalSupply(), 1e18, "OFT total supply should be 1e18 after relay (minted)");
-    }
-
-    function test_transferETHToLZ_destinationToSource_bigTransfer() external {
         destination.selectFork();
 
         deal(address(wethAvalanche), address(foreignAlmProxy), 2_600_000e18);
