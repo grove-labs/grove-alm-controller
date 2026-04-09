@@ -385,9 +385,6 @@ contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBas
         );
     }
 
-    // NOTE: bigTransfer and rateLimited tests are covered by grove-mainnet-fork/LayerZero.t.sol
-    // (USDT/Plasma). The code paths are identical — only the token and chain differ.
-    // Rate limit enforcement + recovery is token-agnostic.
 
     function test_transferUSDeToLZ_destinationToSource() external {
         destination.selectFork();
