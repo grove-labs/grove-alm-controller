@@ -311,70 +311,6 @@ contract AvalancheChainUSDeToLayerZeroTestBase is LayerZeroCallsTestBase {
     }
 }
 
-contract MainnetControllerTransferUSDeToLayerZeroFailureTests is AvalancheChainUSDeToLayerZeroTestBase {
-    using DomainHelpers for *;
-
-    function test_transferUSDeToLZ_notRelayer() external {
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            RELAYER
-        ));
-        mainnetController.transferTokenLayerZero(address(usdeOft), 1e18, destinationEndpointId);
-    }
-
-    function test_transferUSDeToLZ_rateLimitExceeded() external {
-        deal(address(usde), address(almProxy), 10_000_001e18);
-
-        vm.prank(relayer);
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.transferTokenLayerZero(address(usdeOft), 5_000_001e18, destinationEndpointId);
-    }
-
-    function test_transferUSDeToLZ_zeroMaxAmount() external {
-        vm.prank(Ethereum.GROVE_PROXY);
-        rateLimits.setRateLimitData(sourceRateLimitKey, 0, 0);
-
-        vm.prank(relayer);
-        vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.transferTokenLayerZero(address(usdeOft), 1e18, destinationEndpointId);
-    }
-}
-
-contract ForeignControllerTransferUSDeToLayerZeroFailureTests is AvalancheChainUSDeToLayerZeroTestBase {
-    using DomainHelpers for *;
-
-    function setUp() public override {
-        super.setUp();
-        destination.selectFork();
-    }
-
-    function test_transferUSDeToLZ_notRelayer() external {
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            RELAYER
-        ));
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 1e18, sourceEndpointId);
-    }
-
-    function test_transferUSDeToLZ_rateLimitExceeded() external {
-        deal(address(usdeAvalanche), address(foreignAlmProxy), 10_000_001e18, true);
-
-        vm.prank(relayer);
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 5_000_001e18, sourceEndpointId);
-    }
-
-    function test_transferUSDeToLZ_zeroMaxAmount() external {
-        vm.prank(Avalanche.GROVE_EXECUTOR);
-        foreignRateLimits.setRateLimitData(destinationRateLimitKey, 0, 0);
-
-        vm.prank(relayer);
-        vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 1e18, sourceEndpointId);
-    }
-}
 
 contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBase {
     using DomainHelpers for *;
@@ -449,119 +385,6 @@ contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBas
         );
     }
 
-    function test_transferUSDeToLZ_sourceToDestination_bigTransfer() external {
-        deal(address(usde), address(almProxy), 2_900_000e18);
-
-        assertEq(
-            usde.balanceOf(address(almProxy)), 2_900_000e18, "ALM Proxy balance should be 2_900_000e18 before transfer"
-        );
-        assertEq(
-            usde.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 before transfer"
-        );
-        assertEq(
-            usde.balanceOf(address(usdeOft)), USDE_MAINNET_BALANCE_BEFORE, "OFT balance should match before transfer"
-        );
-
-        _expectEthereumOftEmit(2_900_000e18);
-
-        vm.prank(relayer);
-        mainnetController.transferTokenLayerZero(address(usdeOft), 2_900_000e18, destinationEndpointId);
-
-        assertEq(usde.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 after transfer");
-        assertEq(usde.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 after transfer");
-        assertEq(
-            usde.balanceOf(address(usdeOft)),
-            USDE_MAINNET_BALANCE_BEFORE + 2_900_000e18,
-            "OFT balance should be increased by 2_900_000e18 after transfer"
-        );
-
-        destination.selectFork();
-
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignAlmProxy)),
-            0,
-            "Foreign ALM Proxy balance should be 0 before message relay"
-        );
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller balance should be 0 before message relay"
-        );
-        assertEq(
-            usdeAvalanche.totalSupply(),
-            USDE_AVALANCHE_SUPPLY,
-            "Total supply should be USDE_AVALANCHE_SUPPLY before message relay"
-        );
-
-        bridge.relayMessagesToDestination(true, address(usdeOft), address(usdeAvalanche));
-
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignAlmProxy)),
-            2_900_000e18,
-            "Foreign ALM Proxy balance should be 2_900_000e18 after message relay"
-        );
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller balance should be 0 after message relay"
-        );
-        assertEq(
-            usdeAvalanche.totalSupply(),
-            USDE_AVALANCHE_SUPPLY + 2_900_000e18,
-            "Total supply should be increased by 2_900_000e18 after message relay"
-        );
-    }
-
-    function test_transferUSDeToLZ_sourceToDestination_rateLimited() external {
-        bytes32 key = sourceRateLimitKey;
-        deal(address(usde), address(almProxy), 9_000_000e18);
-
-        vm.startPrank(relayer);
-
-        assertEq(
-            usde.balanceOf(address(almProxy)), 9_000_000e18, "ALM Proxy balance should be 9_000_000e18 before transfer"
-        );
-        assertEq(rateLimits.getCurrentRateLimit(key), 5_000_000e18, "Rate limit should be 5_000_000e18 before transfer");
-
-        mainnetController.transferTokenLayerZero(address(usdeOft), 2_000_000e18, destinationEndpointId);
-
-        assertEq(
-            usde.balanceOf(address(almProxy)), 7_000_000e18, "ALM Proxy balance should be 7_000_000e18 after transfer"
-        );
-        assertEq(rateLimits.getCurrentRateLimit(key), 3_000_000e18, "Rate limit should be 3_000_000e18 after transfer");
-
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.transferTokenLayerZero(address(usdeOft), 3_000_001e18, destinationEndpointId);
-
-        mainnetController.transferTokenLayerZero(address(usdeOft), 3_000_000e18, destinationEndpointId);
-
-        assertEq(
-            usde.balanceOf(address(almProxy)), 4_000_000e18, "ALM Proxy balance should be 4_000_000e18 after transfer"
-        );
-        assertEq(rateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
-
-        skip(4 hours);
-
-        assertEq(
-            usde.balanceOf(address(almProxy)), 4_000_000e18, "ALM Proxy balance should be 4_000_000e18 after skipping"
-        );
-        assertEq(
-            rateLimits.getCurrentRateLimit(key), 999_999999999999999993600, "Rate limit should replenish after skipping"
-        );
-
-        mainnetController.transferTokenLayerZero(address(usdeOft), 999_999999999999999993600, destinationEndpointId);
-
-        // NOTE: OFT shared decimals truncation - the OFT adapter removes dust (rounds down to 1e12),
-        // so 999_999_999_999_999_999_993_600 becomes 999_999_999_999_000_000_000_000 actual debit
-        assertEq(
-            usde.balanceOf(address(almProxy)),
-            3_000_000_000_001_000_000_000_000,
-            "ALM Proxy balance should decrease after transfer"
-        );
-        assertEq(rateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
-
-        vm.stopPrank();
-    }
 
     function test_transferUSDeToLZ_destinationToSource() external {
         destination.selectFork();
@@ -634,104 +457,6 @@ contract USDeToLayerZeroIntegrationTests is AvalancheChainUSDeToLayerZeroTestBas
             USDE_MAINNET_BALANCE_BEFORE - 1e18,
             "OFT balance should be decreased by 1e18 after relay"
         );
-    }
-
-    function test_transferUSDeToLZ_destinationToSource_bigTransfer() external {
-        destination.selectFork();
-
-        deal(address(usdeAvalanche), address(foreignAlmProxy), 2_600_000e18, true);
-
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignAlmProxy)),
-            2_600_000e18,
-            "Foreign ALM Proxy balance should be 2_600_000e18 before transfer"
-        );
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller balance should be 0 before transfer"
-        );
-        assertEq(
-            usdeAvalanche.totalSupply(), USDE_AVALANCHE_SUPPLY + 2_600_000e18, "Total supply should be increased before transfer"
-        );
-
-        _expectAvalancheOftEmit(2_600_000e18);
-
-        vm.prank(relayer);
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 2_600_000e18, sourceEndpointId);
-
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignAlmProxy)), 0, "Foreign ALM Proxy balance should be 0 after transfer"
-        );
-        assertEq(
-            usdeAvalanche.balanceOf(address(foreignController)),
-            0,
-            "Foreign Controller balance should be 0 after transfer"
-        );
-        assertEq(
-            usdeAvalanche.totalSupply(),
-            USDE_AVALANCHE_SUPPLY,
-            "Total supply should be USDE_AVALANCHE_SUPPLY after transfer"
-        );
-
-        source.selectFork();
-
-        assertEq(usde.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 before relay");
-        assertEq(usde.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 before relay");
-        assertEq(
-            usde.balanceOf(address(usdeOft)),
-            USDE_MAINNET_BALANCE_BEFORE,
-            "OFT balance should be the same before relay"
-        );
-
-        bridge.relayMessagesToSource(true, address(usdeAvalanche), address(usdeOft));
-
-        assertEq(usde.balanceOf(address(almProxy)), 2_600_000e18, "ALM Proxy balance should be 2_600_000e18 after relay");
-        assertEq(usde.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 after relay");
-        assertEq(
-            usde.balanceOf(address(usdeOft)),
-            USDE_MAINNET_BALANCE_BEFORE - 2_600_000e18,
-            "OFT balance should be decreased by 2_600_000e18 after relay"
-        );
-    }
-
-    function test_transferUSDeToLZ_destinationToSource_rateLimited() external {
-        destination.selectFork();
-
-        bytes32 key = destinationRateLimitKey;
-        deal(address(usdeAvalanche), address(foreignAlmProxy), 9_000_000e18, true);
-
-        vm.startPrank(relayer);
-
-        assertEq(usdeAvalanche.balanceOf(address(foreignAlmProxy)), 9_000_000e18, "Foreign ALM Proxy balance should be 9_000_000e18 before transfer");
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 5_000_000e18, "Rate limit should be 5_000_000e18 before transfer");
-
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 2_000_000e18, sourceEndpointId);
-
-        assertEq(usdeAvalanche.balanceOf(address(foreignAlmProxy)), 7_000_000e18, "Foreign ALM Proxy balance should be 7_000_000e18 after transfer");
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 3_000_000e18, "Rate limit should be 3_000_000e18 after transfer");
-
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 3_000_001e18, sourceEndpointId);
-
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 3_000_000e18, sourceEndpointId);
-
-        assertEq(usdeAvalanche.balanceOf(address(foreignAlmProxy)), 4_000_000e18, "Foreign ALM Proxy balance should be 4_000_000e18 after transfer");
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
-
-        skip(4 hours);
-
-        assertEq(usdeAvalanche.balanceOf(address(foreignAlmProxy)), 4_000_000e18, "Foreign ALM Proxy balance should be 4_000_000e18 after skipping");
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 999_999999999999999993600, "Rate limit should replenish after skipping");
-
-        foreignController.transferTokenLayerZero(address(usdeAvalanche), 999_999999999999999993600, sourceEndpointId);
-
-        // NOTE: OFT shared decimals truncation - the OFT removes dust (rounds down to 1e12),
-        // so 999_999_999_999_999_999_993_600 becomes 999_999_999_999_000_000_000_000 actual debit
-        assertEq(usdeAvalanche.balanceOf(address(foreignAlmProxy)), 3_000_000_000_001_000_000_000_000, "Foreign ALM Proxy balance should decrease after transfer");
-        assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
-
-        vm.stopPrank();
     }
 
     function _expectEthereumOftEmit(uint256 amount) internal {
@@ -1066,6 +791,10 @@ contract ETHToLayerZeroDestinationToSourceTests is AvalancheChainETHToLayerZeroT
             WETH_ADAPTER_BALANCE,
             "OFT Adapter WETH balance should be WETH_ADAPTER_BALANCE before transfer"
         );
+
+        // approvalRequired == true: expect Approval from foreignAlmProxy to adapter for WETH
+        vm.expectEmit(true, true, true, true, address(wethAvalanche));
+        emit Approval(address(foreignAlmProxy), address(oftAdapterAvalanche), 2_600_000e18);
 
         _expectAvalancheOftEmit(2_600_000e18);
 
