@@ -119,7 +119,7 @@ contract ForeignScript is Script {
         if (
             bytes(customNameId).length   != 0 &&
             bytes(customName).length     != 0 &&
-            bytes(customRpcUrl).length.  != 0 &&
+            bytes(customRpcUrl).length   != 0 &&
             customChainId                != 0
         ) {
             setChain(customNameId, ChainData({
