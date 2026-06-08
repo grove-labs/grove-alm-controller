@@ -42,7 +42,7 @@ deploy-monad-production-controller :; CHAIN=monad ENV=production forge script sc
 #
 # Example - deploy to a chain called "custom_chain":
 #
-#   CHAIN=custom_chain CUSTOM_CHAIN_NAME=custom_chain \
+#   CHAIN=custom_chain CUSTOM_CHAIN_NAME=Custom_chain \
 #   CUSTOM_RPC_URL=https://rpc.custom-chain.example CUSTOM_CHAIN_ID=123456 \
 #   ENV=production \
 #     forge script script/Deploy.s.sol:DeployForeignFull --sender ${ETH_FROM} --broadcast --verify
