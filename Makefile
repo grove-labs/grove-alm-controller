@@ -32,3 +32,18 @@ deploy-plasma-production-controller :; CHAIN=plasma ENV=production forge script 
 
 deploy-monad-production-full       :; CHAIN=monad ENV=production forge script script/Deploy.s.sol:DeployForeignFull --sender ${ETH_FROM} --broadcast --verify
 deploy-monad-production-controller :; CHAIN=monad ENV=production forge script script/Deploy.s.sol:DeployForeignController --sender ${ETH_FROM} --broadcast --verify
+
+# -----------------------------------------------------------------------------
+# Custom (non-standard) chain - no code change needed.
+#
+# setUpNonStandardChains() in script/Deploy.s.sol registers a chain on the fly
+# from the CUSTOM_* env vars. run() resolves the fork via getChain(CHAIN), so set
+# CHAIN to the same value as CUSTOM_CHAIN_NAME.
+#
+# Example - deploy to a chain called "custom_chain":
+#
+#   CHAIN=custom_chain CUSTOM_CHAIN_NAME=Custom_chain \
+#   CUSTOM_RPC_URL=https://rpc.custom-chain.example CUSTOM_CHAIN_ID=123456 \
+#   ENV=production \
+#     forge script script/Deploy.s.sol:DeployForeignFull --sender ${ETH_FROM} --broadcast --verify
+# -----------------------------------------------------------------------------

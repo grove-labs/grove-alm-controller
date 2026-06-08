@@ -111,6 +111,23 @@ contract ForeignScript is Script {
             rpcUrl  : vm.envString("PLASMA_RPC_URL"),
             chainId : 9745
         }));
+
+        string memory customChain     = vm.envOr("CHAIN",             string(""));
+        string memory customName      = vm.envOr("CUSTOM_CHAIN_NAME", string(""));
+        string memory customRpcUrl    = vm.envOr("CUSTOM_RPC_URL",    string(""));
+        uint256       customChainId   = vm.envOr("CUSTOM_CHAIN_ID",   uint256(0));
+        if (
+            bytes(customChain).length    != 0 &&
+            bytes(customName).length     != 0 &&
+            bytes(customRpcUrl).length   != 0 &&
+            customChainId                != 0
+        ) {
+            setChain(customChain, ChainData({
+                name    : customName,
+                rpcUrl  : customRpcUrl,
+                chainId : customChainId
+            }));
+        }
     }
 
 }
