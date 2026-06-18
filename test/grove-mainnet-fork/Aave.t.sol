@@ -94,7 +94,7 @@ contract AaveV3MainMarketDepositFailureTests is AaveV3MainMarketBaseTest {
         mainnetController.setMaxSlippage(ATOKEN_USDS, 0);
 
         vm.prank(relayer);
-        vm.expectRevert("MainnetController/max-slippage-not-set");
+        vm.expectRevert("MC/max-slippage-not-set");
         mainnetController.depositAave(ATOKEN_USDS, 1_000_000e18);
     }
 

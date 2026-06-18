@@ -18,12 +18,13 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { CurveLib }     from "./libraries/CurveLib.sol";
-import { MerklLib }     from "./libraries/MerklLib.sol";
-import { PendleLib }    from "./libraries/PendleLib.sol";
-import { CCTPLib }      from "./libraries/CCTPLib.sol";
-import { ERC20Lib }     from "./libraries/common/ERC20Lib.sol";
-import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
+import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
+import { CurveLib }      from "./libraries/CurveLib.sol";
+import { MerklLib }      from "./libraries/MerklLib.sol";
+import { PendleLib }     from "./libraries/PendleLib.sol";
+import { CCTPLib }       from "./libraries/CCTPLib.sol";
+import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
+import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
@@ -167,7 +168,7 @@ contract ForeignController is AccessControl {
     modifier rateLimitExists(bytes32 key) {
         require(
             rateLimits.getRateLimitData(key).maxAmount > 0,
-            "ForeignController/invalid-action"
+            "FC/invalid-action"
         );
         _;
     }
@@ -196,7 +197,7 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(maxSlippage <= 1e18, "ForeignController/max-slippage-out-of-bounds");
+        require(maxSlippage <= 1e18, "FC/max-slippage-oob");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
     }
@@ -215,7 +216,7 @@ contract ForeignController is AccessControl {
         require(
             maxTickDelta > 0 &&
             maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "ForeignController/max-tick-delta-out-of-bounds"
+            "FC/max-tick-delta-oob"
         );
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
@@ -225,7 +226,7 @@ contract ForeignController is AccessControl {
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "ForeignController/lower-tick-out-of-bounds");
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "FC/lower-tick-oob");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -233,7 +234,7 @@ contract ForeignController is AccessControl {
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "ForeignController/upper-tick-out-of-bounds");
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "FC/upper-tick-oob");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
@@ -243,7 +244,7 @@ contract ForeignController is AccessControl {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         // Required due to casting in UniswapV3OracleLibrary.consult
         // Limits twapSecondsAgo to approximately 68 years
-        require(twapSecondsAgo < uint32(type(int32).max), "ForeignController/twap-seconds-ago-out-of-bounds");
+        require(twapSecondsAgo < uint32(type(int32).max), "FC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
@@ -259,7 +260,7 @@ contract ForeignController is AccessControl {
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        require(token != address(0), "ForeignController/token-zero-address");
+        require(token != address(0), "FC/token-zero-address");
 
         emit MaxExchangeRateSet(
             token,
@@ -436,7 +437,7 @@ contract ForeignController is AccessControl {
 
         require(
             _getExchangeRate(shares, amount) <= maxExchangeRates[token],
-            "ForeignController/exchange-rate-too-high"
+            "FC/exchange-rate-too-high"
         );
     }
 
@@ -549,62 +550,48 @@ contract ForeignController is AccessControl {
 
     // NOTE: These cancelation methods are compatible with ERC-7887
 
-    function cancelCentrifugeDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        // NOTE: While the cancelation is pending, no new deposit request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function cancelCentrifugeRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        // NOTE: While the cancelation is pending, no new redeem request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
     function transferSharesCentrifuge(
@@ -615,34 +602,15 @@ contract ForeignController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
-
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "ForeignController/centrifuge-id-not-configured");
-
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
-
-        // Initiate cross-chain transfer via the specific spoke address
-        proxy.doCallWithValue{value: msg.value}(
-            spoke,
-            abi.encodeCall(
-                ISpokeLike(spoke).crosschainTransferShares,
-                (
-                    destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
-                    amount,
-                    0
-                )
-            ),
-            msg.value
-        );
+        CentrifugeLib.transferSharesCentrifuge(CentrifugeLib.CentrifugeTransferParams({
+            proxy                   : proxy,
+            rateLimits              : rateLimits,
+            token                   : token,
+            amount                  : amount,
+            recipient               : centrifugeRecipients[destinationCentrifugeId],
+            destinationCentrifugeId : destinationCentrifugeId,
+            rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+        }));
     }
 
     /**********************************************************************************************/
@@ -654,7 +622,7 @@ contract ForeignController is AccessControl {
         onlyRole(RELAYER)
         rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount)
     {
-        require(maxSlippages[aToken] != 0, "ForeignController/max-slippage-not-set");
+        require(maxSlippages[aToken] != 0, "FC/max-slippage-not-set");
 
         IERC20    underlying = IERC20(IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS());
         IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
@@ -674,7 +642,7 @@ contract ForeignController is AccessControl {
 
         require(
             newATokens >= amount * maxSlippages[aToken] / 1e18,
-            "ForeignController/slippage-too-high"
+            "FC/slippage-too-high"
         );
     }
 
@@ -780,7 +748,7 @@ contract ForeignController is AccessControl {
 
     function toggleOperatorMerkl(address operator) external {
         _checkRole(RELAYER);
-        require(address(merklDistributor) != address(0), "ForeignController/merkl-distributor-not-set");
+        require(address(merklDistributor) != address(0), "FC/merkl-distributor-not-set");
 
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy        : proxy,
@@ -928,7 +896,7 @@ contract ForeignController is AccessControl {
         if (assets == 0) return 0;
 
         // Zero shares with non-zero assets is invalid (infinite exchange rate).
-        if (shares == 0) revert("ForeignController/zero-shares");
+        if (shares == 0) revert("FC/zero-shares");
 
         return (EXCHANGE_RATE_PRECISION * assets) / shares;
     }
