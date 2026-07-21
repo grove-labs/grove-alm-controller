@@ -50,14 +50,14 @@ library AaveV4Lib {
     }
 
     function deposit(DepositParams memory params) external {
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeSpokeReserveKey(params.depositRateLimitId, params.spoke, params.reserveId),
-            params.amount
-        );
-
         require(params.maxSlippage != 0, "AaveV4Lib/max-slippage-not-set");
 
         address underlying = IAaveV4Spoke(params.spoke).getReserve(params.reserveId).underlying;
+
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying),
+            params.amount
+        );
 
         uint256 suppliedBefore
             = IAaveV4Spoke(params.spoke).getUserSuppliedAssets(params.reserveId, address(params.proxy));
@@ -107,7 +107,7 @@ library AaveV4Lib {
 
         // Restore deposit capacity by the withdrawn amount; skipped if no deposit limit is set.
         bytes32 depositKey
-            = RateLimitHelpers.makeSpokeReserveKey(params.depositRateLimitId, params.spoke, params.reserveId);
+            = RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying);
         if (params.rateLimits.getRateLimitData(depositKey).maxAmount != 0) {
             params.rateLimits.triggerRateLimitIncrease(depositKey, amountWithdrawn);
         }

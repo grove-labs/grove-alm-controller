@@ -19,4 +19,8 @@ library RateLimitHelpers {
         return keccak256(abi.encode(key, spoke, reserveId));
     }
 
+    function makeSpokeReserveAssetKey(bytes32 key, address spoke, uint256 reserveId, address asset) internal pure returns (bytes32) {
+        return keccak256(abi.encode(key, spoke, reserveId, asset));
+    }
+
 }

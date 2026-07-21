@@ -49,10 +49,10 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
     function setUp() public virtual override {
         super.setUp();
 
-        usdcDepositKey   = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, USDC_RESERVE_ID);
-        usdcWithdrawKey  = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID);
-        wavaxDepositKey  = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, WAVAX_RESERVE_ID);
-        wavaxWithdrawKey = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, WAVAX_RESERVE_ID);
+        usdcDepositKey   = RateLimitHelpers.makeSpokeReserveAssetKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, USDC_RESERVE_ID,  address(usdcAvalanche));
+        usdcWithdrawKey  = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(),      MAIN_SPOKE, USDC_RESERVE_ID);
+        wavaxDepositKey  = RateLimitHelpers.makeSpokeReserveAssetKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX);
+        wavaxWithdrawKey = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(),      MAIN_SPOKE, WAVAX_RESERVE_ID);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(usdcDepositKey,  USDC_DEPOSIT_LIMIT,  USDC_DEPOSIT_LIMIT  / 1 days);
@@ -88,7 +88,7 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
     function test_depositAaveV4_zeroMaxAmount() external {
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.depositAaveV4(makeAddr("fake-spoke"), 0, 1e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, 1, 1e6);
     }
 
     function test_depositAaveV4_zeroMaxSlippage() external {
