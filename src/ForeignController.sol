@@ -58,6 +58,7 @@ contract ForeignController is AccessControl {
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
     event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+    event MaxAaveV4DeficitSet(address indexed spoke, uint256 indexed reserveId, uint256 maxDeficit);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
     event MerklDistributorSet(address indexed merklDistributor);
@@ -118,6 +119,9 @@ contract ForeignController is AccessControl {
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+
+    // Aave v4 per-reserve deposit deficit tolerance (RAY, 1e27 precision); 0 blocks deposits into any deficit
+    mapping(address spoke => mapping(uint256 reserveId => uint256 maxDeficit)) public maxAaveV4Deficits;
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -202,6 +206,14 @@ contract ForeignController is AccessControl {
         require(maxSlippage <= 1e18, "ForeignController/max-slippage-out-of-bounds");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+    function setMaxAaveV4Deficit(address spoke, uint256 reserveId, uint256 maxDeficit)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        maxAaveV4Deficits[spoke][reserveId] = maxDeficit;
+        emit MaxAaveV4DeficitSet(spoke, reserveId, maxDeficit);
     }
 
     function setCentrifugeRecipient(uint16 destinationCentrifugeId, bytes32 recipient)
@@ -723,7 +735,8 @@ contract ForeignController is AccessControl {
             spoke              : spoke,
             reserveId          : reserveId,
             amount             : amount,
-            maxSlippage        : maxSlippages[spoke]
+            maxSlippage        : maxSlippages[spoke],
+            maxDeficit         : maxAaveV4Deficits[spoke][reserveId]
         }));
     }
 

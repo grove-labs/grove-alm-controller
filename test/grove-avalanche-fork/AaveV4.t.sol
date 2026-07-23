@@ -159,6 +159,58 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
 
 }
 
+contract AaveV4MainSpokeDepositDeficitGuardTests is AaveV4MainSpokeBaseTest {
+
+    uint256 constant DEFICIT_RAY = 1e27;
+
+    function _mockUsdcDeficit(uint256 deficitRay) internal {
+        uint256 assetId = IAaveV4Spoke(MAIN_SPOKE).getReserve(USDC_RESERVE_ID).assetId;
+        vm.mockCall(
+            CORE_HUB,
+            abi.encodeWithSignature("getAssetDeficitRay(uint256)", assetId),
+            abi.encode(deficitRay)
+        );
+    }
+
+    // Any outstanding deficit blocks deposits at the default (zero) tolerance.
+    function test_depositAaveV4_deficitBlockedByDefault() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+        _mockUsdcDeficit(DEFICIT_RAY);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    // Raising the per-reserve tolerance to cover the deficit re-admits the deposit (== is allowed).
+    function test_depositAaveV4_deficitWithinTolerance() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+        _mockUsdcDeficit(DEFICIT_RAY);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Deficit(MAIN_SPOKE, USDC_RESERVE_ID, DEFICIT_RAY);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+
+        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
+    }
+
+    // One wei of deficit above the configured tolerance still trips the guard.
+    function test_depositAaveV4_deficitJustAboveTolerance() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+        _mockUsdcDeficit(DEFICIT_RAY + 1);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Deficit(MAIN_SPOKE, USDC_RESERVE_ID, DEFICIT_RAY);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+}
+
 contract AaveV4MainSpokeDepositSuccessTests is AaveV4MainSpokeBaseTest {
 
     // Guards the IAaveV4Spoke.Reserve layout assumed by the partial interface.

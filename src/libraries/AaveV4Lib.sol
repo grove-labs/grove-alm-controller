@@ -27,6 +27,10 @@ interface IAaveV4Spoke {
     function getUserSuppliedAssets(uint256 reserveId, address user) external view returns (uint256);
 }
 
+interface IAaveV4Hub {
+    function getAssetDeficitRay(uint256 assetId) external view returns (uint256);
+}
+
 library AaveV4Lib {
 
     struct DepositParams {
@@ -37,6 +41,7 @@ library AaveV4Lib {
         uint256     reserveId;
         uint256     amount;
         uint256     maxSlippage;
+        uint256     maxDeficit;
     }
 
     struct WithdrawParams {
@@ -52,7 +57,16 @@ library AaveV4Lib {
     function deposit(DepositParams memory params) external {
         require(params.maxSlippage != 0, "AaveV4Lib/max-slippage-not-set");
 
-        address underlying = IAaveV4Spoke(params.spoke).getReserve(params.reserveId).underlying;
+        IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
+
+        // Block deposits into a pool carrying an outstanding deficit (unbacked liquidity). The
+        // tolerance defaults to zero (any deficit blocks); an admin can raise it to un-wedge dust.
+        require(
+            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= params.maxDeficit,
+            "AaveV4Lib/deficit-too-high"
+        );
+
+        address underlying = reserve.underlying;
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying),
