@@ -410,6 +410,28 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
     }
 
+    // A withdraw restores deposit capacity only up to the configured maxAmount: after the deposit
+    // limit is tightened below the withdrawn amount, the restore clamps at the new cap instead of
+    // minting excess capacity.
+    function test_withdrawAaveV4_usdc_depositRestoreCappedAtMaxAmount() public {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+
+        // Tighten the deposit limit below the withdrawn amount, with no remaining capacity.
+        uint256 tightenedLimit = 1_000_000e6;
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(usdcDepositKey, tightenedLimit, 0, 0, block.timestamp);
+
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), 0);
+
+        // Withdraw ~4M; the restore credits only up to the 1M cap.
+        vm.prank(ALM_RELAYER);
+        foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
+
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), tightenedLimit);
+    }
+
     function test_withdrawAaveV4_wavax() public {
         uint256 amount = WAVAX_DEPOSIT_AMOUNT;
 
