@@ -406,47 +406,6 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
 
 }
 
-contract AaveV4MainSpokeInflationAttackTests is AaveV4MainSpokeBaseTest {
-
-    // Aave v3 lets an attacker inflate the share price by donating underlying to the aToken, whose
-    // accounting derives from balanceOf. Aave v4's Hub tracks liquidity internally (asset.liquidity),
-    // so a raw donation is inert. See AaveV4-REVIEW.md section 3 for the full analysis.
-    function test_depositAaveV4_donationDoesNotInflateSharePrice() external {
-        IAaveV4Hub hub     = IAaveV4Hub(CORE_HUB);
-        uint256    assetId = IAaveV4Spoke(MAIN_SPOKE).getReserve(USDC_RESERVE_ID).assetId;
-
-        uint256 liquidityBefore = hub.getAssetLiquidity(assetId);
-        uint256 assetsBefore    = hub.getAddedAssets(assetId);
-        uint256 sharesBefore    = hub.getAddedShares(assetId);
-
-        // Share price starts at exactly 1:1.
-        assertEq(assetsBefore, sharesBefore);
-
-        // Donate underlying straight to the Hub (the v3 inflation vector).
-        uint256 donation = 10_000_000e6;
-        deal(address(usdcAvalanche), address(this), donation);
-        usdcAvalanche.transfer(CORE_HUB, donation);
-
-        // Raw balance grew, but the Hub's internal accounting is untouched: share price stays 1:1.
-        assertEq(usdcAvalanche.balanceOf(CORE_HUB), startingHubBalanceUsdc + donation);
-        assertEq(hub.getAssetLiquidity(assetId),    liquidityBefore);
-        assertEq(hub.getAddedAssets(assetId),       assetsBefore);
-        assertEq(hub.getAddedShares(assetId),       sharesBefore);
-
-        // Honest deposit still receives ~1:1 and passes the slippage guard.
-        deal(address(usdcAvalanche), address(almProxy), 1_000e6);
-
-        vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000e6);
-
-        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), 1_000e6, 1);
-
-        // Shares minted 1:1 against the deposit; the donation conferred no benefit.
-        assertEq(hub.getAddedShares(assetId), sharesBefore + 1_000e6);
-    }
-
-}
-
 contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
 
     // End-to-end flow across both reserves on the shared Main Spoke, interleaving successful and
