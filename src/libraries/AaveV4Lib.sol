@@ -41,7 +41,6 @@ library AaveV4Lib {
         uint256     reserveId;
         uint256     amount;
         uint256     maxSlippage;
-        uint256     maxDeficit;
     }
 
     struct WithdrawParams {
@@ -59,11 +58,11 @@ library AaveV4Lib {
 
         IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
 
-        // Block deposits into a pool carrying an outstanding deficit (unbacked liquidity). The
-        // tolerance defaults to zero (any deficit blocks); an admin can raise it to un-wedge dust.
+        // Block deposits into a reserve whose Hub carries any outstanding deficit (unbacked
+        // liquidity from socialized bad debt); a new supplier would otherwise absorb a share of it.
         require(
-            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= params.maxDeficit,
-            "AaveV4Lib/deficit-too-high"
+            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) == 0,
+            "AaveV4Lib/asset-in-deficit"
         );
 
         address underlying = reserve.underlying;
