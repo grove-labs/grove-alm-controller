@@ -18,6 +18,7 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
+import { AaveV4Lib }    from "./libraries/AaveV4Lib.sol";
 import { CurveLib }     from "./libraries/CurveLib.sol";
 import { MerklLib }     from "./libraries/MerklLib.sol";
 import { PendleLib }    from "./libraries/PendleLib.sol";
@@ -81,6 +82,8 @@ contract ForeignController is AccessControl {
     bytes32 public LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
     bytes32 public LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
+    bytes32 public LIMIT_AAVE_V4_DEPOSIT     = keccak256("LIMIT_AAVE_V4_DEPOSIT");
+    bytes32 public LIMIT_AAVE_V4_WITHDRAW    = keccak256("LIMIT_AAVE_V4_WITHDRAW");
     bytes32 public LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
     bytes32 public LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
     bytes32 public LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
@@ -703,6 +706,41 @@ contract ForeignController is AccessControl {
             RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
             amountWithdrawn
         );
+    }
+
+    /**********************************************************************************************/
+    /*** Relayer Aave V4 functions                                                              ***/
+    /**********************************************************************************************/
+
+    function depositAaveV4(address spoke, uint256 reserveId, uint256 amount)
+        external
+        onlyRole(RELAYER)
+    {
+        AaveV4Lib.deposit(AaveV4Lib.DepositParams({
+            proxy              : proxy,
+            rateLimits         : rateLimits,
+            depositRateLimitId : LIMIT_AAVE_V4_DEPOSIT,
+            spoke              : spoke,
+            reserveId          : reserveId,
+            amount             : amount,
+            maxSlippage        : maxSlippages[spoke]
+        }));
+    }
+
+    function withdrawAaveV4(address spoke, uint256 reserveId, uint256 amount)
+        external
+        onlyRole(RELAYER)
+        returns (uint256 amountWithdrawn)
+    {
+        amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
+            proxy               : proxy,
+            rateLimits          : rateLimits,
+            depositRateLimitId  : LIMIT_AAVE_V4_DEPOSIT,
+            withdrawRateLimitId : LIMIT_AAVE_V4_WITHDRAW,
+            spoke               : spoke,
+            reserveId           : reserveId,
+            amount              : amount
+        }));
     }
 
     /**********************************************************************************************/
