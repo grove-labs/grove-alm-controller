@@ -53,22 +53,28 @@ library AaveV4Lib {
         uint256     amount;
     }
 
-    function deposit(DepositParams memory params) external {
+    function deposit(
+        DepositParams memory params,
+        mapping(address hub => mapping(uint16 assetId => uint256 maxDeficit)) storage maxDeficits
+    )
+        external
+    {
         require(params.maxSlippage != 0, "AaveV4Lib/max-slippage-not-set");
 
         IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
 
-        // Block deposits into a reserve whose Hub carries any outstanding deficit (unbacked
-        // liquidity from socialized bad debt); a new supplier would otherwise absorb a share of it.
-        require(
-            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) == 0,
-            "AaveV4Lib/asset-in-deficit"
-        );
-
         address underlying = reserve.underlying;
 
+        // Cap the outstanding deficit (unbacked liquidity from socialized bad debt) that a new
+        // supplier is willing to absorb a pro-rata share of. Keyed by (hub, assetId) to match the
+        // scope the Hub reports it over: the shortfall is shared by every spoke fronting the asset.
+        require(
+            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= maxDeficits[reserve.hub][reserve.assetId],
+            "AaveV4Lib/deficit-too-high"
+        );
+
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying),
+            _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve),
             params.amount
         );
 
@@ -99,7 +105,9 @@ library AaveV4Lib {
 
     // NOTE: !!! Rate limited at end of function !!!
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
-        address underlying = IAaveV4Spoke(params.spoke).getReserve(params.reserveId).underlying;
+        IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
+
+        address underlying = reserve.underlying;
 
         uint256 balanceBefore = IERC20(underlying).balanceOf(address(params.proxy));
 
@@ -119,11 +127,30 @@ library AaveV4Lib {
         );
 
         // Restore deposit capacity by the withdrawn amount; skipped if no deposit limit is set.
-        bytes32 depositKey
-            = RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying);
+        // A reserve remapped to a different Hub asset resolves to an unconfigured key, so only the
+        // restore is skipped, never the exit itself (the withdraw key omits the reserve's Hub data).
+        bytes32 depositKey = _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve);
         if (params.rateLimits.getRateLimitData(depositKey).maxAmount != 0) {
             params.rateLimits.triggerRateLimitIncrease(depositKey, amountWithdrawn);
         }
+    }
+
+    function _makeDepositKey(
+        bytes32 rateLimitId,
+        address spoke,
+        uint256 reserveId,
+        IAaveV4Spoke.Reserve memory reserve
+    )
+        internal pure returns (bytes32)
+    {
+        return RateLimitHelpers.makeSpokeReserveHubAssetKey(
+            rateLimitId,
+            spoke,
+            reserveId,
+            reserve.hub,
+            reserve.assetId,
+            reserve.underlying
+        );
     }
 
 }

@@ -448,6 +448,8 @@ contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAd
 
 contract ForeignControllerAdminTestBase is UnitTestBase {
 
+    event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
+    event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event LayerZeroRecipientSet(uint32 indexed destinationDomain, bytes32 layerZeroRecipient);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -614,6 +616,123 @@ contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase 
         vm.prank(admin);
         vm.expectRevert("ForeignController/max-slippage-out-of-bounds");
         foreignController.setMaxSlippage(makeAddr("pool"), 1e18 + 1);
+    }
+}
+
+contract ForeignControllerSetMaxAaveV4SlippageTests is ForeignControllerAdminTestBase {
+
+    function test_setMaxAaveV4Slippage_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxAaveV4Slippage(makeAddr("spoke"), 1, 0.01e18);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxAaveV4Slippage(makeAddr("spoke"), 1, 0.01e18);
+    }
+
+    // Each reserve on a spoke carries its own tolerance, unlike the shared maxSlippages mapping.
+    function test_setMaxAaveV4Slippage() public {
+        address spoke      = makeAddr("spoke");
+        address otherSpoke = makeAddr("otherSpoke");
+
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 1), 0);
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 2), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxAaveV4SlippageSet(spoke, 1, 0.01e18);
+        foreignController.setMaxAaveV4Slippage(spoke, 1, 0.01e18);
+
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 1), 0.01e18);
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 2), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxAaveV4SlippageSet(spoke, 2, 0.02e18);
+        foreignController.setMaxAaveV4Slippage(spoke, 2, 0.02e18);
+
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 1), 0.01e18);
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 2), 0.02e18);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxAaveV4SlippageSet(spoke, 1, 1e18);
+        foreignController.setMaxAaveV4Slippage(spoke, 1, 1e18);
+
+        assertEq(foreignController.maxAaveV4Slippages(spoke, 1), 1e18);
+
+        // The same reserveId on another spoke is a different market.
+        assertEq(foreignController.maxAaveV4Slippages(otherSpoke, 1), 0);
+
+        vm.prank(admin);
+        foreignController.setMaxAaveV4Slippage(otherSpoke, 1, 0.5e18);
+
+        assertEq(foreignController.maxAaveV4Slippages(otherSpoke, 1), 0.5e18);
+        assertEq(foreignController.maxAaveV4Slippages(spoke,      1), 1e18);
+    }
+
+    function test_setMaxAaveV4Slippage_outOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/max-slippage-out-of-bounds");
+        foreignController.setMaxAaveV4Slippage(makeAddr("spoke"), 1, 1e18 + 1);
+    }
+}
+
+contract ForeignControllerSetMaxAaveV4DeficitTests is ForeignControllerAdminTestBase {
+
+    // RAY-denominated in the asset's own units, so this is $1,000 of a 6-decimal asset.
+    uint256 constant TOLERANCE = 1_000e6 * 1e27;
+
+    address hub      = makeAddr("hub");
+    address otherHub = makeAddr("otherHub");
+
+    function test_setMaxAaveV4Deficit_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxAaveV4Deficit(hub, 2, TOLERANCE);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxAaveV4Deficit(hub, 2, TOLERANCE);
+    }
+
+    // The tolerance is scoped to one asset on one Hub: neither another asset on the same Hub nor the
+    // same asset id on another Hub inherits it.
+    function test_setMaxAaveV4Deficit() public {
+        assertEq(foreignController.maxAaveV4Deficits(hub,      2), 0);
+        assertEq(foreignController.maxAaveV4Deficits(hub,      3), 0);
+        assertEq(foreignController.maxAaveV4Deficits(otherHub, 2), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxAaveV4DeficitSet(hub, 2, TOLERANCE);
+        foreignController.setMaxAaveV4Deficit(hub, 2, TOLERANCE);
+
+        assertEq(foreignController.maxAaveV4Deficits(hub,      2), TOLERANCE);
+        assertEq(foreignController.maxAaveV4Deficits(hub,      3), 0);
+        assertEq(foreignController.maxAaveV4Deficits(otherHub, 2), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxAaveV4DeficitSet(hub, 2, 0);
+        foreignController.setMaxAaveV4Deficit(hub, 2, 0);
+
+        assertEq(foreignController.maxAaveV4Deficits(hub, 2), 0);
     }
 }
 
