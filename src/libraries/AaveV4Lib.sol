@@ -41,6 +41,9 @@ library AaveV4Lib {
         uint256     reserveId;
         uint256     amount;
         uint256     maxSlippage;
+        address     hub;
+        uint16      assetId;
+        uint256     maxDeficit;
     }
 
     struct WithdrawParams {
@@ -53,23 +56,26 @@ library AaveV4Lib {
         uint256     amount;
     }
 
-    function deposit(
-        DepositParams memory params,
-        mapping(address hub => mapping(uint16 assetId => uint256 maxDeficit)) storage maxDeficits
-    )
-        external
-    {
+    function deposit(DepositParams memory params) external {
         require(params.maxSlippage != 0, "AaveV4Lib/max-slippage-not-set");
 
         IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
 
+        // The caller resolves maxDeficit from the (hub, assetId) it declares, before the reserve can
+        // be read, so the declaration is only safe once checked against the Spoke: otherwise a
+        // relayer could aim the lookup at an asset carrying a looser tolerance.
+        require(
+            reserve.hub == params.hub && reserve.assetId == params.assetId,
+            "AaveV4Lib/invalid-hub-asset"
+        );
+
         address underlying = reserve.underlying;
 
         // Cap the outstanding deficit (unbacked liquidity from socialized bad debt) that a new
-        // supplier is willing to absorb a pro-rata share of. Keyed by (hub, assetId) to match the
+        // supplier is willing to absorb a pro-rata share of. Scoped to (hub, assetId) to match the
         // scope the Hub reports it over: the shortfall is shared by every spoke fronting the asset.
         require(
-            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= maxDeficits[reserve.hub][reserve.assetId],
+            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= params.maxDeficit,
             "AaveV4Lib/deficit-too-high"
         );
 

@@ -738,22 +738,24 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave V4 functions                                                              ***/
     /**********************************************************************************************/
 
-    function depositAaveV4(address spoke, uint256 reserveId, uint256 amount)
+    // NOTE: hub and assetId are declared by the relayer to resolve the bad debt tolerance, then
+    //       checked against the reserve inside the library.
+    function depositAaveV4(address spoke, uint256 reserveId, address hub, uint16 assetId, uint256 amount)
         external
         onlyRole(RELAYER)
     {
-        AaveV4Lib.deposit(
-            AaveV4Lib.DepositParams({
-                proxy              : proxy,
-                rateLimits         : rateLimits,
-                depositRateLimitId : LIMIT_AAVE_V4_DEPOSIT,
-                spoke              : spoke,
-                reserveId          : reserveId,
-                amount             : amount,
-                maxSlippage        : maxAaveV4Slippages[spoke][reserveId]
-            }),
-            maxAaveV4Deficits
-        );
+        AaveV4Lib.deposit(AaveV4Lib.DepositParams({
+            proxy              : proxy,
+            rateLimits         : rateLimits,
+            depositRateLimitId : LIMIT_AAVE_V4_DEPOSIT,
+            spoke              : spoke,
+            reserveId          : reserveId,
+            amount             : amount,
+            maxSlippage        : maxAaveV4Slippages[spoke][reserveId],
+            hub                : hub,
+            assetId            : assetId,
+            maxDeficit         : maxAaveV4Deficits[hub][assetId]
+        }));
     }
 
     function withdrawAaveV4(address spoke, uint256 reserveId, uint256 amount)
