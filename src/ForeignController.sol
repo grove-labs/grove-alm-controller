@@ -121,11 +121,8 @@ contract ForeignController is AccessControl {
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
-    // Slippage is per market, since one spoke hosts many reserves and each has its own share price.
-    // The deficit tolerance is per Hub asset instead, because the Hub aggregates the deficit over
-    // every spoke fronting that asset, so one shortfall impairs all of them equally.
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
-    mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY, 1e27 precision
+    mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -221,7 +218,6 @@ contract ForeignController is AccessControl {
         emit MaxAaveV4SlippageSet(spoke, reserveId, maxSlippage);
     }
 
-    // NOTE: maxDeficit is RAY-denominated in the asset's own units, matching getAssetDeficitRay.
     function setMaxAaveV4Deficit(address hub, uint16 assetId, uint256 maxDeficit)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -738,8 +734,6 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave V4 functions                                                              ***/
     /**********************************************************************************************/
 
-    // NOTE: hub and assetId are declared by the relayer to resolve the bad debt tolerance, then
-    //       checked against the reserve inside the library.
     function depositAaveV4(address spoke, uint256 reserveId, address hub, uint16 assetId, uint256 amount)
         external
         onlyRole(RELAYER)
