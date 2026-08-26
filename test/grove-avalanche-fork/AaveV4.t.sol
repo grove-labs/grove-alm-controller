@@ -9,6 +9,7 @@ interface IAaveV4Hub {
     function getAssetLiquidity(uint256 assetId) external view returns (uint256);
     function getAddedAssets(uint256 assetId)    external view returns (uint256);
     function getAddedShares(uint256 assetId)    external view returns (uint256);
+    function getAssetUnderlyingAndDecimals(uint256 assetId) external view returns (address, uint8);
 }
 
 contract AaveV4MainSpokeBaseTest is ForkTestBase {
@@ -76,8 +77,9 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
         return IAaveV4Spoke(MAIN_SPOKE).getUserSuppliedAssets(reserveId, address(almProxy));
     }
 
-    // Simulates governance remapping a live reserveId onto a different Hub asset. No remap has
-    // happened on-chain, so the real reserve is read back and re-encoded with a new assetId.
+    // Simulates governance remapping a live reserveId onto a different Hub asset fronting the same
+    // underlying. No remap has happened on-chain, so the real reserve is read back and re-encoded
+    // with the new assetId, and the Hub is mocked to agree on the underlying.
     function _remapUsdcReserveToAsset(uint16 assetId) internal {
         IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(MAIN_SPOKE).getReserve(USDC_RESERVE_ID);
 
@@ -87,6 +89,11 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
             MAIN_SPOKE,
             abi.encodeCall(IAaveV4Spoke.getReserve, (USDC_RESERVE_ID)),
             abi.encode(reserve)
+        );
+        vm.mockCall(
+            CORE_HUB,
+            abi.encodeCall(IAaveV4Hub.getAssetUnderlyingAndDecimals, (assetId)),
+            abi.encode(reserve.underlying, reserve.decimals)
         );
     }
 
@@ -388,6 +395,64 @@ contract AaveV4MainSpokeDepositDeficitGuardTests is AaveV4MainSpokeBaseTest {
 
         // The restore is keyed on the same deposit key, so capacity comes back despite the deficit.
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT);
+    }
+
+}
+
+contract AaveV4MainSpokeHubSpokeUnderlyingTests is AaveV4MainSpokeBaseTest {
+
+    function _mockHubUnderlying(uint16 assetId, address underlying, uint8 decimals) internal {
+        vm.mockCall(
+            CORE_HUB,
+            abi.encodeWithSignature("getAssetUnderlyingAndDecimals(uint256)", uint256(assetId)),
+            abi.encode(underlying, decimals)
+        );
+    }
+
+    function test_depositAaveV4_hubSpokeUnderlyingMismatch() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, WAVAX, 18);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset-metadata");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    function test_depositAaveV4_hubAssetDelisted() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, address(0), 0);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset-metadata");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    function test_depositAaveV4_hubSpokeUnderlyingAgreement() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, address(usdcAvalanche), 6);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
+    }
+
+    function test_withdrawAaveV4_unaffectedByHubSpokeUnderlyingMismatch() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, WAVAX, 18);
+
+        vm.prank(ALM_RELAYER);
+        uint256 withdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
+
+        assertApproxEqAbs(withdrawn, USDC_DEPOSIT_AMOUNT, 1);
+        assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
     }
 
 }

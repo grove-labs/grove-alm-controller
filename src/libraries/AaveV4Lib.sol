@@ -29,6 +29,7 @@ interface IAaveV4Spoke {
 
 interface IAaveV4Hub {
     function getAssetDeficitRay(uint256 assetId) external view returns (uint256);
+    function getAssetUnderlyingAndDecimals(uint256 assetId) external view returns (address, uint8);
 }
 
 library AaveV4Lib {
@@ -70,6 +71,9 @@ library AaveV4Lib {
         );
 
         address underlying = reserve.underlying;
+
+        (address hubUnderlying,) = IAaveV4Hub(reserve.hub).getAssetUnderlyingAndDecimals(reserve.assetId);
+        require(hubUnderlying == underlying, "AaveV4Lib/invalid-hub-asset-metadata");
 
         // The Hub records the deficit (unbacked liquidity from bad debt) globally per asset, and
         // separately per reporting Spoke; eliminateDeficit burns shares from the caller Spoke, so
