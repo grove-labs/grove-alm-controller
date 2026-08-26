@@ -71,9 +71,10 @@ library AaveV4Lib {
 
         address underlying = reserve.underlying;
 
-        // Cap the outstanding deficit (unbacked liquidity from socialized bad debt) that a new
-        // supplier is willing to absorb a pro-rata share of. Scoped to (hub, assetId) to match the
-        // scope the Hub reports it over: the shortfall is shared by every spoke fronting the asset.
+        // The Hub records the deficit (unbacked liquidity from bad debt) globally per asset, and
+        // separately per reporting Spoke; eliminateDeficit burns shares from the caller Spoke, so
+        // losses are not automatically distributed pro rata across suppliers. maxDeficit is a
+        // deposit threshold on the Hub-wide reported deficit for the declared (hub, assetId).
         require(
             IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= params.maxDeficit,
             "AaveV4Lib/deficit-too-high"
@@ -128,7 +129,7 @@ library AaveV4Lib {
         amountWithdrawn = IERC20(underlying).balanceOf(address(params.proxy)) - balanceBefore;
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeSpokeReserveKey(params.withdrawRateLimitId, params.spoke, params.reserveId),
+            RateLimitHelpers.makeAddressUint256Key(params.withdrawRateLimitId, params.spoke, params.reserveId),
             amountWithdrawn
         );
 
@@ -149,7 +150,7 @@ library AaveV4Lib {
     )
         internal pure returns (bytes32)
     {
-        return RateLimitHelpers.makeSpokeReserveHubAssetKey(
+        return RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
             rateLimitId,
             spoke,
             reserveId,

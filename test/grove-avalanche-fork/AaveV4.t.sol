@@ -54,9 +54,9 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
         super.setUp();
 
         usdcDepositKey   = _depositKey(USDC_RESERVE_ID,  USDC_ASSET_ID,  address(usdcAvalanche));
-        usdcWithdrawKey  = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID);
+        usdcWithdrawKey  = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID);
         wavaxDepositKey  = _depositKey(WAVAX_RESERVE_ID, WAVAX_ASSET_ID, WAVAX);
-        wavaxWithdrawKey = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, WAVAX_RESERVE_ID);
+        wavaxWithdrawKey = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, WAVAX_RESERVE_ID);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(usdcDepositKey,  USDC_DEPOSIT_LIMIT,  USDC_DEPOSIT_LIMIT  / 1 days);
@@ -96,7 +96,7 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
     function _depositKey(uint256 reserveId, uint16 assetId, address underlying)
         internal view returns (bytes32)
     {
-        return RateLimitHelpers.makeSpokeReserveHubAssetKey(
+        return RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
             foreignController.LIMIT_AAVE_V4_DEPOSIT(),
             MAIN_SPOKE,
             reserveId,
@@ -136,7 +136,7 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
     // The deposit key binds the reserve's Hub and asset id, so a budget configured against any
     // other Hub asset is unreachable even for the right (spoke, reserveId).
     function test_depositAaveV4_depositKeyBindsHubAndAsset() external {
-        bytes32 wrongHubKey = RateLimitHelpers.makeSpokeReserveHubAssetKey(
+        bytes32 wrongHubKey = RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
             foreignController.LIMIT_AAVE_V4_DEPOSIT(),
             MAIN_SPOKE,
             USDC_RESERVE_ID,
