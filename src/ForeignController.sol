@@ -56,6 +56,8 @@ contract ForeignController is AccessControl {
     );
     event CentrifugeRecipientSet(uint16 indexed destinationCentrifugeId, bytes32 recipient);
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
+    event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
+    event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
     event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -118,6 +120,9 @@ contract ForeignController is AccessControl {
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+
+    mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
+    mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
 
     mapping(uint32 destinationDomain       => bytes32 mintRecipient)      public mintRecipients;
     mapping(uint32 destinationEndpointId   => bytes32 layerZeroRecipient) public layerZeroRecipients;
@@ -202,6 +207,23 @@ contract ForeignController is AccessControl {
         require(maxSlippage <= 1e18, "ForeignController/max-slippage-out-of-bounds");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
+    }
+
+    function setMaxAaveV4Slippage(address spoke, uint256 reserveId, uint256 maxSlippage)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        require(maxSlippage <= 1e18, "ForeignController/max-slippage-out-of-bounds");
+        maxAaveV4Slippages[spoke][reserveId] = maxSlippage;
+        emit MaxAaveV4SlippageSet(spoke, reserveId, maxSlippage);
+    }
+
+    function setMaxAaveV4Deficit(address hub, uint16 assetId, uint256 maxDeficit)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        maxAaveV4Deficits[hub][assetId] = maxDeficit;
+        emit MaxAaveV4DeficitSet(hub, assetId, maxDeficit);
     }
 
     function setCentrifugeRecipient(uint16 destinationCentrifugeId, bytes32 recipient)
@@ -712,7 +734,7 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave V4 functions                                                              ***/
     /**********************************************************************************************/
 
-    function depositAaveV4(address spoke, uint256 reserveId, uint256 amount)
+    function depositAaveV4(address spoke, uint256 reserveId, address hub, uint16 assetId, uint256 amount)
         external
         onlyRole(RELAYER)
     {
@@ -723,7 +745,10 @@ contract ForeignController is AccessControl {
             spoke              : spoke,
             reserveId          : reserveId,
             amount             : amount,
-            maxSlippage        : maxSlippages[spoke]
+            maxSlippage        : maxAaveV4Slippages[spoke][reserveId],
+            hub                : hub,
+            assetId            : assetId,
+            maxDeficit         : maxAaveV4Deficits[hub][assetId]
         }));
     }
 

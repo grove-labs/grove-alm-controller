@@ -15,12 +15,12 @@ library RateLimitHelpers {
         return keccak256(abi.encode(key, domain));
     }
 
-    function makeSpokeReserveKey(bytes32 key, address spoke, uint256 reserveId) internal pure returns (bytes32) {
-        return keccak256(abi.encode(key, spoke, reserveId));
+    function makeAddressUint256Key(bytes32 key, address addr, uint256 value) internal pure returns (bytes32) {
+        return keccak256(abi.encode(key, addr, value));
     }
 
-    function makeSpokeReserveAssetKey(bytes32 key, address spoke, uint256 reserveId, address asset) internal pure returns (bytes32) {
-        return keccak256(abi.encode(key, spoke, reserveId, asset));
+    function makeAddressUint256AddressUint16AddressKey(bytes32 key, address addr1, uint256 value1, address addr2, uint16 value2, address addr3) internal pure returns (bytes32) {
+        return keccak256(abi.encode(key, addr1, value1, addr2, value2, addr3));
     }
 
 }

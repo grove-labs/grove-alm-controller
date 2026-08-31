@@ -29,6 +29,7 @@ interface IAaveV4Spoke {
 
 interface IAaveV4Hub {
     function getAssetDeficitRay(uint256 assetId) external view returns (uint256);
+    function getAssetUnderlyingAndDecimals(uint256 assetId) external view returns (address, uint8);
 }
 
 library AaveV4Lib {
@@ -41,6 +42,9 @@ library AaveV4Lib {
         uint256     reserveId;
         uint256     amount;
         uint256     maxSlippage;
+        address     hub;
+        uint16      assetId;
+        uint256     maxDeficit;
     }
 
     struct WithdrawParams {
@@ -58,17 +62,30 @@ library AaveV4Lib {
 
         IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
 
-        // Block deposits into a reserve whose Hub carries any outstanding deficit (unbacked
-        // liquidity from socialized bad debt); a new supplier would otherwise absorb a share of it.
+        // The caller resolves maxDeficit from the (hub, assetId) it declares, before the reserve can
+        // be read, so the declaration is only safe once checked against the Spoke: otherwise a
+        // relayer could aim the lookup at an asset carrying a looser tolerance.
         require(
-            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) == 0,
-            "AaveV4Lib/asset-in-deficit"
+            reserve.hub == params.hub && reserve.assetId == params.assetId,
+            "AaveV4Lib/invalid-hub-asset"
         );
 
         address underlying = reserve.underlying;
 
+        (address hubUnderlying,) = IAaveV4Hub(reserve.hub).getAssetUnderlyingAndDecimals(reserve.assetId);
+        require(hubUnderlying == underlying, "AaveV4Lib/invalid-hub-asset-metadata");
+
+        // The Hub records the deficit (unbacked liquidity from bad debt) globally per asset, and
+        // separately per reporting Spoke; eliminateDeficit burns shares from the caller Spoke, so
+        // losses are not automatically distributed pro rata across suppliers. maxDeficit is a
+        // deposit threshold on the Hub-wide reported deficit for the declared (hub, assetId).
+        require(
+            IAaveV4Hub(reserve.hub).getAssetDeficitRay(reserve.assetId) <= params.maxDeficit,
+            "AaveV4Lib/deficit-too-high"
+        );
+
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying),
+            _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve),
             params.amount
         );
 
@@ -99,7 +116,9 @@ library AaveV4Lib {
 
     // NOTE: !!! Rate limited at end of function !!!
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
-        address underlying = IAaveV4Spoke(params.spoke).getReserve(params.reserveId).underlying;
+        IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
+
+        address underlying = reserve.underlying;
 
         uint256 balanceBefore = IERC20(underlying).balanceOf(address(params.proxy));
 
@@ -114,16 +133,35 @@ library AaveV4Lib {
         amountWithdrawn = IERC20(underlying).balanceOf(address(params.proxy)) - balanceBefore;
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeSpokeReserveKey(params.withdrawRateLimitId, params.spoke, params.reserveId),
+            RateLimitHelpers.makeAddressUint256Key(params.withdrawRateLimitId, params.spoke, params.reserveId),
             amountWithdrawn
         );
 
         // Restore deposit capacity by the withdrawn amount; skipped if no deposit limit is set.
-        bytes32 depositKey
-            = RateLimitHelpers.makeSpokeReserveAssetKey(params.depositRateLimitId, params.spoke, params.reserveId, underlying);
+        // A reserve remapped to a different Hub asset resolves to an unconfigured key, so only the
+        // restore is skipped, never the exit itself (the withdraw key omits the reserve's Hub data).
+        bytes32 depositKey = _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve);
         if (params.rateLimits.getRateLimitData(depositKey).maxAmount != 0) {
             params.rateLimits.triggerRateLimitIncrease(depositKey, amountWithdrawn);
         }
+    }
+
+    function _makeDepositKey(
+        bytes32 rateLimitId,
+        address spoke,
+        uint256 reserveId,
+        IAaveV4Spoke.Reserve memory reserve
+    )
+        internal pure returns (bytes32)
+    {
+        return RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
+            rateLimitId,
+            spoke,
+            reserveId,
+            reserve.hub,
+            reserve.assetId,
+            reserve.underlying
+        );
     }
 
 }

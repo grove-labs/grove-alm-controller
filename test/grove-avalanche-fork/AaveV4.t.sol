@@ -9,6 +9,7 @@ interface IAaveV4Hub {
     function getAssetLiquidity(uint256 assetId) external view returns (uint256);
     function getAddedAssets(uint256 assetId)    external view returns (uint256);
     function getAddedShares(uint256 assetId)    external view returns (uint256);
+    function getAssetUnderlyingAndDecimals(uint256 assetId) external view returns (address, uint8);
 }
 
 contract AaveV4MainSpokeBaseTest is ForkTestBase {
@@ -21,6 +22,10 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
 
     uint256 constant USDC_RESERVE_ID  = 2;
     uint256 constant WAVAX_RESERVE_ID = 0;
+
+    // Hub asset ids, folded into the deposit rate limit key alongside the Hub and underlying.
+    uint16 constant USDC_ASSET_ID  = 2;
+    uint16 constant WAVAX_ASSET_ID = 0;
 
     // Deposit rate limits are controller config only and never bind here: Aave v4's on-chain
     // supply ("add") caps are far lower (USDC 5,000,000; WAVAX 500,000). The WAVAX limit is the
@@ -49,17 +54,19 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
     function setUp() public virtual override {
         super.setUp();
 
-        usdcDepositKey   = RateLimitHelpers.makeSpokeReserveAssetKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, USDC_RESERVE_ID,  address(usdcAvalanche));
-        usdcWithdrawKey  = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(),      MAIN_SPOKE, USDC_RESERVE_ID);
-        wavaxDepositKey  = RateLimitHelpers.makeSpokeReserveAssetKey(foreignController.LIMIT_AAVE_V4_DEPOSIT(),  MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX);
-        wavaxWithdrawKey = RateLimitHelpers.makeSpokeReserveKey(foreignController.LIMIT_AAVE_V4_WITHDRAW(),      MAIN_SPOKE, WAVAX_RESERVE_ID);
+        usdcDepositKey   = _depositKey(USDC_RESERVE_ID,  USDC_ASSET_ID,  address(usdcAvalanche));
+        usdcWithdrawKey  = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID);
+        wavaxDepositKey  = _depositKey(WAVAX_RESERVE_ID, WAVAX_ASSET_ID, WAVAX);
+        wavaxWithdrawKey = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, WAVAX_RESERVE_ID);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(usdcDepositKey,  USDC_DEPOSIT_LIMIT,  USDC_DEPOSIT_LIMIT  / 1 days);
         rateLimits.setRateLimitData(wavaxDepositKey, WAVAX_DEPOSIT_LIMIT, WAVAX_DEPOSIT_LIMIT / 1 days);
         rateLimits.setUnlimitedRateLimitData(usdcWithdrawKey);
         rateLimits.setUnlimitedRateLimitData(wavaxWithdrawKey);
-        foreignController.setMaxSlippage(MAIN_SPOKE, 1e18 - 1e4);  // Rounding slippage
+        // Rounding slippage, set per market now that one spoke hosts many reserves.
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, USDC_RESERVE_ID,  1e18 - 1e4);
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, WAVAX_RESERVE_ID, 1e18 - 1e4);
         vm.stopPrank();
 
         startingHubBalanceUsdc  = usdcAvalanche.balanceOf(CORE_HUB);
@@ -68,6 +75,42 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
 
     function _suppliedAssets(uint256 reserveId) internal view returns (uint256) {
         return IAaveV4Spoke(MAIN_SPOKE).getUserSuppliedAssets(reserveId, address(almProxy));
+    }
+
+    // Simulates governance remapping a live reserveId onto a different Hub asset fronting the same
+    // underlying. No remap has happened on-chain, so the real reserve is read back and re-encoded
+    // with the new assetId, and the Hub is mocked to agree on the underlying.
+    function _remapUsdcReserveToAsset(uint16 assetId) internal {
+        IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(MAIN_SPOKE).getReserve(USDC_RESERVE_ID);
+
+        reserve.assetId = assetId;
+
+        vm.mockCall(
+            MAIN_SPOKE,
+            abi.encodeCall(IAaveV4Spoke.getReserve, (USDC_RESERVE_ID)),
+            abi.encode(reserve)
+        );
+        vm.mockCall(
+            CORE_HUB,
+            abi.encodeCall(IAaveV4Hub.getAssetUnderlyingAndDecimals, (assetId)),
+            abi.encode(reserve.underlying, reserve.decimals)
+        );
+    }
+
+    // Components are hardcoded rather than read from the spoke; the resulting key bytes are pinned
+    // against literals in test_aaveV4_depositKeyDerivation, since this helper shares the production
+    // key builder and so cannot detect a change to it on its own.
+    function _depositKey(uint256 reserveId, uint16 assetId, address underlying)
+        internal view returns (bytes32)
+    {
+        return RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
+            foreignController.LIMIT_AAVE_V4_DEPOSIT(),
+            MAIN_SPOKE,
+            reserveId,
+            CORE_HUB,
+            assetId,
+            underlying
+        );
     }
 
 }
@@ -82,24 +125,66 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
             address(this),
             RELAYER
         ));
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000e6);
     }
 
+    // Reserve 1 (BTC.b) has a slippage tolerance but no deposit limit configured.
     function test_depositAaveV4_zeroMaxAmount() external {
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, 1, 1e18 - 1e4);
+
+        uint16 assetId = IAaveV4Spoke(MAIN_SPOKE).getReserve(1).assetId;
+
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.depositAaveV4(MAIN_SPOKE, 1, 1e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, 1, CORE_HUB, assetId, 1e6);
+    }
+
+    // The deposit key binds the reserve's Hub and asset id, so a budget configured against any
+    // other Hub asset is unreachable even for the right (spoke, reserveId).
+    function test_depositAaveV4_depositKeyBindsHubAndAsset() external {
+        bytes32 wrongHubKey = RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
+            foreignController.LIMIT_AAVE_V4_DEPOSIT(),
+            MAIN_SPOKE,
+            USDC_RESERVE_ID,
+            makeAddr("otherHub"),
+            USDC_ASSET_ID,
+            address(usdcAvalanche)
+        );
+        bytes32 wrongAssetIdKey = _depositKey(USDC_RESERVE_ID, USDC_ASSET_ID + 1, address(usdcAvalanche));
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(usdcDepositKey, 0, 0);
+        rateLimits.setUnlimitedRateLimitData(wrongHubKey);
+        rateLimits.setUnlimitedRateLimitData(wrongAssetIdKey);
+        vm.stopPrank();
+
+        deal(address(usdcAvalanche), address(almProxy), 1_000e6);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000e6);
     }
 
     function test_depositAaveV4_zeroMaxSlippage() external {
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setMaxSlippage(MAIN_SPOKE, 0);
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, USDC_RESERVE_ID, 0);
 
         deal(address(usdcAvalanche), address(almProxy), 1_000e6);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("AaveV4Lib/max-slippage-not-set");
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000e6);
+    }
+
+    // The relayer declares (hub, assetId) so the controller can resolve the bad debt tolerance
+    // before the reserve is read. A declaration the Spoke does not confirm is rejected outright.
+    function test_depositAaveV4_wrongHub() external {
+        deal(address(usdcAvalanche), address(almProxy), 1_000e6);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, makeAddr("otherHub"), USDC_ASSET_ID, 1_000e6);
     }
 
     function test_depositAaveV4_usdcSlippageBoundary() external {
@@ -107,25 +192,33 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
 
         // Strictest tolerance (1e18) still admits the exact 1:1 USDC deposit.
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setMaxSlippage(MAIN_SPOKE, 1e18);
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, USDC_RESERVE_ID, 1e18);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
     }
 
     // Mirror image of the USDC boundary: WAVAX's share price is above 1:1, so the credited position
     // rounds just below the supplied amount and the strictest tolerance (1e18) trips the guard.
+    // Per-market tolerances mean tightening WAVAX cannot loosen or break USDC, asserted below.
     function test_depositAaveV4_wavaxSlippageBoundary() external {
-        deal(WAVAX, address(almProxy), WAVAX_DEPOSIT_AMOUNT);
+        deal(WAVAX,                  address(almProxy), WAVAX_DEPOSIT_AMOUNT);
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
 
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setMaxSlippage(MAIN_SPOKE, 1e18);
+        foreignController.setMaxAaveV4Slippage(MAIN_SPOKE, WAVAX_RESERVE_ID, 1e18);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("AaveV4Lib/slippage-too-high");
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, WAVAX_DEPOSIT_AMOUNT);
+
+        // USDC keeps its own tolerance and still deposits.
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
     }
 
     // The deposit limit ($50M) far exceeds Aave's supply cap, so only the over-limit revert is
@@ -136,10 +229,10 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_LIMIT + 1);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_LIMIT + 1);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
     }
@@ -149,10 +242,10 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX_DEPOSIT_LIMIT + 1);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, WAVAX_DEPOSIT_LIMIT + 1);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, WAVAX_DEPOSIT_AMOUNT);
 
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), WAVAX_DEPOSIT_LIMIT - WAVAX_DEPOSIT_AMOUNT);
     }
@@ -161,34 +254,205 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
 
 contract AaveV4MainSpokeDepositDeficitGuardTests is AaveV4MainSpokeBaseTest {
 
-    function _mockUsdcDeficit(uint256 deficitRay) internal {
-        uint256 assetId = IAaveV4Spoke(MAIN_SPOKE).getReserve(USDC_RESERVE_ID).assetId;
+    // getAssetDeficitRay is denominated in the asset's own units scaled by RAY, so $1,000 of USDC
+    // (6 decimals) is 1_000e6 * 1e27. Every reserve on the Core Hub reads zero at the fork block.
+    uint256 constant USDC_DEFICIT_TOLERANCE = 1_000e6 * 1e27;
+
+    function _setUsdcDeficitTolerance(uint256 maxDeficit) internal {
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Deficit(CORE_HUB, USDC_ASSET_ID, maxDeficit);
+    }
+
+    function _mockDeficit(uint16 assetId, uint256 deficitRay) internal {
         vm.mockCall(
             CORE_HUB,
-            abi.encodeWithSignature("getAssetDeficitRay(uint256)", assetId),
+            abi.encodeWithSignature("getAssetDeficitRay(uint256)", uint256(assetId)),
             abi.encode(deficitRay)
         );
     }
 
-    // The deficit tolerance is hardcoded to zero: even one wei of deficit blocks the deposit.
-    function test_depositAaveV4_assetInDeficit() external {
+    // The tolerance defaults to zero, so any deficit blocks the deposit until governance opts in.
+    function test_depositAaveV4_deficitAboveDefaultTolerance() external {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
-        _mockUsdcDeficit(1);
+        _mockDeficit(USDC_ASSET_ID, 1);
+
+        assertEq(foreignController.maxAaveV4Deficits(CORE_HUB, USDC_ASSET_ID), 0);
 
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("AaveV4Lib/asset-in-deficit");
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
     }
 
     // A reserve carrying no deficit deposits normally.
     function test_depositAaveV4_noDeficit() external {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
-        _mockUsdcDeficit(0);
+        _mockDeficit(USDC_ASSET_ID, 0);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
+    }
+
+    function test_depositAaveV4_deficitToleranceBoundary() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT * 2);
+
+        _setUsdcDeficitTolerance(USDC_DEFICIT_TOLERANCE);
+
+        // One RAY-wei above the tolerance blocks the deposit.
+        _mockDeficit(USDC_ASSET_ID, USDC_DEFICIT_TOLERANCE + 1);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        // Exactly at the tolerance is admitted.
+        _mockDeficit(USDC_ASSET_ID, USDC_DEFICIT_TOLERANCE);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
+    }
+
+    // The tolerance is scoped to one Hub asset, so raising it for USDC leaves every other asset at
+    // zero, whichever spoke or reserve fronts it.
+    function test_depositAaveV4_deficitToleranceIsPerHubAsset() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+        deal(WAVAX,                  address(almProxy), WAVAX_DEPOSIT_AMOUNT);
+
+        _setUsdcDeficitTolerance(USDC_DEFICIT_TOLERANCE);
+
+        _mockDeficit(USDC_ASSET_ID,  USDC_DEFICIT_TOLERANCE);
+        _mockDeficit(WAVAX_ASSET_ID, 1);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, WAVAX_DEPOSIT_AMOUNT);
+    }
+
+    // The tolerance follows the Hub asset the reserve points at, not the market used to reach it.
+    // Remapping the USDC reserve onto the WAVAX asset forces the relayer to declare WAVAX, so the
+    // deposit reads WAVAX's tolerance and USDC's own stops applying however permissive it is.
+    function test_depositAaveV4_deficitToleranceFollowsHubAsset() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockDeficit(WAVAX_ASSET_ID, USDC_DEFICIT_TOLERANCE);
+        _remapUsdcReserveToAsset(WAVAX_ASSET_ID);
+        _setUsdcDeficitTolerance(type(uint256).max);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        // Configuring the asset the reserve now points at clears the guard, leaving the deposit to
+        // fail on the remapped (and so unconfigured) rate limit key instead.
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Deficit(CORE_HUB, WAVAX_ASSET_ID, USDC_DEFICIT_TOLERANCE);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    // The declaration cannot be aimed at a more tolerant asset to sneak a deposit through: it is
+    // checked against the Spoke, so the reserve's own asset is the only tolerance that can apply.
+    function test_depositAaveV4_declaredAssetCannotBorrowTolerance() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockDeficit(USDC_ASSET_ID, USDC_DEFICIT_TOLERANCE);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxAaveV4Deficit(CORE_HUB, WAVAX_ASSET_ID, type(uint256).max);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        // Declaring honestly leaves USDC's own (zero) tolerance in force.
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/deficit-too-high");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    // Exiting an impaired pool is never gated: only deposits read the deficit.
+    function test_withdrawAaveV4_unaffectedByDeficit() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        _mockDeficit(USDC_ASSET_ID, USDC_DEFICIT_TOLERANCE);
+
+        vm.prank(ALM_RELAYER);
+        uint256 withdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
+
+        assertApproxEqAbs(withdrawn, USDC_DEPOSIT_AMOUNT, 1);
+        assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
+
+        // The restore is keyed on the same deposit key, so capacity comes back despite the deficit.
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT);
+    }
+
+}
+
+contract AaveV4MainSpokeHubSpokeUnderlyingTests is AaveV4MainSpokeBaseTest {
+
+    function _mockHubUnderlying(uint16 assetId, address underlying, uint8 decimals) internal {
+        vm.mockCall(
+            CORE_HUB,
+            abi.encodeWithSignature("getAssetUnderlyingAndDecimals(uint256)", uint256(assetId)),
+            abi.encode(underlying, decimals)
+        );
+    }
+
+    function test_depositAaveV4_hubSpokeUnderlyingMismatch() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, WAVAX, 18);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset-metadata");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    function test_depositAaveV4_hubAssetDelisted() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, address(0), 0);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset-metadata");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    function test_depositAaveV4_hubSpokeUnderlyingAgreement() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, address(usdcAvalanche), 6);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), USDC_DEPOSIT_AMOUNT, 1);
+    }
+
+    function test_withdrawAaveV4_unaffectedByHubSpokeUnderlyingMismatch() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        _mockHubUnderlying(USDC_ASSET_ID, WAVAX, 18);
+
+        vm.prank(ALM_RELAYER);
+        uint256 withdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
+
+        assertApproxEqAbs(withdrawn, USDC_DEPOSIT_AMOUNT, 1);
+        assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
     }
 
 }
@@ -201,15 +465,30 @@ contract AaveV4MainSpokeDepositSuccessTests is AaveV4MainSpokeBaseTest {
 
         assertEq(usdcReserve.underlying, address(usdcAvalanche));
         assertEq(usdcReserve.hub,        CORE_HUB);
-        assertEq(usdcReserve.assetId,    2);
+        assertEq(usdcReserve.assetId,    USDC_ASSET_ID);
         assertEq(usdcReserve.decimals,   6);
 
         IAaveV4Spoke.Reserve memory wavaxReserve = IAaveV4Spoke(MAIN_SPOKE).getReserve(WAVAX_RESERVE_ID);
 
         assertEq(wavaxReserve.underlying, WAVAX);
         assertEq(wavaxReserve.hub,        CORE_HUB);
-        assertEq(wavaxReserve.assetId,    0);
+        assertEq(wavaxReserve.assetId,    WAVAX_ASSET_ID);
         assertEq(wavaxReserve.decimals,   18);
+    }
+
+    // Literals computed outside Solidity as
+    // keccak256(abi.encode(keccak256("LIMIT_AAVE_V4_DEPOSIT"), spoke, reserveId, hub, assetId, underlying)).
+    // Pinning the bytes means a change to the key's components, their order or their types fails
+    // here, rather than silently re-pointing every configured market at an unfunded key.
+    function test_aaveV4_depositKeyDerivation() external view {
+        assertEq(usdcDepositKey,  0xdd0ecb82a84c89ed5146cfd9c39e4ce7355790e3f317e639a28b8db8d7b52489);
+        assertEq(wavaxDepositKey, 0x324d1fe3d06c4ac7e9e27b2923e8b5e4a8aab8e1e72a114e8f87250d58f5ce7a);
+
+        // The withdraw key deliberately omits the reserve's Hub data.
+        assertEq(
+            usdcWithdrawKey,
+            keccak256(abi.encode(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID))
+        );
     }
 
     function test_depositAaveV4_usdc() public {
@@ -223,7 +502,7 @@ contract AaveV4MainSpokeDepositSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         assertEq(usdcAvalanche.allowance(address(almProxy), MAIN_SPOKE), 0);
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID),  USDC_DEPOSIT_AMOUNT, 1);
@@ -250,7 +529,7 @@ contract AaveV4MainSpokeDepositSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), WAVAX_DEPOSIT_LIMIT);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, amount);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, amount);
 
         assertEq(wavax.allowance(address(almProxy), MAIN_SPOKE), 0);
         // Supplied tracks the deposit within share-conversion rounding (share price > 1:1).
@@ -284,7 +563,7 @@ contract AaveV4MainSpokeWithdrawFailureTests is AaveV4MainSpokeBaseTest {
         deal(address(usdcAvalanche), address(almProxy), 1_000e6);
 
         vm.startPrank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000e6);
 
         vm.expectRevert("RateLimits/zero-maxAmount");
         foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000e6);
@@ -303,7 +582,7 @@ contract AaveV4MainSpokeWithdrawFailureTests is AaveV4MainSpokeBaseTest {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
 
         vm.startPrank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, withdrawLimit + 1);
@@ -324,7 +603,7 @@ contract AaveV4MainSpokeWithdrawFailureTests is AaveV4MainSpokeBaseTest {
         deal(WAVAX, address(almProxy), WAVAX_DEPOSIT_AMOUNT);
 
         vm.startPrank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, WAVAX_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, WAVAX_DEPOSIT_AMOUNT);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         foreignController.withdrawAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, withdrawLimit + 1);
@@ -342,7 +621,7 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
     function test_withdrawAaveV4_usdc() public {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         uint256 supplied = _suppliedAssets(USDC_RESERVE_ID);
         assertApproxEqAbs(supplied, USDC_DEPOSIT_AMOUNT, 1);
@@ -384,7 +663,7 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
@@ -416,7 +695,7 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
     function test_withdrawAaveV4_usdc_depositRestoreCappedAtMaxAmount() public {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, USDC_DEPOSIT_AMOUNT);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
 
         // Tighten the deposit limit below the withdrawn amount, with no remaining capacity.
         uint256 tightenedLimit = 1_000_000e6;
@@ -437,7 +716,7 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
 
         deal(WAVAX, address(almProxy), amount);
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, amount);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, amount);
 
         uint256 supplied = _suppliedAssets(WAVAX_RESERVE_ID);
         assertApproxEqAbs(supplied, amount, 10);
@@ -458,6 +737,64 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
 
         assertApproxEqAbs(rateLimits.getCurrentRateLimit(wavaxDepositKey),  WAVAX_DEPOSIT_LIMIT, 10);
         assertEq(rateLimits.getCurrentRateLimit(wavaxWithdrawKey),          type(uint256).max);
+    }
+
+}
+
+// The deposit key binds (hub, assetId, underlying), so remapping a live reserve onto a different
+// Hub asset moves it to a fresh, unconfigured key. The withdraw key binds only (spoke, reserveId),
+// which is what keeps the exit reachable. Simulated with vm.mockCall on getReserve, since no
+// remapping has happened on-chain.
+contract AaveV4MainSpokeReserveRemapTests is AaveV4MainSpokeBaseTest {
+
+    // A different asset that exists on the Core Hub, so the deficit read still resolves.
+    uint16 constant REMAPPED_ASSET_ID = 3;
+
+    // A relayer still declaring the pre-remap asset is turned away before anything else is read.
+    function test_depositAaveV4_remappedReserveRejectsStaleDeclaration() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _remapUsdcReserveToAsset(REMAPPED_ASSET_ID);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("AaveV4Lib/invalid-hub-asset");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    // Declaring the new asset gets past the check, but lands on a fresh, unconfigured deposit key.
+    function test_depositAaveV4_remappedReserveHasNoBudget() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        _remapUsdcReserveToAsset(REMAPPED_ASSET_ID);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, REMAPPED_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+    }
+
+    function test_withdrawAaveV4_remappedReserveSkipsRestore() external {
+        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
+
+        uint256 remainingBeforeRemap = rateLimits.getCurrentRateLimit(usdcDepositKey);
+
+        assertEq(remainingBeforeRemap, USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
+
+        _remapUsdcReserveToAsset(REMAPPED_ASSET_ID);
+
+        vm.prank(ALM_RELAYER);
+        uint256 withdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
+
+        // The exit succeeds and the funds come back...
+        assertApproxEqAbs(withdrawn,                          USDC_DEPOSIT_AMOUNT, 1);
+        assertApproxEqAbs(usdcAvalanche.balanceOf(address(almProxy)), USDC_DEPOSIT_AMOUNT, 1);
+        assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
+
+        // ...but the restore targets the new, unconfigured key, so the original market's consumed
+        // capacity is not returned. Failing this way keeps funds recoverable, which is the point.
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), remainingBeforeRemap);
     }
 
 }
@@ -489,7 +826,7 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
 
         // Stage 1: USDC deposit consumes USDC capacity only; WAVAX untouched.
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 2_000_000e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 2_000_000e6);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  1_000_000e6);
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), wavaxLimit);
@@ -497,7 +834,7 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
 
         // Stage 2: WAVAX deposit consumes WAVAX capacity only; USDC untouched.
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, 200_000e18);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, 200_000e18);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  1_000_000e6);
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 100_000e18);
@@ -506,14 +843,14 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
         // Stage 3: USDC deposit above its remaining limit reverts and mutates nothing on either asset.
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000_000e6 + 1);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000_000e6 + 1);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  1_000_000e6);
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 100_000e18);
 
         // Stage 4: WAVAX deposit up to its own remaining limit still succeeds and exhausts it.
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, 100_000e18);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, 100_000e18);
 
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 0);
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  1_000_000e6);
@@ -523,10 +860,10 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
         // freeze the other.
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, 1);
+        foreignController.depositAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, CORE_HUB, WAVAX_ASSET_ID, 1);
 
         vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000_000e6);
+        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, 1_000_000e6);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  0);
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 0);
