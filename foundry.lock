@@ -36,7 +36,7 @@
     "rev": "9505c85a251afc57ecced90a6076f2c661ee2404"
   },
   "lib/spark-address-registry": {
-    "rev": "23eb286593ea7be1bcbb3f1a87fb9185e46e3285"
+    "rev": "d3247083428eb9f7ebe797fd47758463401d1c26"
   },
   "lib/spark-psm": {
     "rev": "6a5a579cb503a461df254007064370f732fcd19d"
