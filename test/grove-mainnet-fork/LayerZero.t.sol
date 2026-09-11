@@ -160,7 +160,8 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             usdc                     : address(usdt0Plasma),
             pendleRouter             : address(0xDeadBeef), // unused
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef)  // unused
+            uniswapV3PositionManager : address(0xDeadBeef),  // unused
+            midnight                 : address(0)
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);

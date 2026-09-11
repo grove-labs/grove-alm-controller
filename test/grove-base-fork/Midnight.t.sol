@@ -113,6 +113,10 @@ contract MidnightTestBase is ForkTestBase {
         return 51_000_000;  // Midnight was deployed on Base at block 48,286,884
     }
 
+    function _midnight() internal override pure returns (address) {
+        return MIDNIGHT_BASE;
+    }
+
     // Overridden by the suites that run the same flows against tokens which are not 18 decimals.
     function _loanTokenDecimals()       internal virtual pure returns (uint8) { return 18; }
     function _collateralTokenDecimals() internal virtual pure returns (uint8) { return 18; }

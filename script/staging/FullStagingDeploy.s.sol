@@ -341,7 +341,8 @@ contract FullStagingDeploy is Script {
             usdc                     : domain.input.readAddress(".usdc"),
             pendleRouter             : domain.input.readAddress(".pendleRouter"),
             uniswapV3Router          : domain.input.readAddress(".uniswapV3Router"),
-            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager")
+            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager"),
+            midnight                 : domain.input.readAddress(".midnight")
             
             // susds : domain.input.readAddress(".susds"),
             // usds  : domain.input.readAddress(".usds")

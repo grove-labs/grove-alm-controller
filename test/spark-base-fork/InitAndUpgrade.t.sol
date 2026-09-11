@@ -39,6 +39,21 @@ contract LibraryWrapper {
 
 }
 
+// Just enough of the Midnight singleton for the init sanity checks.
+contract MockMidnight {
+
+    address public configurator;
+
+    constructor(address configurator_) {
+        configurator = configurator_;
+    }
+
+    function setConfigurator(address configurator_) external {
+        configurator = configurator_;
+    }
+
+}
+
 contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
 
     uint32 constant destinationEndpointId   = 30101;  // Ethereum EID
@@ -69,7 +84,8 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
             usdc                     : address(usdcBase),
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
-            uniswapV3PositionManager : address(0xdeadbeef)
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : address(0)
         });
 
         mintRecipients = new Init.MintRecipient[](1);
@@ -252,6 +268,30 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
     function test_initAlmSystem_upgradeController_incorrectUniswapV3PositionManager() external {
         checkAddresses.uniswapV3PositionManager = mismatchAddress;
         _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/incorrect-uniswapV3PositionManager"));
+    }
+
+    /**********************************************************************************************/
+    /*** Midnight tests                                                                         ***/
+    /**********************************************************************************************/
+
+    function test_initAlmSystem_upgradeController_incorrectMidnight() external {
+        checkAddresses.midnight = mismatchAddress;
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/incorrect-midnight"));
+    }
+
+    function test_initAlmSystem_upgradeController_midnightNotAContract() external {
+        _redeployControllerWithMidnight(mismatchAddress);  // an EOA
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/midnight-not-a-contract"));
+    }
+
+    function test_initAlmSystem_upgradeController_midnightNotConfigured() external {
+        MockMidnight midnight = new MockMidnight(address(0));
+
+        _redeployControllerWithMidnight(address(midnight));
+        _checkInitAndUpgradeFail(abi.encodePacked("ForeignControllerInit/midnight-not-configured"));
+
+        midnight.setConfigurator(makeAddr("configurator"));
+        _checkInitAndUpgradeSucceed();
     }
 
     /**********************************************************************************************/
@@ -457,6 +497,24 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
     /**********************************************************************************************/
     /*** Helper functions                                                                       ***/
     /**********************************************************************************************/
+
+    function _redeployControllerWithMidnight(address midnight) internal {
+        foreignController = ForeignController(ForeignControllerDeploy.deployController({
+            admin                    : Base.SPARK_EXECUTOR,
+            almProxy                 : address(almProxy),
+            rateLimits               : address(rateLimits),
+            psm                      : address(psmBase),
+            usdc                     : address(usdcBase),
+            cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
+            pendleRouter             : PENDLE_ROUTER_BASE,
+            uniswapV3Router          : address(0xdeadbeef),
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : midnight
+        }));
+
+        controllerInst.controller = address(foreignController);
+        checkAddresses.midnight   = midnight;
+    }
 
     function _checkInitAndUpgradeFail(bytes memory expectedError) internal {
         vm.expectRevert(expectedError);
