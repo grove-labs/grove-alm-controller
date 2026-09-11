@@ -133,7 +133,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
-            uniswapV3PositionManager : address(0xdeadbeef)
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : address(0)
         }));
 
         Init.MintRecipient[] memory mintRecipients_ = new Init.MintRecipient[](1);
@@ -326,7 +327,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             CCTP_MESSENGER_BASE,
             PENDLE_ROUTER_BASE,
             address(0xdeadbeef),
-            address(0xdeadbeef)
+            address(0xdeadbeef),
+            address(0)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -355,7 +357,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             CCTP_MESSENGER_BASE,
             PENDLE_ROUTER_BASE,
             address(0xdeadbeef),
-            address(0xdeadbeef)
+            address(0xdeadbeef),
+            address(0)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -384,7 +387,8 @@ contract ForeignControllerInitAndUpgradeFailureTest is ForeignControllerInitAndU
             CCTP_MESSENGER_BASE,
             PENDLE_ROUTER_BASE,
             address(0xdeadbeef),
-            address(0xdeadbeef)
+            address(0xdeadbeef),
+            address(0)
         );
 
         checkAddresses.psm = address(psmBase);  // Overwrite to point to misconfigured PSM
@@ -526,7 +530,8 @@ contract ForeignControllerInitAlmSystemSuccessTests is ForeignControllerInitAndU
             GroveBase.CCTP_TOKEN_MESSENGER_V2,
             PENDLE_ROUTER_BASE,
             address(0xdeadbeef),
-            address(0xdeadbeef)
+            address(0xdeadbeef),
+            address(0)
         );
 
         // Overwrite storage for all previous deployments in setUp and assert brand new deployment
@@ -643,7 +648,8 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
-            uniswapV3PositionManager : address(0xdeadbeef)
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : address(0)
         }));
 
         controllerInst = ControllerInstance({

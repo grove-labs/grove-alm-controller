@@ -319,7 +319,8 @@ contract FullStagingDeploy is Script {
             cctp                     : domain.input.readAddress(".cctpTokenMessenger"),
             pendleRouter             : domain.input.readAddress(".pendleRouter"),
             uniswapV3Router          : domain.input.readAddress(".uniswapV3Router"),
-            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager")
+            uniswapV3PositionManager : domain.input.readAddress(".uniswapV3PositionManager"),
+            midnight                 : domain.input.readAddress(".midnight")
         });
 
         // Step 2: Initialize ALM system

@@ -111,7 +111,8 @@ contract ForkTestBase is Test {
             cctp                     : CCTP_MESSENGER_BASE,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef)  // unused
+            uniswapV3PositionManager : address(0xDeadBeef),  // unused
+            midnight                 : address(0)
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));

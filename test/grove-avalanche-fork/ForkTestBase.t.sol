@@ -117,7 +117,8 @@ contract ForkTestBase is Test {
             cctp                     : CCTP_TOKEN_MESSENGER,
             pendleRouter             : address(0), // No Pendle Router on Avalanche
             uniswapV3Router          : UNISWAP_V3_ROUTER,
-            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER,
+            midnight                 : address(0)
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));

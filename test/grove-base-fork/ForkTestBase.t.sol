@@ -59,6 +59,7 @@ contract ForkTestBase is Test {
     address constant PENDLE_ROUTER_BASE          = Base.PENDLE_ROUTER;
     address constant UNISWAP_V3_ROUTER           = 0x2626664c2603336E57B271c5C0b26F421741e481;
     address constant UNISWAP_V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
+    address constant MIDNIGHT_BASE               = 0xAdedD8ab6dE832766Fedf0FaC4992E5C4D3EA18A;
 
     address relayer = Base.ALM_RELAYER;
 
@@ -120,7 +121,8 @@ contract ForkTestBase is Test {
             cctp                     : CCTP_TOKEN_MESSENGER,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : UNISWAP_V3_ROUTER, 
-            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER  
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER,
+            midnight                 : MIDNIGHT_BASE
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
