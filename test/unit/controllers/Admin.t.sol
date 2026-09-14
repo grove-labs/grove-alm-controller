@@ -1115,7 +1115,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
 
     function test_setMidnightMarketConfig_maxBuyTickOutOfBounds() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/max-buy-tick-out-of-bounds");
+        vm.expectRevert("MidnightLib/max-buy-tick-oob");
         foreignController.setMidnightMarketConfig(
             marketId,
             _config(uint16(MIDNIGHT_MAX_TICK + 1), 3000, 0)
@@ -1125,10 +1125,10 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     function test_setMidnightMarketConfig_minSellTickOutOfBounds() public {
         vm.startPrank(admin);
 
-        vm.expectRevert("ForeignController/min-sell-tick-out-of-bounds");
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
         foreignController.setMidnightMarketConfig(marketId, _config(4000, 0, 0));
 
-        vm.expectRevert("ForeignController/min-sell-tick-out-of-bounds");
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
         foreignController.setMidnightMarketConfig(
             marketId,
             _config(4000, uint16(MIDNIGHT_MAX_TICK + 1), 0)
@@ -1139,7 +1139,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
 
     function test_setMidnightMarketConfig_maxContinuousFeeOutOfBounds() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/max-continuous-fee-out-of-bounds");
+        vm.expectRevert("MidnightLib/max-continuous-fee-oob");
         foreignController.setMidnightMarketConfig(
             marketId,
             _config(4000, 3000, MidnightLib.MAX_CONTINUOUS_FEE + 1)

@@ -9,7 +9,7 @@ import { IMidnight, Market, Offer } from "../interfaces/MidnightInterfaces.sol";
 
 import { ERC20Lib }        from "./common/ERC20Lib.sol";
 import { MidnightIdLib }   from "./midnight/MidnightIdLib.sol";
-import { MidnightTickLib } from "./midnight/MidnightTickLib.sol";
+import { MidnightTickLib, MAX_TICK } from "./midnight/MidnightTickLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
@@ -51,14 +51,33 @@ library MidnightLib {
     }
 
     struct RedeemParams {
-        IALMProxy   proxy;
-        IRateLimits rateLimits;
-        address     midnight;
-        bytes32     buyRateLimitId;
-        bytes32     redeemRateLimitId;
-        bytes32     marketId;
-        uint256     units;
-        uint256     minAssetsOut;
+        IALMProxy    proxy;
+        IRateLimits  rateLimits;
+        address      midnight;
+        bytes32      buyRateLimitId;
+        bytes32      redeemRateLimitId;
+        bytes32      marketId;
+        MarketConfig config;
+        uint256      units;
+        uint256      minAssetsOut;
+    }
+
+    /**********************************************************************************************/
+    /*** Config functions                                                                       ***/
+    /**********************************************************************************************/
+
+    function validateMarketConfig(MarketConfig memory config) external pure {
+        // A zero maxBuyTick is the kill switch: it blocks new entries, including into resting offers.
+        require(config.maxBuyTick <= MAX_TICK, "MidnightLib/max-buy-tick-oob");
+
+        // A non-zero minSellTick marks the market as onboarded; it is an exit price floor, so it has
+        // to be set low enough that selling below par net of the settlement fee stays possible.
+        require(
+            config.minSellTick != 0 && config.minSellTick <= MAX_TICK,
+            "MidnightLib/min-sell-tick-oob"
+        );
+
+        require(config.maxContinuousFee <= MAX_CONTINUOUS_FEE, "MidnightLib/max-continuous-fee-oob");
     }
 
     /**********************************************************************************************/
@@ -165,6 +184,9 @@ library MidnightLib {
     }
 
     function redeem(RedeemParams memory params) external returns (uint256 assetsWithdrawn) {
+        // Redemption reads no config value, but an onboarded config is what authenticates the market.
+        require(params.config.minSellTick != 0, "MidnightLib/market-not-onboarded");
+
         bytes32       marketId = params.marketId;
         Market memory market   = IMidnight(params.midnight).toMarket(marketId);
 

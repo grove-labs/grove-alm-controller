@@ -28,7 +28,6 @@ import { CCTPLib }      from "./libraries/CCTPLib.sol";
 import { ERC20Lib }     from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
 
-import { MAX_TICK as MIDNIGHT_MAX_TICK } from "./libraries/midnight/MidnightTickLib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
@@ -313,24 +312,7 @@ contract ForeignController is AccessControl {
         external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
-
-        // A zero maxBuyTick is the kill switch: it blocks new entries, including into resting offers.
-        require(
-            config.maxBuyTick <= MIDNIGHT_MAX_TICK,
-            "ForeignController/max-buy-tick-out-of-bounds"
-        );
-
-        // A non-zero minSellTick marks the market as onboarded; it is an exit price floor, so it has
-        // to be set low enough that selling below par net of the settlement fee stays possible.
-        require(
-            config.minSellTick != 0 && config.minSellTick <= MIDNIGHT_MAX_TICK,
-            "ForeignController/min-sell-tick-out-of-bounds"
-        );
-
-        require(
-            config.maxContinuousFee <= MidnightLib.MAX_CONTINUOUS_FEE,
-            "ForeignController/max-continuous-fee-out-of-bounds"
-        );
+        MidnightLib.validateMarketConfig(config);
 
         midnightMarketConfigs[marketId] = config;
 
@@ -958,12 +940,6 @@ contract ForeignController is AccessControl {
     {
         _checkRole(RELAYER);
 
-        // Redemption reads no config value, but an onboarded config is what authenticates the market.
-        require(
-            midnightMarketConfigs[marketId].minSellTick != 0,
-            "ForeignController/market-not-onboarded"
-        );
-
         assetsWithdrawn = MidnightLib.redeem(MidnightLib.RedeemParams({
             proxy             : proxy,
             rateLimits        : rateLimits,
@@ -971,6 +947,7 @@ contract ForeignController is AccessControl {
             buyRateLimitId    : LIMIT_MIDNIGHT_BUY,
             redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
             marketId          : marketId,
+            config            : midnightMarketConfigs[marketId],
             units             : units,
             minAssetsOut      : minAssetsOut
         }));

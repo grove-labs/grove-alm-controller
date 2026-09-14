@@ -1005,7 +1005,7 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
 
         // A market on another venue has a different id, so governance never onboarded it.
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("ForeignController/market-not-onboarded");
+        vm.expectRevert("MidnightLib/market-not-onboarded");
         foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
     }
 
@@ -1097,7 +1097,7 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         otherMarket.maturity = market.maturity + 1 days;
 
         vm.prank(ALM_RELAYER);
-        vm.expectRevert("ForeignController/market-not-onboarded");
+        vm.expectRevert("MidnightLib/market-not-onboarded");
         foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
     }
 
