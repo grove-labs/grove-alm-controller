@@ -72,7 +72,7 @@ contract MockOracle {
 
 contract MidnightTestBase is ForkTestBase {
 
-    address constant MIDNIGHT = 0xAdedD8ab6dE832766Fedf0FaC4992E5C4D3EA18A;
+    address constant MIDNIGHT = MIDNIGHT_BASE;
 
     // Both already enabled on the Base singleton at the fork block.
     uint256 constant LLTV               = 0.86e18;
@@ -111,6 +111,10 @@ contract MidnightTestBase is ForkTestBase {
 
     function _getBlock() internal override pure returns (uint256) {
         return 51_000_000;  // Midnight was deployed on Base at block 48,286,884
+    }
+
+    function _midnight() internal override pure returns (address) {
+        return MIDNIGHT_BASE;
     }
 
     // Overridden by the suites that run the same flows against tokens which are not 18 decimals.
@@ -175,8 +179,6 @@ contract MidnightTestBase is ForkTestBase {
         rateLimits.setRateLimitData(buyKey,    5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
         rateLimits.setRateLimitData(sellKey,   5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
         rateLimits.setRateLimitData(redeemKey, 5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
-
-        foreignController.setMidnight(MIDNIGHT);
 
         foreignController.setMidnightMarketConfig(
             marketId,
@@ -1537,55 +1539,6 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
         assertEq(_credit(),                       creditBefore);
         assertEq(midnight.lossFactor(marketId),   0);
         assertEq(midnight.debt(marketId, victim), VICTIM_UNITS);
-    }
-
-}
-
-contract ForeignControllerMidnightRepointTests is MidnightTestBase {
-
-    uint256 constant SEEDED_UNITS = 1_000_000e18;
-
-    function setUp() public override {
-        super.setUp();
-
-        _seedCredit(SEEDED_UNITS);
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnight(makeAddr("midnight2"));
-    }
-
-    // Repointing the venue closes entries into the old one; sells are authenticated by the id alone
-    // and stay open, while redemption resolves the market through the venue and follows it.
-    function test_midnightRepoint_entriesClosedSellsOpen() public {
-        vm.expectRevert("MidnightLib/invalid-midnight");
-        _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
-
-        uint256 sold     = SEEDED_UNITS / 2;
-        uint256 expected = _sellerAssets(sold, TICK_99);
-
-        assertEq(_sell(_offer(true, TICK_99, uint128(sold)), sold, expected), expected);
-
-        _repay(SEEDED_UNITS - sold);
-
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert();
-        foreignController.redeemMidnight(marketId, SEEDED_UNITS - sold, 0);
-
-        assertEq(_credit(), SEEDED_UNITS - sold);
-    }
-
-    // Configs are keyed by id, so governance can still close or reopen a market on the old venue.
-    function test_midnightRepoint_oldConfigStaysEditable() public {
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            marketId,
-            MidnightLib.MarketConfig(0, TICK_98, MidnightLib.MAX_CONTINUOUS_FEE, 0)
-        );
-
-        ( uint16 maxBuyTick, uint16 minSellTick, , ) = foreignController.midnightMarketConfigs(marketId);
-
-        assertEq(maxBuyTick,  0);
-        assertEq(minSellTick, TICK_98);
     }
 
 }
