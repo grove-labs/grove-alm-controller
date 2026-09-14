@@ -302,8 +302,10 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        // Market ids commit to the Midnight address, so repointing only moves where entries are
-        // allowed; markets onboarded under the old venue keep their configs and stay exitable.
+        // Market ids commit to the Midnight address, so repointing moves where entries are allowed;
+        // markets onboarded under the old venue keep their configs and stay sellable (the sell path
+        // takes the venue from the offer). Redemption follows the configured venue, so matured
+        // old-venue positions need a repoint back to redeem.
         midnight = midnight_;
         emit MidnightSet(midnight_);
     }

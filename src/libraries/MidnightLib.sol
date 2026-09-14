@@ -39,7 +39,7 @@ library MidnightLib {
     struct TakeParams {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
-        address      midnight;  // Venue entries are pinned to; the market id itself authenticates exits.
+        address      midnight;  // Venue entries are pinned to; sells take the venue from the offer.
         bytes32      buyRateLimitId;
         bytes32      sellRateLimitId;
         bytes32      marketId;
@@ -92,7 +92,8 @@ library MidnightLib {
 
         Market memory market = params.offers[0].market;
 
-        // Entries are pinned to the configured venue; exits are not, so a repoint cannot trap a position.
+        // Entries are pinned to the configured venue. Sells are not (the venue comes from the offer,
+        // authenticated by the market id), so a repoint leaves unmatured positions sellable.
         require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
 
         // Entering crystallizes the continuous fee over the remaining term, so it is checked up front.
@@ -187,6 +188,8 @@ library MidnightLib {
         // Redemption reads no config value, but an onboarded config is what authenticates the market.
         require(params.config.minSellTick != 0, "MidnightLib/market-not-onboarded");
 
+        // Unlike sell, the market is resolved on the configured venue, so this reverts for ids
+        // created under a previous venue until governance repoints back.
         bytes32       marketId = params.marketId;
         Market memory market   = IMidnight(params.midnight).toMarket(marketId);
 

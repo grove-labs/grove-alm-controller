@@ -3,8 +3,9 @@
 pragma solidity ^0.8.21;
 
 // Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370,
-// src/interfaces/IMidnight.sol. Structs are copied verbatim because the market id is
-// keccak256 over abi.encode(market). IMidnight is trimmed to the lend-side surface used here.
+// src/interfaces/IMidnight.sol. Structs are copied verbatim because the market id is a CREATE2
+// address derived from abi.encode(market) (see MidnightIdLib). IMidnight is trimmed to the
+// lend-side surface used here.
 
 struct CollateralParams {
     address token;
