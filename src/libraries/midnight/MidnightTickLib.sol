@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (c) 2026 Morpho Association
+pragma solidity ^0.8.21;
+
+// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370,
+// src/libraries/TickLib.sol. Midnight exposes no tick-to-price view, so bounding offer
+// prices on-chain needs the conversion here. Two deviations, neither changing results:
+// `priceToTick` is omitted, and `require(cond, CustomError())` is rewritten as an if
+// with a revert, which solc 0.8.25 needs.
+
+int256  constant LN_ONE_PLUS_DELTA = 0.004987541511039073e18;  // floor(ln(1.005) * 1e18)
+uint256 constant MAX_TICK          = 6744;
+// Minimum representable price increment in WAD (1e-7 WAD). Tick prices are rounded to multiples of this value.
+uint256 constant PRICE_ROUNDING_STEP = 1e11;
+
+library MidnightTickLib {
+
+    using MidnightTickLib for uint256;
+
+    error TickOutOfRange();
+
+    /// @dev Returns x / d rounded to the nearest integer with ties rounded down, without checking for overflow.
+    function divHalfDownUnchecked(uint256 x, uint256 d) internal pure returns (uint256) {
+        unchecked {
+            return (x + (d - 1) / 2) / d;
+        }
+    }
+
+    function wExp(int256 x) internal pure returns (uint256) {
+        unchecked {
+            if (x < 0) {
+                return 1e36 / wExp(-x);
+            } else {
+                int256 ln2 = 0.693147180559945309e18;  // floor(ln(2) * 1e18)
+                // offset is chosen such that 2 * expR(-offset) == expR(ln2 - offset - 1), so wExp is non-decreasing.
+                int256 offset = 0.32261121498945987e18;
+                int256 q = (x + offset) / ln2;
+                int256 r = x - q * ln2;
+                int256 secondTerm = r * r / (2 * 1e18);
+                int256 thirdTerm = secondTerm * r / (3 * 1e18);
+                int256 expR = 1e18 + r + secondTerm + thirdTerm;
+                // - q is non-negative because x is non-negative in this branch
+                // - expR is positive because |r| < ln2 < 1e18 and |secondTerm| > |thirdTerm|
+                return uint256(expR) << uint256(q);
+            }
+        }
+    }
+
+    function tickToPrice(uint256 tick) internal pure returns (uint256) {
+        if (tick > MAX_TICK) revert TickOutOfRange();
+        unchecked {
+            return uint256(1e36)
+                    .divHalfDownUnchecked(1e18 + wExp(LN_ONE_PLUS_DELTA * (int256(MAX_TICK / 2) - int256(tick))))
+                    .divHalfDownUnchecked(PRICE_ROUNDING_STEP) * PRICE_ROUNDING_STEP;
+        }
+    }
+
+}

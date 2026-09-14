@@ -9,7 +9,12 @@ fs_permissions = [
     { access = "read", path = "./script/input/"},
     { access = "read-write", path = "./script/output/"}
 ]
-evm_version = 'cancun'
+# Morpho Midnight is compiled for Osaka and its health check uses CLZ, so the EVM the tests run on
+# has to support it. forge normalizes this to the newest target solc 0.8.25 knows, so our own
+# bytecode is unchanged.
+# NOTE: ForeignController currently exceeds the EIP-170 runtime limit with the Midnight surface added.
+#       Tests are not subject to the limit; reclaiming the space is a follow-up before deployment.
+evm_version = 'osaka'
 remappings = [
     '@layerzerolabs/oft-evm/=lib/devtools/packages/oft-evm/',
     'layerzerolabs/oapp-evm/=lib/devtools/packages/oapp-evm/',
