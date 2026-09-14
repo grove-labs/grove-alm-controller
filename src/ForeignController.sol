@@ -372,9 +372,6 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    // NOTE: !!! This function was deployed without integration testing !!!
-    //       KEEP RATE LIMIT AT ZERO until LayerZero dependencies are live and
-    //       all functionality has been thoroughly integration tested.
     function transferTokenLayerZero(
         address oftAddress,
         uint256 amount,
@@ -388,9 +385,6 @@ contract ForeignController is AccessControl {
             amount
         );
 
-        // NOTE: Full integration testing of this logic is not possible without OFTs with
-        //       approvalRequired == true. Add integration testing for this case before
-        //       using in production.
         if (ILayerZero(oftAddress).approvalRequired()) {
             ERC20Lib.approve(proxy, ILayerZero(oftAddress).token(), oftAddress, amount);
         }
