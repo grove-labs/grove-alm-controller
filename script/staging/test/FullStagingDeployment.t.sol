@@ -536,9 +536,9 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
         cctpBridgeBase.relayMessagesToDestination(true);
 
         vm.startPrank(relayerSafeBase);
-        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, 0);
         skip(1 days);
-        baseController.withdrawERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.withdrawERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, type(uint256).max);
 
         assertEq(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);
 
@@ -569,9 +569,9 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
         cctpBridgeBase.relayMessagesToDestination(true);
 
         vm.startPrank(relayerSafeBase);
-        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, 0);
         skip(1 days);
-        baseController.redeemERC4626(Base.MORPHO_VAULT_SUSDC, IERC20(Base.MORPHO_VAULT_SUSDC).balanceOf(address(baseAlmProxy)));
+        baseController.redeemERC4626(Base.MORPHO_VAULT_SUSDC, IERC20(Base.MORPHO_VAULT_SUSDC).balanceOf(address(baseAlmProxy)), 0);
 
         assertGe(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);  // Interest earned
 

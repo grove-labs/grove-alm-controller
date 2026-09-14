@@ -21,6 +21,9 @@ contract MorphoBaseTest is ForkTestBase {
     IERC4626 usdsVault = IERC4626(MORPHO_VAULT_USDS);
     IERC4626 usdcVault = IERC4626(MORPHO_VAULT_USDC);
 
+    bytes32 usdsDepositKey;
+    bytes32 usdsWithdrawKey;
+
     function setUp() public override {
         super.setUp();
 
@@ -67,11 +70,11 @@ contract MorphoBaseTest is ForkTestBase {
         supplyQueueUSDC[0] = MarketParamsLib.id(usdcParams);
         IMetaMorpho(MORPHO_VAULT_USDC).setSupplyQueue(supplyQueueUSDC);
 
+        usdsDepositKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_DEPOSIT(),  MORPHO_VAULT_USDS);
+        usdsWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_WITHDRAW(), MORPHO_VAULT_USDS);
+
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_DEPOSIT(),
-                MORPHO_VAULT_USDS
-            ),
+            usdsDepositKey,
             25_000_000e18,
             uint256(5_000_000e18) / 1 days
         );
@@ -84,10 +87,7 @@ contract MorphoBaseTest is ForkTestBase {
             uint256(5_000_000e6) / 1 days
         );
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
-                MORPHO_VAULT_USDS
-            ),
+            usdsWithdrawKey,
             10_000_000e18,
             uint256(5_000_000e18) / 1 days
         );
@@ -123,13 +123,13 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
             address(this),
             RELAYER
         ));
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 0);
     }
 
     function test_morpho_deposit_zeroMaxAmount() external {
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.depositERC4626(makeAddr("fake-token"), 1e18);
+        foreignController.depositERC4626(makeAddr("fake-token"), 1e18, 0);
     }
 
     function test_morpho_usds_deposit_rateLimitedBoundary() external {
@@ -137,9 +137,9 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18 + 1);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18 + 1, 0);
 
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18, 0);
     }
 
     function test_morpho_usdc_deposit_rateLimitedBoundary() external {
@@ -147,9 +147,23 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 25_000_000e6 + 1);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 25_000_000e6 + 1, 0);
 
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 25_000_000e6);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 25_000_000e6, 0);
+    }
+
+    function test_morpho_deposit_minSharesOutNotMetBoundary() external {
+        deal(Base.USDS, address(almProxy), 25_000_000e18);
+
+        uint256 overBoundaryShares = usdsVault.convertToShares(25_000_000e18) + 1;
+        uint256 atBoundaryShares   = usdsVault.convertToShares(25_000_000e18);
+
+        vm.startPrank(relayer);
+
+        vm.expectRevert("ERC4626Lib/min-shares-out-not-met");
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18, overBoundaryShares);
+
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18, atBoundaryShares);
     }
 
     function test_depositERC4626_exchangeRateBoundary() external {
@@ -161,14 +175,14 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
 
         vm.prank(relayer);
         vm.expectRevert("ERC4626Lib/exchange-rate-too-high");
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18, 0);
 
         vm.startPrank(Base.SPARK_EXECUTOR);
         foreignController.setMaxExchangeRate(MORPHO_VAULT_USDS, usdsVault.convertToShares(1e18), 1e18);
         vm.stopPrank();
 
         vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 25_000_000e18, 0);
     }
 
     function test_morpho_usdc_deposit_zeroExchangeRate() external {
@@ -179,7 +193,7 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
 
         vm.prank(relayer);
         vm.expectRevert("ERC4626Lib/exchange-rate-too-high");
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1e18, 0);
     }
 
 }
@@ -193,12 +207,18 @@ contract MorphoDepositSuccessTests is MorphoBaseTest {
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                             1_000_000e18);
         assertEq(IERC20(Base.USDS).allowance(address(almProxy), address(MORPHO_VAULT_USDS)), 0);
 
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  25_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 10_000_000e18);
+
         vm.prank(relayer);
-        assertEq(foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18), 1_000_000e18);
+        assertEq(foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18), 1_000_000e18);
 
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))),          1_000_000e18);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                             0);
         assertEq(IERC20(Base.USDS).allowance(address(almProxy), address(MORPHO_VAULT_USDS)), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 10_000_000e18);
     }
 
     function test_morpho_usdc_deposit() public {
@@ -209,7 +229,7 @@ contract MorphoDepositSuccessTests is MorphoBaseTest {
         assertEq(IERC20(Base.USDC).allowance(address(almProxy), address(MORPHO_VAULT_USDC)), 0);
 
         vm.prank(relayer);
-        assertEq(foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6), 1_000_000e18);
+        assertEq(foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6, 1_000_000e18), 1_000_000e18);
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))),          1_000_000e6);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                             0);
@@ -226,35 +246,57 @@ contract MorphoWithdrawFailureTests is MorphoBaseTest {
             address(this),
             RELAYER
         ));
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, type(uint256).max);
     }
 
     function test_morpho_withdraw_zeroMaxAmount() external {
-        vm.prank(relayer);
+        // Longer setup because rate limit revert is at the end of the function
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsWithdrawKey, 0, 0);
+
+        deal(Base.USDS, address(almProxy), 1_000_000e18);
+        vm.startPrank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 0);
+
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.withdrawERC4626(makeAddr("fake-token"), 1_000_000e18);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, type(uint256).max);
     }
 
     function test_morpho_usds_withdraw_rateLimitBoundary() external {
         deal(Base.USDS, address(almProxy), 10_000_000e18 + 1);
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 10_000_000e18 + 1);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 10_000_000e18 + 1, 0);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18 + 1);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18 + 1, type(uint256).max);
 
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18, type(uint256).max);
     }
 
     function test_morpho_usdc_withdraw_rateLimitBoundary() external {
-        deal(Base.USDC, address(almProxy), 10_000_000e18 + 1);
+        deal(Base.USDC, address(almProxy), 10_000_000e6 + 1);
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 10_000_000e6 + 1);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 10_000_000e6 + 1, 0);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 10_000_000e6 + 1);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 10_000_000e6 + 1, type(uint256).max);
 
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 10_000_000e6);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 10_000_000e6, type(uint256).max);
+    }
+
+    function test_morpho_withdraw_maxSharesInBoundary() external {
+        deal(Base.USDS, address(almProxy), 10_000_000e18);
+
+        uint256 underBoundaryShares = usdsVault.previewWithdraw(10_000_000e18) - 1;
+        uint256 atBoundaryShares    = usdsVault.previewWithdraw(10_000_000e18);
+
+        vm.startPrank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 10_000_000e18, 0);
+
+        vm.expectRevert("ERC4626Lib/shares-burned-too-high");
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18, underBoundaryShares);
+
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 10_000_000e18, atBoundaryShares);
     }
 
 }
@@ -264,31 +306,69 @@ contract MorphoWithdrawSuccessTests is MorphoBaseTest {
     function test_morpho_usds_withdraw() public {
         deal(Base.USDS, address(almProxy), 1_000_000e18);
         vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
 
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 1_000_000e18);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    0);
 
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 10_000_000e18);
+
         vm.prank(relayer);
-        assertEq(foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18), 1_000_000e18);
+        assertEq(foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18), 1_000_000e18);
 
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
+
+        // Withdraw charges the withdraw limit and restores the deposit limit by the assets received.
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  25_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
     function test_morpho_usdc_withdraw() public {
         deal(Base.USDC, address(almProxy), 1_000_000e6);
         vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6, 1_000_000e18);
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 1_000_000e6);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    0);
 
         vm.prank(relayer);
-        assertEq(foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 1_000_000e6), 1_000_000e18);
+        assertEq(foreignController.withdrawERC4626(MORPHO_VAULT_USDC, 1_000_000e6, 1_000_000e18), 1_000_000e18);
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    1_000_000e6);
+    }
+
+    function test_morpho_withdraw_zeroDepositRateLimit() public {
+        deal(Base.USDS, address(almProxy), 1_000_000e18);
+        vm.prank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
+
+        // Removing the deposit limit must not block the exit; the restore is simply skipped.
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
+
+        vm.prank(relayer);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
+
+        assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),  1_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  0);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
+    }
+
+    function test_morpho_withdraw_restoreIsCappedAtMaxAmount() public {
+        deal(Base.USDS, address(almProxy), 1_000_000e18);
+        vm.prank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
+
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsDepositKey, 500_000e18, 0);
+
+        vm.prank(relayer);
+        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
+
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey), 500_000e18);
     }
 
 }
@@ -301,34 +381,26 @@ contract MorphoRedeemFailureTests is MorphoBaseTest {
             address(this),
             RELAYER
         ));
-        foreignController.redeemERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 0);
     }
 
     function test_morpho_redeem_zeroMaxAmount() external {
         // Longer setup because rate limit revert is at the end of the function
-        vm.startPrank(Base.SPARK_EXECUTOR);
-        rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
-                MORPHO_VAULT_USDS
-            ),
-            0,
-            0
-        );
-        vm.stopPrank();
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsWithdrawKey, 0, 0);
 
         deal(Base.USDS, address(almProxy), 1_000_000e18);
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 0);
 
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.redeemERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 0);
     }
 
     function test_morpho_usds_redeem_rateLimitBoundary() external {
         deal(Base.USDS, address(almProxy), 20_000_000e18);
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 20_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 20_000_000e18, 0);
 
         IERC4626 vault = IERC4626(MORPHO_VAULT_USDS);
 
@@ -339,15 +411,15 @@ contract MorphoRedeemFailureTests is MorphoBaseTest {
         assertEq(vault.previewRedeem(atBoundaryShares),   10_000_000e18);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.redeemERC4626(MORPHO_VAULT_USDS, overBoundaryShares);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, overBoundaryShares, 0);
 
-        foreignController.redeemERC4626(MORPHO_VAULT_USDS, atBoundaryShares);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, atBoundaryShares, 0);
     }
 
     function test_morpho_usdc_redeem_rateLimitBoundary() external {
-        deal(Base.USDC, address(almProxy), 20_000_000e18);
+        deal(Base.USDC, address(almProxy), 20_000_000e6);
         vm.startPrank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 20_000_000e6);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 20_000_000e6, 0);
 
         IERC4626 vault = IERC4626(MORPHO_VAULT_USDC);
 
@@ -358,9 +430,26 @@ contract MorphoRedeemFailureTests is MorphoBaseTest {
         assertEq(vault.previewRedeem(atBoundaryShares),   10_000_000e6);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.redeemERC4626(MORPHO_VAULT_USDC, overBoundaryShares);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDC, overBoundaryShares, 0);
 
-        foreignController.redeemERC4626(MORPHO_VAULT_USDC, atBoundaryShares);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDC, atBoundaryShares, 0);
+    }
+
+    function test_morpho_redeem_minAssetsOutNotMetBoundary() external {
+        deal(Base.USDS, address(almProxy), 10_000_000e18);
+
+        vm.startPrank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 10_000_000e18, 0);
+
+        uint256 shares = usdsVault.balanceOf(address(almProxy));
+
+        uint256 overBoundaryAssets = usdsVault.previewRedeem(shares) + 1;
+        uint256 atBoundaryAssets   = usdsVault.previewRedeem(shares);
+
+        vm.expectRevert("ERC4626Lib/min-assets-out-not-met");
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares, overBoundaryAssets);
+
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares, atBoundaryAssets);
     }
 
 }
@@ -370,33 +459,58 @@ contract MorphoRedeemSuccessTests is MorphoBaseTest {
     function test_morpho_usds_redeem() public {
         deal(Base.USDS, address(almProxy), 1_000_000e18);
         vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
 
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 1_000_000e18);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    0);
 
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 10_000_000e18);
+
         uint256 shares = usdsVault.balanceOf(address(almProxy));
         vm.prank(relayer);
-        assertEq(foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares), 1_000_000e18);
+        assertEq(foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares, 1_000_000e18), 1_000_000e18);
 
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
+
+        // Redeem charges the withdraw limit and restores the deposit limit by the assets received.
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  25_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
     function test_morpho_usdc_redeem() public {
         deal(Base.USDC, address(almProxy), 1_000_000e6);
         vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6);
+        foreignController.depositERC4626(MORPHO_VAULT_USDC, 1_000_000e6, 1_000_000e18);
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 1_000_000e6);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    0);
 
         uint256 shares = usdcVault.balanceOf(address(almProxy));
         vm.prank(relayer);
-        assertEq(foreignController.redeemERC4626(MORPHO_VAULT_USDC, shares), 1_000_000e6);
+        assertEq(foreignController.redeemERC4626(MORPHO_VAULT_USDC, shares, 1_000_000e6), 1_000_000e6);
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    1_000_000e6);
+    }
+
+    function test_morpho_redeem_zeroDepositRateLimit() public {
+        deal(Base.USDS, address(almProxy), 1_000_000e18);
+        vm.prank(relayer);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
+
+        // Removing the deposit limit must not block the exit; the restore is simply skipped.
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
+
+        uint256 shares = usdsVault.balanceOf(address(almProxy));
+        vm.prank(relayer);
+        foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares, 1_000_000e18);
+
+        assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),  1_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  0);
+        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
 }

@@ -439,7 +439,7 @@ contract ForeignController is AccessControl {
     /*** Relayer ERC4626 functions                                                              ***/
     /**********************************************************************************************/
 
-    function depositERC4626(address token, uint256 amount)
+    function depositERC4626(address token, uint256 amount, uint256 minSharesOut)
         external
         returns (uint256 shares)
     {
@@ -450,36 +450,42 @@ contract ForeignController is AccessControl {
             rateLimitId     : LIMIT_4626_DEPOSIT,
             token           : token,
             amount          : amount,
+            minSharesOut    : minSharesOut,
             maxExchangeRate : maxExchangeRates[token]
         }));
     }
 
-    function withdrawERC4626(address token, uint256 amount)
+    // NOTE: !!! Rate limited at end of function !!!
+    function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn)
         external
         returns (uint256 shares)
     {
         _checkRole(RELAYER);
         return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_4626_WITHDRAW,
-            token       : token,
-            amount      : amount
+            proxy               : proxy,
+            rateLimits          : rateLimits,
+            depositRateLimitId  : LIMIT_4626_DEPOSIT,
+            withdrawRateLimitId : LIMIT_4626_WITHDRAW,
+            token               : token,
+            amount              : amount,
+            maxSharesIn         : maxSharesIn
         }));
     }
 
     // NOTE: !!! Rate limited at end of function !!!
-    function redeemERC4626(address token, uint256 shares)
+    function redeemERC4626(address token, uint256 shares, uint256 minAssetsOut)
         external
         returns (uint256 assets)
     {
         _checkRole(RELAYER);
         return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_4626_WITHDRAW,
-            token       : token,
-            shares      : shares
+            proxy               : proxy,
+            rateLimits          : rateLimits,
+            depositRateLimitId  : LIMIT_4626_DEPOSIT,
+            withdrawRateLimitId : LIMIT_4626_WITHDRAW,
+            token               : token,
+            shares              : shares,
+            minAssetsOut        : minAssetsOut
         }));
     }
 
