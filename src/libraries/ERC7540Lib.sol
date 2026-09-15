@@ -49,6 +49,8 @@ library ERC7540Lib {
                 (params.amount, address(params.proxy), address(params.proxy))
             )
         );
+
+        ERC20Lib.approve(params.proxy, asset, params.token, 0);
     }
 
     function claimDeposit(ClaimParams memory params) external {
