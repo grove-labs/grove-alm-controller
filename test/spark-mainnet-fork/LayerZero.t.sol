@@ -335,15 +335,89 @@ contract ArbitrumChainLayerZeroTestBase is ForkTestBase {
 
 }
 
-contract ForeignControllerTransferLayerZeroFailureTests is ArbitrumChainLayerZeroTestBase {
+contract ForeignControllerLayerZeroTestBase is ArbitrumChainLayerZeroTestBase {
 
     using DomainHelpers  for *;
     using OptionsBuilder for bytes;
 
+    bytes32 key;
+    bytes32 target;
+
     function setUp() public override virtual {
         super.setUp();
         destination.selectFork();
+
+        key = keccak256(abi.encode(
+            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            USDT_OFT,
+            destinationEndpointId
+        ));
+
+        target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
     }
+
+    function _configure(uint256 maxAmount) internal {
+        vm.startPrank(SPARK_EXECUTOR);
+        foreignRateLimits.setRateLimitData(key, maxAmount, 0);
+        foreignController.setLayerZeroRecipient(destinationEndpointId, target);
+        vm.stopPrank();
+    }
+
+    function _fee(uint256 amount) internal view returns (uint256) {
+        return foreignController.quoteTransferLayerZero(USDT_OFT, amount, destinationEndpointId).nativeFee;
+    }
+
+    function _expectedSendParams(uint256 amount) internal view returns (SendParam memory) {
+        return SendParam({
+            dstEid       : destinationEndpointId,
+            to           : target,
+            amountLD     : amount,
+            minAmountLD  : amount,
+            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0),
+            composeMsg   : "",
+            oftCmd       : ""
+        });
+    }
+
+}
+
+contract ForeignControllerQuoteTransferLayerZeroTests is ForeignControllerLayerZeroTestBase {
+
+    function test_quoteTransferLayerZero_recipientNotSet() external {
+        vm.expectRevert("LayerZeroLib/recipient-not-set");
+        foreignController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero_zeroMinAmount() external {
+        _configure(10_000_000e6);
+
+        vm.expectRevert("LayerZeroLib/zero-min-amount");
+        foreignController.quoteTransferLayerZero(USDT_OFT, 0, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero_quoteSendFailed() external {
+        _configure(10_000_000e6);
+
+        vm.mockCallRevert(USDT_OFT, ILayerZero.quoteSend.selector, "");
+
+        vm.expectRevert("LayerZeroLib/quote-send-failed");
+        foreignController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero() external {
+        _configure(10_000_000e6);
+
+        MessagingFee memory expected = ILayerZero(USDT_OFT).quoteSend(_expectedSendParams(1e6), false);
+        MessagingFee memory fee      = foreignController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+
+        assertGt(fee.nativeFee, 0);
+        assertEq(fee.nativeFee,  expected.nativeFee);
+        assertEq(fee.lzTokenFee, expected.lzTokenFee);
+    }
+
+}
+
+contract ForeignControllerTransferLayerZeroFailureTests is ForeignControllerLayerZeroTestBase {
 
     function test_transferTokenLayerZero_notRelayer() external {
         vm.expectRevert(abi.encodeWithSignature(
@@ -354,73 +428,67 @@ contract ForeignControllerTransferLayerZeroFailureTests is ArbitrumChainLayerZer
         foreignController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
     }
 
+    function test_transferTokenLayerZero_recipientNotSet() external {
+        vm.prank(SPARK_EXECUTOR);
+        foreignRateLimits.setRateLimitData(key, 10_000_000e6, 0);
+
+        vm.expectRevert("LayerZeroLib/recipient-not-set");
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_transferTokenLayerZero_zeroMinAmount() external {
+        _configure(10_000_000e6);
+
+        vm.expectRevert("LayerZeroLib/zero-min-amount");
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero(USDT_OFT, 0, destinationEndpointId);
+    }
+
     function test_transferTokenLayerZero_zeroMaxAmount() external {
-        vm.startPrank(SPARK_EXECUTOR);
-        foreignRateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                foreignController.LIMIT_LAYERZERO_TRANSFER(),
-                USDT_OFT,
-                destinationEndpointId
-            )),
-            0,
-            0
-        );
-        vm.stopPrank();
+        _configure(0);
 
         vm.expectRevert("RateLimits/zero-maxAmount");
         vm.prank(relayer);
         foreignController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
     }
 
-    function test_transferTokenLayerZero_rateLimitedBoundary() external {
-        vm.startPrank(SPARK_EXECUTOR);
+    function test_transferTokenLayerZero_insufficientFee() external {
+        _configure(10_000_000e6);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
+        deal(USDT0, address(foreignAlmProxy), 10_000_000e6);
+        deal(relayer, 1 ether);
 
-        foreignRateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                foreignController.LIMIT_LAYERZERO_TRANSFER(),
-                USDT_OFT,
-                destinationEndpointId
-            )),
+        uint256 fee = _fee(10_000_000e6);
+
+        vm.prank(relayer);
+        vm.expectRevert();
+        foreignController.transferTokenLayerZero{value: fee - 1}(
+            USDT_OFT,
             10_000_000e6,
-            0
+            destinationEndpointId
         );
+    }
 
-        foreignController.setLayerZeroRecipient(
-            destinationEndpointId,
-            target
-        );
+    function test_transferTokenLayerZero_rateLimitedBoundary() external {
+        _configure(10_000_000e6);
 
-        vm.stopPrank();
-
-        // Setup token balances
         deal(USDT0, address(foreignAlmProxy), 10_000_000e6);
         deal(relayer, 1 ether);  // Gas cost for LayerZero
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : target,
-            amountLD     : 10_000_000e6,
-            minAmountLD  : 10_000_000e6,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        MessagingFee memory fee = ILayerZero(USDT_OFT).quoteSend(sendParams, false);
+        uint256 fee = _fee(10_000_000e6 + 1);
 
         vm.startPrank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.transferTokenLayerZero{value: fee.nativeFee}(
+        foreignController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6 + 1,
             destinationEndpointId
         );
 
-        foreignController.transferTokenLayerZero{value: fee.nativeFee}(
+        fee = _fee(10_000_000e6);
+
+        foreignController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6,
             destinationEndpointId
@@ -429,11 +497,7 @@ contract ForeignControllerTransferLayerZeroFailureTests is ArbitrumChainLayerZer
 
 }
 
-
-contract ForeignControllerTransferLayerZeroSuccessTests is ArbitrumChainLayerZeroTestBase {
-
-    using DomainHelpers  for *;
-    using OptionsBuilder for bytes;
+contract ForeignControllerTransferLayerZeroSuccessTests is ForeignControllerLayerZeroTestBase {
 
     event OFTSent(
         bytes32 indexed guid, // GUID of the OFT message.
@@ -443,51 +507,21 @@ contract ForeignControllerTransferLayerZeroSuccessTests is ArbitrumChainLayerZer
         uint256 amountReceivedLD // Amount of tokens received in local decimals.
     );
 
-    function setUp() public override virtual {
+    function setUp() public override {
         super.setUp();
-        destination.selectFork();
+
+        _configure(10_000_000e6);
+
+        deal(USDT0, address(foreignAlmProxy), 10_000_000e6);
+        deal(relayer, 1 ether);  // Gas cost for LayerZero
     }
 
     function test_transferTokenLayerZero() external {
-        vm.startPrank(SPARK_EXECUTOR);
-
-        bytes32 key = keccak256(abi.encode(
-            foreignController.LIMIT_LAYERZERO_TRANSFER(),
-            USDT_OFT,
-            destinationEndpointId
-        ));
-
-        bytes32 target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
-
-        foreignRateLimits.setRateLimitData(key, 10_000_000e6, 0);
-
-        foreignController.setLayerZeroRecipient(destinationEndpointId, target);
-
-        vm.stopPrank();
-
-        // Setup token balances
-        deal(USDT0, address(foreignAlmProxy), 10_000_000e6);
-        deal(relayer, 1 ether);  // Gas cost for LayerZero
-
-        vm.startPrank(relayer);
+        uint256 fee = _fee(10_000_000e6);
 
         assertEq(relayer.balance,                                   1 ether);
         assertEq(foreignRateLimits.getCurrentRateLimit(key),        10_000_000e6);
         assertEq(IERC20(USDT0).balanceOf(address(foreignAlmProxy)), 10_000_000e6);
-
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : target,
-            amountLD     : 10_000_000e6,
-            minAmountLD  : 10_000_000e6,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        MessagingFee memory fee = ILayerZero(USDT_OFT).quoteSend(sendParams, false);
 
         vm.expectEmit(USDT_OFT);
         emit OFTSent(
@@ -497,15 +531,54 @@ contract ForeignControllerTransferLayerZeroSuccessTests is ArbitrumChainLayerZer
             10_000_000e6,
             10_000_000e6
         );
-        foreignController.transferTokenLayerZero{value: fee.nativeFee}(
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6,
             destinationEndpointId
         );
 
-        assertEq(relayer.balance,                                   1 ether - fee.nativeFee);
-        assertEq(foreignRateLimits.getCurrentRateLimit(key),        0);
-        assertEq(IERC20(USDT0).balanceOf(address(foreignAlmProxy)), 0);
+        assertEq(relayer.balance,                                    1 ether - fee);
+        assertEq(address(foreignController).balance,                 0);
+        assertEq(address(foreignAlmProxy).balance,                   0);
+        assertEq(foreignRateLimits.getCurrentRateLimit(key),         0);
+        assertEq(IERC20(USDT0).balanceOf(address(foreignAlmProxy)),  0);
+        assertEq(IERC20(USDT0).allowance(address(foreignAlmProxy), USDT_OFT), 0);
+    }
+
+    function test_transferTokenLayerZero_excessFeeSweptToProxy() external {
+        uint256 fee = _fee(10_000_000e6);
+
+        assertEq(address(foreignController).balance, 0);
+        assertEq(address(foreignAlmProxy).balance,   0);
+
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero{value: fee + 0.1 ether}(
+            USDT_OFT,
+            10_000_000e6,
+            destinationEndpointId
+        );
+
+        assertEq(relayer.balance,                    1 ether - fee - 0.1 ether);
+        assertEq(address(foreignController).balance, 0);
+        assertEq(address(foreignAlmProxy).balance,   0.1 ether);
+    }
+
+    function test_transferTokenLayerZero_controllerBalanceSweptToProxy() external {
+        // Any ETH already sitting in the controller is swept too, not only this call's excess.
+        deal(address(foreignController), 0.5 ether);
+
+        uint256 fee = _fee(10_000_000e6);
+
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero{value: fee}(
+            USDT_OFT,
+            10_000_000e6,
+            destinationEndpointId
+        );
+
+        assertEq(address(foreignController).balance, 0);
+        assertEq(address(foreignAlmProxy).balance,   0.5 ether);
     }
 
 }

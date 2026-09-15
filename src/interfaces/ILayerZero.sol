@@ -70,4 +70,6 @@ interface ILayerZero {
 
     function approvalRequired() external pure returns (bool);
 
+    function decimalConversionRate() external view returns (uint256);
+
 }
