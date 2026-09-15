@@ -89,7 +89,7 @@ library CentrifugeLib {
             params.amount
         );
 
-        require(params.recipient != 0, "MainnetController/centrifuge-id-not-configured");
+        require(params.recipient != 0, "CentrifugeLib/centrifuge-id-not-configured");
 
         ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(params.token);
 
@@ -124,7 +124,7 @@ library CentrifugeLib {
     function _rateLimitExists(IRateLimits rateLimits, bytes32 key) internal view {
         require(
             rateLimits.getRateLimitData(key).maxAmount > 0,
-            "MainnetController/invalid-action"
+            "CentrifugeLib/invalid-action"
         );
     }
 }
