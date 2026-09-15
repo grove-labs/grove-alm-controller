@@ -545,6 +545,12 @@ contract ForeignControllerSetLayerZeroRecipientTests is ForeignControllerAdminTe
         foreignController.setLayerZeroRecipient(1, layerZeroRecipient1);
     }
 
+    function test_setLayerZeroRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/zero-recipient");
+        foreignController.setLayerZeroRecipient(1, bytes32(0));
+    }
+
     function test_setLayerZeroRecipient() public {
         assertEq(foreignController.layerZeroRecipients(1), bytes32(0));
         assertEq(foreignController.layerZeroRecipients(2), bytes32(0));
