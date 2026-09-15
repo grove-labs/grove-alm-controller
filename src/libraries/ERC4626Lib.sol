@@ -78,7 +78,6 @@ library ERC4626Lib {
         ERC20Lib.approve(params.proxy, asset, params.token, 0);
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdraw(WithdrawParams memory params) external returns (uint256 shares) {
         address asset = IERC4626(params.token).asset();
 
@@ -103,7 +102,6 @@ library ERC4626Lib {
         _rateLimitExit(params.rateLimits, params.withdrawRateLimitId, params.depositRateLimitId, params.token, assets);
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function redeem(RedeemParams memory params) external returns (uint256 assets) {
         address asset = IERC4626(params.token).asset();
 
