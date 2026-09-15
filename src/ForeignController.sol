@@ -74,8 +74,6 @@ contract ForeignController is AccessControl {
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
 
-    uint256 public constant EXCHANGE_RATE_PRECISION = ERC4626Lib.EXCHANGE_RATE_PRECISION;
-
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
 
@@ -468,7 +466,6 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function redeemERC4626(address token, uint256 shares)
         external
         returns (uint256 assets)

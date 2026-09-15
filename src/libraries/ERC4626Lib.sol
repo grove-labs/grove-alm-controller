@@ -86,7 +86,6 @@ library ERC4626Lib {
         );
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function redeem(RedeemParams memory params) external returns (uint256 assets) {
         // Redeem shares for assets from the token, decode the resulting assets.
         // Assumes proxy has adequate token shares.
