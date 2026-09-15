@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
@@ -20,6 +21,7 @@ library ERC4626Lib {
         bytes32     rateLimitId;
         address     token;
         uint256     amount;
+        uint256     minSharesOut;
         uint256     maxExchangeRate;
     }
 
@@ -29,6 +31,7 @@ library ERC4626Lib {
         bytes32     rateLimitId;
         address     token;
         uint256     amount;
+        uint256     maxSharesIn;
     }
 
     struct RedeemParams {
@@ -37,6 +40,7 @@ library ERC4626Lib {
         bytes32     rateLimitId;
         address     token;
         uint256     shares;
+        uint256     minAssetsOut;
     }
 
     function deposit(DepositParams memory params) external returns (uint256 shares) {
@@ -50,55 +54,74 @@ library ERC4626Lib {
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
         ERC20Lib.approve(params.proxy, asset, params.token, params.amount);
 
-        // Deposit asset into the token, proxy receives token shares, decode the resulting shares.
-        shares = abi.decode(
-            params.proxy.doCall(
-                params.token,
-                abi.encodeCall(IERC4626(params.token).deposit, (params.amount, address(params.proxy)))
-            ),
-            (uint256)
+        // Shares are measured on the proxy rather than trusted from the vault's return value.
+        uint256 startingShares = IERC20(params.token).balanceOf(address(params.proxy));
+
+        params.proxy.doCall(
+            params.token,
+            abi.encodeCall(IERC4626(params.token).deposit, (params.amount, address(params.proxy)))
         );
+
+        shares = IERC20(params.token).balanceOf(address(params.proxy)) - startingShares;
+
+        require(shares >= params.minSharesOut, "ERC4626Lib/min-shares-out-not-met");
 
         require(
             getExchangeRate(shares, params.amount) <= params.maxExchangeRate,
             "ERC4626Lib/exchange-rate-too-high"
         );
+
+        // Clear approval in case the vault pulled less than approved.
+        ERC20Lib.approve(params.proxy, asset, params.token, 0);
     }
 
     function withdraw(WithdrawParams memory params) external returns (uint256 shares) {
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
-            params.amount
+        address asset = IERC4626(params.token).asset();
+
+        uint256 startingAssets = IERC20(asset).balanceOf(address(params.proxy));
+        uint256 startingShares = IERC20(params.token).balanceOf(address(params.proxy));
+
+        // Withdraw asset from a token, assumes proxy has adequate token shares.
+        params.proxy.doCall(
+            params.token,
+            abi.encodeCall(
+                IERC4626(params.token).withdraw,
+                (params.amount, address(params.proxy), address(params.proxy))
+            )
         );
 
-        // Withdraw asset from a token, decode resulting shares.
-        // Assumes proxy has adequate token shares.
-        shares = abi.decode(
-            params.proxy.doCall(
-                params.token,
-                abi.encodeCall(
-                    IERC4626(params.token).withdraw,
-                    (params.amount, address(params.proxy), address(params.proxy))
-                )
-            ),
-            (uint256)
+        uint256 assets = IERC20(asset).balanceOf(address(params.proxy)) - startingAssets;
+
+        shares = startingShares - IERC20(params.token).balanceOf(address(params.proxy));
+
+        require(shares <= params.maxSharesIn, "ERC4626Lib/shares-burned-too-high");
+
+        // Charge the withdraw limit by the assets actually received.
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            assets
         );
     }
 
     function redeem(RedeemParams memory params) external returns (uint256 assets) {
-        // Redeem shares for assets from the token, decode the resulting assets.
-        // Assumes proxy has adequate token shares.
-        assets = abi.decode(
-            params.proxy.doCall(
-                params.token,
-                abi.encodeCall(
-                    IERC4626(params.token).redeem,
-                    (params.shares, address(params.proxy), address(params.proxy))
-                )
-            ),
-            (uint256)
+        address asset = IERC4626(params.token).asset();
+
+        uint256 startingAssets = IERC20(asset).balanceOf(address(params.proxy));
+
+        // Redeem shares for assets from the token, assumes proxy has adequate token shares.
+        params.proxy.doCall(
+            params.token,
+            abi.encodeCall(
+                IERC4626(params.token).redeem,
+                (params.shares, address(params.proxy), address(params.proxy))
+            )
         );
 
+        assets = IERC20(asset).balanceOf(address(params.proxy)) - startingAssets;
+
+        require(assets >= params.minAssetsOut, "ERC4626Lib/min-assets-out-not-met");
+
+        // Charge the withdraw limit by the assets actually received.
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
             assets
