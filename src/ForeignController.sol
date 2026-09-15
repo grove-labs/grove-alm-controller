@@ -459,13 +459,12 @@ contract ForeignController is AccessControl {
     {
         _checkRole(RELAYER);
         return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
-            proxy               : proxy,
-            rateLimits          : rateLimits,
-            depositRateLimitId  : LIMIT_4626_DEPOSIT,
-            withdrawRateLimitId : LIMIT_4626_WITHDRAW,
-            token               : token,
-            amount              : amount,
-            maxSharesIn         : maxSharesIn
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_4626_WITHDRAW,
+            token       : token,
+            amount      : amount,
+            maxSharesIn : maxSharesIn
         }));
     }
 
@@ -475,13 +474,12 @@ contract ForeignController is AccessControl {
     {
         _checkRole(RELAYER);
         return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
-            proxy               : proxy,
-            rateLimits          : rateLimits,
-            depositRateLimitId  : LIMIT_4626_DEPOSIT,
-            withdrawRateLimitId : LIMIT_4626_WITHDRAW,
-            token               : token,
-            shares              : shares,
-            minAssetsOut        : minAssetsOut
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_4626_WITHDRAW,
+            token        : token,
+            shares       : shares,
+            minAssetsOut : minAssetsOut
         }));
     }
 

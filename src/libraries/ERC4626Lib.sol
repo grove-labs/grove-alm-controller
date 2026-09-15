@@ -28,8 +28,7 @@ library ERC4626Lib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     depositRateLimitId;
-        bytes32     withdrawRateLimitId;
+        bytes32     rateLimitId;
         address     token;
         uint256     amount;
         uint256     maxSharesIn;
@@ -38,8 +37,7 @@ library ERC4626Lib {
     struct RedeemParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     depositRateLimitId;
-        bytes32     withdrawRateLimitId;
+        bytes32     rateLimitId;
         address     token;
         uint256     shares;
         uint256     minAssetsOut;
@@ -51,7 +49,6 @@ library ERC4626Lib {
             params.amount
         );
 
-        // Note that whitelist is done by rate limits.
         address asset = IERC4626(params.token).asset();
 
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
@@ -99,7 +96,11 @@ library ERC4626Lib {
 
         require(shares <= params.maxSharesIn, "ERC4626Lib/shares-burned-too-high");
 
-        _rateLimitExit(params.rateLimits, params.withdrawRateLimitId, params.depositRateLimitId, params.token, assets);
+        // Charge the withdraw limit by the assets actually received.
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            assets
+        );
     }
 
     function redeem(RedeemParams memory params) external returns (uint256 assets) {
@@ -120,7 +121,11 @@ library ERC4626Lib {
 
         require(assets >= params.minAssetsOut, "ERC4626Lib/min-assets-out-not-met");
 
-        _rateLimitExit(params.rateLimits, params.withdrawRateLimitId, params.depositRateLimitId, params.token, assets);
+        // Charge the withdraw limit by the assets actually received.
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            assets
+        );
     }
 
     function getExchangeRate(uint256 shares, uint256 assets) public pure returns (uint256) {
@@ -131,30 +136,6 @@ library ERC4626Lib {
         if (shares == 0) revert("ERC4626Lib/zero-shares");
 
         return (EXCHANGE_RATE_PRECISION * assets) / shares;
-    }
-
-    // Charges the withdraw limit by the assets actually received and gives that capacity back to
-    // the deposit limit. The restore is skipped when no deposit limit is configured so that exits
-    // are never blocked by it.
-    function _rateLimitExit(
-        IRateLimits rateLimits,
-        bytes32     withdrawRateLimitId,
-        bytes32     depositRateLimitId,
-        address     token,
-        uint256     assets
-    )
-        internal
-    {
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(withdrawRateLimitId, token),
-            assets
-        );
-
-        bytes32 depositKey = RateLimitHelpers.makeAssetKey(depositRateLimitId, token);
-
-        if (rateLimits.getRateLimitData(depositKey).maxAmount != 0) {
-            rateLimits.triggerRateLimitIncrease(depositKey, assets);
-        }
     }
 
 }

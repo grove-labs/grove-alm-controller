@@ -320,8 +320,8 @@ contract MorphoWithdrawSuccessTests is MorphoBaseTest {
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
 
-        // Withdraw charges the withdraw limit and restores the deposit limit by the assets received.
-        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  25_000_000e18);
+        // Withdraw charges the withdraw limit by the assets received; the deposit limit is untouched.
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
@@ -338,37 +338,6 @@ contract MorphoWithdrawSuccessTests is MorphoBaseTest {
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    1_000_000e6);
-    }
-
-    function test_morpho_withdraw_zeroDepositRateLimit() public {
-        deal(Base.USDS, address(almProxy), 1_000_000e18);
-        vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
-
-        // Removing the deposit limit must not block the exit; the restore is simply skipped.
-        vm.prank(Base.SPARK_EXECUTOR);
-        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
-
-        vm.prank(relayer);
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
-
-        assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),  1_000_000e18);
-        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  0);
-        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
-    }
-
-    function test_morpho_withdraw_restoreIsCappedAtMaxAmount() public {
-        deal(Base.USDS, address(almProxy), 1_000_000e18);
-        vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
-
-        vm.prank(Base.SPARK_EXECUTOR);
-        rateLimits.setRateLimitData(usdsDepositKey, 500_000e18, 0);
-
-        vm.prank(relayer);
-        foreignController.withdrawERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
-
-        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey), 500_000e18);
     }
 
 }
@@ -474,8 +443,8 @@ contract MorphoRedeemSuccessTests is MorphoBaseTest {
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
 
-        // Redeem charges the withdraw limit and restores the deposit limit by the assets received.
-        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  25_000_000e18);
+        // Redeem charges the withdraw limit by the assets received; the deposit limit is untouched.
+        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
@@ -493,24 +462,6 @@ contract MorphoRedeemSuccessTests is MorphoBaseTest {
 
         assertEq(usdcVault.convertToAssets(usdcVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDC).balanceOf(address(almProxy)),                    1_000_000e6);
-    }
-
-    function test_morpho_redeem_zeroDepositRateLimit() public {
-        deal(Base.USDS, address(almProxy), 1_000_000e18);
-        vm.prank(relayer);
-        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1_000_000e18, 1_000_000e18);
-
-        // Removing the deposit limit must not block the exit; the restore is simply skipped.
-        vm.prank(Base.SPARK_EXECUTOR);
-        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
-
-        uint256 shares = usdsVault.balanceOf(address(almProxy));
-        vm.prank(relayer);
-        foreignController.redeemERC4626(MORPHO_VAULT_USDS, shares, 1_000_000e18);
-
-        assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),  1_000_000e18);
-        assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  0);
-        assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
 
 }
