@@ -157,6 +157,28 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
         assertEq(centrifugeV3Vault.pendingDepositRequest(REQUEST_ID, address(almProxy)), 1_000_000e6);
     }
 
+    function test_requestDepositERC7540_clearsApprovalWhenVaultPullsLess() external {
+        deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
+
+        // Simulate a vault that accepts the request without pulling the full amount.
+        vm.mockCall(
+            address(centrifugeV3Vault),
+            abi.encodeWithSelector(
+                centrifugeV3Vault.requestDeposit.selector,
+                1_000_000e6,
+                address(almProxy),
+                address(almProxy)
+            ),
+            abi.encode(REQUEST_ID)
+        );
+
+        vm.prank(ALM_RELAYER);
+        foreignController.requestDepositERC7540(address(centrifugeV3Vault), 1_000_000e6);
+
+        assertEq(usdcAvalanche.balanceOf(address(almProxy)),                              1_000_000e6);
+        assertEq(usdcAvalanche.allowance(address(almProxy), address(centrifugeV3Vault)), 0);
+    }
+
 }
 
 contract ForeignControllerClaimDepositERC7540FailureTests is CentrifugeTestBase {
