@@ -680,7 +680,6 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdrawAave(address aToken, uint256 amount)
         external
         returns (uint256 amountWithdrawn)

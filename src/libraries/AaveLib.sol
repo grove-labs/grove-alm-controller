@@ -66,7 +66,6 @@ library AaveLib {
         );
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
         IAavePool pool = IAavePool(IATokenWithPool(params.aToken).POOL());
 
