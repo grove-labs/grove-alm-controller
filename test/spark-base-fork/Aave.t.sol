@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
-import { IAToken } from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
+import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
+import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
@@ -123,6 +124,27 @@ contract AaveV3BaseMarketDepositSuccessTests is AaveV3BaseMarketTestBase {
         assertEq(usdcBase.balanceOf(address(ausdc)),    startingAUSDCBalance + 1_000_000e6);
     }
 
+    function test_depositAave_usdc_clearsApprovalWhenPoolPullsLess() public {
+        deal(Base.USDC, address(almProxy), 1_000_000e6);
+
+        // 1 wei slippage floor rounds to zero for this amount, so a pool that mints nothing still passes.
+        vm.prank(Base.SPARK_EXECUTOR);
+        foreignController.setMaxSlippage(ATOKEN_USDC, 1);
+
+        // Simulate a pool that accepts the supply without pulling the underlying.
+        vm.mockCall(
+            POOL,
+            abi.encodeWithSelector(IAavePool.supply.selector, Base.USDC, 1_000_000e6, address(almProxy), uint16(0)),
+            ""
+        );
+
+        vm.prank(relayer);
+        foreignController.depositAave(ATOKEN_USDC, 1_000_000e6);
+
+        assertEq(usdcBase.balanceOf(address(almProxy)),       1_000_000e6);
+        assertEq(usdcBase.allowance(address(almProxy), POOL), 0);
+    }
+
 }
 
 contract AaveV3BaseMarketWithdrawFailureTests is AaveV3BaseMarketTestBase {
@@ -223,6 +245,32 @@ contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
 
         // Interest accrued was withdrawn, reducing cash balance
         assertLe(usdcBase.balanceOf(address(ausdc)), startingAUSDCBalance);
+    }
+
+    function test_withdrawAave_usdc_measuresBalanceDeltaNotReturnValue() public {
+        bytes32 key = RateLimitHelpers.makeAssetKey(
+            foreignController.LIMIT_AAVE_WITHDRAW(),
+            ATOKEN_USDC
+        );
+
+        deal(Base.USDC, address(almProxy), 500_000e6);
+        vm.prank(relayer);
+        foreignController.depositAave(ATOKEN_USDC, 500_000e6);
+
+        assertEq(rateLimits.getCurrentRateLimit(key), 1_000_000e6);
+
+        // Simulate a pool that reports a withdrawal it did not perform.
+        vm.mockCall(
+            POOL,
+            abi.encodeWithSelector(IAavePool.withdraw.selector, Base.USDC, 400_000e6, address(almProxy)),
+            abi.encode(uint256(400_000e6))
+        );
+
+        vm.prank(relayer);
+        assertEq(foreignController.withdrawAave(ATOKEN_USDC, 400_000e6), 0);
+
+        assertEq(usdcBase.balanceOf(address(almProxy)), 0);
+        assertEq(rateLimits.getCurrentRateLimit(key),   1_000_000e6);
     }
 
     function test_withdrawAave_usdc_unlimitedRateLimit() public {

@@ -64,27 +64,24 @@ library AaveLib {
             newATokens >= params.amount * params.maxSlippage / 1e18,
             "AaveLib/slippage-too-high"
         );
+
+        ERC20Lib.approve(params.proxy, address(underlying), address(pool), 0);
     }
 
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
-        IAavePool pool = IAavePool(IATokenWithPool(params.aToken).POOL());
+        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
+        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
 
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            params.proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (
-                        IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS(),
-                        params.amount,
-                        address(params.proxy)
-                    )
-                )
-            ),
-            (uint256)
+        uint256 underlyingBalance = underlying.balanceOf(address(params.proxy));
+
+        // Withdraw underlying from Aave pool. Assumes proxy has adequate aTokens.
+        params.proxy.doCall(
+            address(pool),
+            abi.encodeCall(pool.withdraw, (address(underlying), params.amount, address(params.proxy)))
         );
+
+        // Measured from the proxy's balance rather than the pool's return value.
+        amountWithdrawn = underlying.balanceOf(address(params.proxy)) - underlyingBalance;
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.aToken),
