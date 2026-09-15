@@ -45,7 +45,6 @@ library ERC4626Lib {
             params.amount
         );
 
-        // Note that whitelist is done by rate limits.
         address asset = IERC4626(params.token).asset();
 
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
