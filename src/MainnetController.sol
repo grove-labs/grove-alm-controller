@@ -19,18 +19,17 @@ import { IPendleMarket }                            from "./interfaces/PendleInt
 import { IRateLimits }                              from "./interfaces/IRateLimits.sol";
 import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
-import "./interfaces/ILayerZero.sol";
+import { MessagingFee }                             from "./interfaces/ILayerZero.sol";
 
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
+import { LayerZeroLib }                   from "./libraries/LayerZeroLib.sol";
 import { MerklLib }                       from "./libraries/MerklLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
 import { ERC20Lib }                       from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
-
-import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
 
@@ -56,8 +55,6 @@ interface IVaultLike {
 }
 
 contract MainnetController is AccessControl {
-
-    using OptionsBuilder for bytes;
 
     /**********************************************************************************************/
     /*** Events                                                                                 ***/
@@ -199,6 +196,7 @@ contract MainnetController is AccessControl {
         external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
+        require(layerZeroRecipient != bytes32(0), "MainnetController/zero-recipient");
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
     }
@@ -901,38 +899,31 @@ contract MainnetController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
-            amount
-        );
+        LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
+            proxy                 : proxy,
+            rateLimits            : rateLimits,
+            rateLimitId           : LIMIT_LAYERZERO_TRANSFER,
+            oftAddress            : oftAddress,
+            amount                : amount,
+            destinationEndpointId : destinationEndpointId,
+            layerZeroRecipient    : layerZeroRecipients[destinationEndpointId]
+        }));
+    }
 
-        if (ILayerZero(oftAddress).approvalRequired()) {
-            ERC20Lib.approve(proxy, ILayerZero(oftAddress).token(), oftAddress, amount);
-        }
-
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : layerZeroRecipients[destinationEndpointId],
-            amountLD     : amount,
-            minAmountLD  : 0,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        // Query the min amount received on the destination chain and set it.
-        ( ,, OFTReceipt memory receipt ) = ILayerZero(oftAddress).quoteOFT(sendParams);
-        sendParams.minAmountLD = receipt.amountReceivedLD;
-
-        MessagingFee memory fee = ILayerZero(oftAddress).quoteSend(sendParams, false);
-
-        proxy.doCallWithValue{value: fee.nativeFee}(
-            oftAddress,
-            abi.encodeCall(ILayerZero.send, (sendParams, fee, address(proxy))),
-            fee.nativeFee
-        );
+    function quoteTransferLayerZero(
+        address oftAddress,
+        uint256 amount,
+        uint32  destinationEndpointId
+    )
+        external view returns (MessagingFee memory fee)
+    {
+        return LayerZeroLib.quoteTransferFee(LayerZeroLib.QuoteParams({
+            proxy                 : proxy,
+            oftAddress            : oftAddress,
+            amount                : amount,
+            destinationEndpointId : destinationEndpointId,
+            layerZeroRecipient    : layerZeroRecipients[destinationEndpointId]
+        }));
     }
 
     /**********************************************************************************************/

@@ -208,8 +208,14 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
 
         vm.startPrank(Ethereum.GROVE_PROXY);
 
-        sourceRateLimitKey = keccak256(
-            abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), _getSourceOftAddress(), destinationEndpointId)
+        address sourceOft = _getSourceOftAddress();
+
+        sourceRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(sourceOft).token(),
+            sourceOft,
+            ILayerZero(sourceOft).peers(destinationEndpointId),
+            destinationEndpointId
         );
 
         rateLimits.setRateLimitData(sourceRateLimitKey, maxAmount, slope);

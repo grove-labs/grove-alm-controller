@@ -30,19 +30,95 @@ import { CCTPv2Forwarder as CCTPForwarder } from "xchain-helpers/forwarders/CCTP
 
 contract MainnetControllerLayerZeroTestBase is ForkTestBase {
 
+    using OptionsBuilder for bytes;
+
     uint32 constant destinationEndpointId = 30110;  // Arbitrum EID
 
     address constant USDT_OFT = 0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee;
+
+    bytes32 key;
+    bytes32 target;
+
+    function setUp() public override virtual {
+        super.setUp();
+
+        key = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(USDT_OFT).token(),
+            USDT_OFT,
+            ILayerZero(USDT_OFT).peers(destinationEndpointId),
+            destinationEndpointId
+        );
+
+        target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
+    }
 
     function _getBlock() internal pure override returns (uint256) {
         return 22468758;  // May 12, 2025
     }
 
+    function _configure(uint256 maxAmount) internal {
+        vm.startPrank(SPARK_PROXY);
+        rateLimits.setRateLimitData(key, maxAmount, 0);
+        mainnetController.setLayerZeroRecipient(destinationEndpointId, target);
+        vm.stopPrank();
+    }
+
+    function _fee(uint256 amount) internal view returns (uint256) {
+        return mainnetController.quoteTransferLayerZero(USDT_OFT, amount, destinationEndpointId).nativeFee;
+    }
+
+    function _expectedSendParams(uint256 amount) internal view returns (SendParam memory) {
+        return SendParam({
+            dstEid       : destinationEndpointId,
+            to           : target,
+            amountLD     : amount,
+            minAmountLD  : amount,
+            extraOptions : OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0),
+            composeMsg   : "",
+            oftCmd       : ""
+        });
+    }
+
+}
+
+contract MainnetControllerQuoteTransferLayerZeroTests is MainnetControllerLayerZeroTestBase {
+
+    function test_quoteTransferLayerZero_recipientNotSet() external {
+        vm.expectRevert("LayerZeroLib/recipient-not-set");
+        mainnetController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero_zeroMinAmount() external {
+        _configure(10_000_000e6);
+
+        vm.expectRevert("LayerZeroLib/zero-min-amount");
+        mainnetController.quoteTransferLayerZero(USDT_OFT, 0, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero_quoteSendFailed() external {
+        _configure(10_000_000e6);
+
+        vm.mockCallRevert(USDT_OFT, ILayerZero.quoteSend.selector, "");
+
+        vm.expectRevert("LayerZeroLib/quote-send-failed");
+        mainnetController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_quoteTransferLayerZero() external {
+        _configure(10_000_000e6);
+
+        MessagingFee memory expected = ILayerZero(USDT_OFT).quoteSend(_expectedSendParams(1e6), false);
+        MessagingFee memory fee      = mainnetController.quoteTransferLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+
+        assertGt(fee.nativeFee, 0);
+        assertEq(fee.nativeFee,  expected.nativeFee);
+        assertEq(fee.lzTokenFee, expected.lzTokenFee);
+    }
+
 }
 
 contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLayerZeroTestBase {
-
-    using OptionsBuilder for bytes;
 
     function test_transferTokenLayerZero_notRelayer() external {
         vm.expectRevert(abi.encodeWithSignature(
@@ -50,73 +126,85 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
             address(this),
             RELAYER
         ));
-        mainnetController.transferTokenLayerZero(USDT_OFT, 1e6, 30110);
+        mainnetController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_transferTokenLayerZero_recipientNotSet() external {
+        vm.prank(SPARK_PROXY);
+        rateLimits.setRateLimitData(key, 10_000_000e6, 0);
+
+        vm.expectRevert("LayerZeroLib/recipient-not-set");
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_transferTokenLayerZero_zeroMinAmount() external {
+        _configure(10_000_000e6);
+
+        vm.expectRevert("LayerZeroLib/zero-min-amount");
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero(USDT_OFT, 0, destinationEndpointId);
     }
 
     function test_transferTokenLayerZero_zeroMaxAmount() external {
-        vm.startPrank(SPARK_PROXY);
-        rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                mainnetController.LIMIT_LAYERZERO_TRANSFER(),
-                USDT_OFT,
-                destinationEndpointId
-            )),
-            0,
-            0
-        );
-        vm.stopPrank();
+        _configure(0);
 
         vm.expectRevert("RateLimits/zero-maxAmount");
         vm.prank(relayer);
         mainnetController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
     }
 
-    function test_transferTokenLayerZero_rateLimitedBoundary() external {
-        vm.startPrank(SPARK_PROXY);
+    function test_transferTokenLayerZero_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (rateLimitId, oft, eid) key does not authorize transfers.
+        _configure(0);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
+        bytes32 legacyKey =
+            keccak256(abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), USDT_OFT, destinationEndpointId));
 
-        rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                mainnetController.LIMIT_LAYERZERO_TRANSFER(),
-                USDT_OFT,
-                destinationEndpointId
-            )),
+        vm.prank(SPARK_PROXY);
+        rateLimits.setRateLimitData(legacyKey, 10_000_000e6, 0);
+
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_transferTokenLayerZero_insufficientFee() external {
+        _configure(10_000_000e6);
+
+        deal(address(usdt), address(almProxy), 10_000_000e6);
+        deal(relayer, 1 ether);
+
+        uint256 fee = _fee(10_000_000e6);
+
+        vm.prank(relayer);
+        vm.expectRevert();
+        mainnetController.transferTokenLayerZero{value: fee - 1}(
+            USDT_OFT,
             10_000_000e6,
-            0
+            destinationEndpointId
         );
+    }
 
-        mainnetController.setLayerZeroRecipient(destinationEndpointId, target);
+    function test_transferTokenLayerZero_rateLimitedBoundary() external {
+        _configure(10_000_000e6);
 
-        vm.stopPrank();
-
-        // Setup token balances
         deal(address(usdt), address(almProxy), 10_000_000e6);
         deal(relayer, 1 ether);  // Gas cost for LayerZero
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : target,
-            amountLD     : 10_000_000e6,
-            minAmountLD  : 10_000_000e6,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        MessagingFee memory fee = ILayerZero(USDT_OFT).quoteSend(sendParams, false);
+        uint256 fee = _fee(10_000_000e6 + 1);
 
         vm.startPrank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.transferTokenLayerZero{value: fee.nativeFee}(
+        mainnetController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6 + 1,
             destinationEndpointId
         );
 
-        mainnetController.transferTokenLayerZero{value: fee.nativeFee}(
+        fee = _fee(10_000_000e6);
+
+        mainnetController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6,
             destinationEndpointId
@@ -127,8 +215,6 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
 
 contract MainnetControllerTransferLayerZeroSuccessTests is MainnetControllerLayerZeroTestBase {
 
-    using OptionsBuilder for bytes;
-
     event OFTSent(
         bytes32 indexed guid, // GUID of the OFT message.
         uint32  dstEid, // Destination Endpoint ID.
@@ -137,48 +223,23 @@ contract MainnetControllerTransferLayerZeroSuccessTests is MainnetControllerLaye
         uint256 amountReceivedLD // Amount of tokens received in local decimals.
     );
 
-    function test_transferTokenLayerZero() external {
-        vm.startPrank(SPARK_PROXY);
+    function setUp() public override {
+        super.setUp();
 
-        bytes32 key = keccak256(abi.encode(
-            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
-            USDT_OFT,
-            destinationEndpointId
-        ));
+        _configure(10_000_000e6);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
-
-        rateLimits.setRateLimitData(key, 10_000_000e6, 0);
-
-        mainnetController.setLayerZeroRecipient(destinationEndpointId, target);
-
-        vm.stopPrank();
-
-        // Setup token balances
         deal(address(usdt), address(almProxy), 10_000_000e6);
         deal(relayer, 1 ether);  // Gas cost for LayerZero
+    }
+
+    function test_transferTokenLayerZero() external {
+        uint256 fee = _fee(10_000_000e6);
 
         uint256 oftBalanceBefore = IERC20(usdt).balanceOf(USDT_OFT);
-
-        vm.startPrank(relayer);
 
         assertEq(relayer.balance,                           1 ether);
         assertEq(rateLimits.getCurrentRateLimit(key),       10_000_000e6);
         assertEq(IERC20(usdt).balanceOf(address(almProxy)), 10_000_000e6);
-
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : target,
-            amountLD     : 10_000_000e6,
-            minAmountLD  : 10_000_000e6,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        MessagingFee memory fee = ILayerZero(USDT_OFT).quoteSend(sendParams, false);
 
         vm.expectEmit(USDT_OFT);
         emit OFTSent(
@@ -188,16 +249,55 @@ contract MainnetControllerTransferLayerZeroSuccessTests is MainnetControllerLaye
             10_000_000e6,
             10_000_000e6
         );
-        mainnetController.transferTokenLayerZero{value: fee.nativeFee}(
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero{value: fee}(
             USDT_OFT,
             10_000_000e6,
             destinationEndpointId
         );
 
-        assertEq(relayer.balance,                           1 ether - fee.nativeFee);
+        assertEq(relayer.balance,                           1 ether - fee);
+        assertEq(address(mainnetController).balance,        0);
+        assertEq(address(almProxy).balance,                 0);
+        assertEq(rateLimits.getCurrentRateLimit(key),       0);
         assertEq(IERC20(usdt).balanceOf(USDT_OFT),          oftBalanceBefore + 10_000_000e6);
         assertEq(IERC20(usdt).balanceOf(address(almProxy)), 0);
-        assertEq(rateLimits.getCurrentRateLimit(key),       0);
+        assertEq(IERC20(usdt).allowance(address(almProxy), USDT_OFT), 0);
+    }
+
+    function test_transferTokenLayerZero_excessFeeSweptToProxy() external {
+        uint256 fee = _fee(10_000_000e6);
+
+        assertEq(address(mainnetController).balance, 0);
+        assertEq(address(almProxy).balance,          0);
+
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero{value: fee + 0.1 ether}(
+            USDT_OFT,
+            10_000_000e6,
+            destinationEndpointId
+        );
+
+        assertEq(relayer.balance,                    1 ether - fee - 0.1 ether);
+        assertEq(address(mainnetController).balance, 0);
+        assertEq(address(almProxy).balance,          0.1 ether);
+    }
+
+    function test_transferTokenLayerZero_controllerBalanceSweptToProxy() external {
+        // Any ETH already sitting in the controller is swept too, not only this call's excess.
+        deal(address(mainnetController), 0.5 ether);
+
+        uint256 fee = _fee(10_000_000e6);
+
+        vm.prank(relayer);
+        mainnetController.transferTokenLayerZero{value: fee}(
+            USDT_OFT,
+            10_000_000e6,
+            destinationEndpointId
+        );
+
+        assertEq(address(mainnetController).balance, 0);
+        assertEq(address(almProxy).balance,          0.5 ether);
     }
 
 }

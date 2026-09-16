@@ -114,6 +114,12 @@ contract MainnetControllerSetLayerZeroRecipientTests is MainnetControllerAdminTe
         mainnetController.setMintRecipient(1, mintRecipient1);
     }
 
+    function test_setLayerZeroRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("MainnetController/zero-recipient");
+        mainnetController.setLayerZeroRecipient(1, bytes32(0));
+    }
+
     function test_setLayerZeroRecipient() public {
         assertEq(mainnetController.layerZeroRecipients(1), bytes32(0));
         assertEq(mainnetController.layerZeroRecipients(2), bytes32(0));
