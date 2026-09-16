@@ -15,26 +15,87 @@ contract CurveTestBase is ForkTestBase {
 
     ICurvePoolLike curvePool = ICurvePoolLike(CURVE_POOL);
 
+    // Aggregate (pool-level) keys, charged in 18-decimal value terms
     bytes32 curveDepositKey;
-    bytes32 curveSwapKey;
     bytes32 curveWithdrawKey;
+
+    // Per-token keys, charged in token units
+    bytes32 curveUsdcSwapKey;
+    bytes32 curveUsdtSwapKey;
+    bytes32 curveUsdcDepositKey;
+    bytes32 curveUsdtDepositKey;
+    bytes32 curveUsdcWithdrawKey;
+    bytes32 curveUsdtWithdrawKey;
+
+    // Pre-hardening swap key `(LIMIT_CURVE_SWAP, pool)`, no longer consulted
+    bytes32 curveLegacySwapKey;
 
     function setUp() public virtual override  {
         super.setUp();
 
         curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveSwapKey     = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
         curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
 
+        curveUsdcSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdc), CURVE_POOL);
+        curveUsdtSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdt), CURVE_POOL);
+        curveUsdcDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdc), CURVE_POOL);
+        curveUsdtDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdt), CURVE_POOL);
+        curveUsdcWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdc), CURVE_POOL);
+        curveUsdtWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdt), CURVE_POOL);
+
+        curveLegacySwapKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(), CURVE_POOL);
+
+        // NOTE: The pool is skewed towards USDT, so a balanced 1m/1m deposit is worth slightly more
+        //       than 2m in pro-rata terms. The aggregate deposit limit has headroom for that.
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveDepositKey,  2_000_000e18, uint256(2_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(curveSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(curveDepositKey,  2_100_000e18, uint256(2_100_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 3_000_000e18, uint256(3_000_000e18) / 1 days);
+
+        rateLimits.setRateLimitData(curveUsdcSwapKey,     1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtSwapKey,     1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(curveUsdcDepositKey,  2_000_000e6, uint256(2_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtDepositKey,  2_000_000e6, uint256(2_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(curveUsdcWithdrawKey, 3_000_000e6, uint256(3_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtWithdrawKey, 3_000_000e6, uint256(3_000_000e6) / 1 days);
         vm.stopPrank();
 
         // Set a higher slippage to allow for successes
         vm.prank(GROVE_PROXY);
         mainnetController.setMaxSlippage(CURVE_POOL, 0.98e18);
+    }
+
+    function _setUnlimitedCurveRateLimits() internal {
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setUnlimitedRateLimitData(curveDepositKey);
+        rateLimits.setUnlimitedRateLimitData(curveWithdrawKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdcSwapKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdtSwapKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdcDepositKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdtDepositKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdcWithdrawKey);
+        rateLimits.setUnlimitedRateLimitData(curveUsdtWithdrawKey);
+        vm.stopPrank();
+    }
+
+    // Pro-rata share of each pool balance backing `lpTokens`, i.e. what CurveLib treats as deposited
+    function _proRataBalances(uint256 lpTokens) internal view returns (uint256[] memory amounts) {
+        uint256 totalSupply = curveLp.totalSupply();
+        amounts = new uint256[](2);
+        for (uint256 i = 0; i < 2; i++) {
+            amounts[i] = curvePool.balances(i) * lpTokens / totalSupply;
+        }
+    }
+
+    function _toValue(uint256[] memory amounts) internal view returns (uint256 value) {
+        uint256[] memory rates = curvePool.stored_rates();
+        for (uint256 i = 0; i < amounts.length; i++) {
+            value += amounts[i] * rates[i];
+        }
+        value /= 1e18;
+    }
+
+    function _swappedIn(uint256 input, uint256 deposited) internal pure returns (uint256) {
+        return input > deposited ? input - deposited : 0;
     }
 
     function _addLiquidity(uint256 usdcAmount, uint256 usdtAmount)
@@ -138,59 +199,129 @@ contract MainnetControllerAddLiquidityCurveFailureTests is CurveTestBase {
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
     }
 
-    function test_addLiquidityCurve_zeroMaxAmount() public {
-        bytes32 curveDeposit = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(), CURVE_POOL);
-
-        vm.prank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveDeposit, 0, 0);
-
-        uint256[] memory amounts = new uint256[](2);
+    function _defaultAddLiquidityParams() internal pure returns (uint256[] memory amounts, uint256 minLpAmount) {
+        amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
         amounts[1] = 1_000_000e6;
 
-        uint256 minLpAmount = 1_950_000e18;
+        minLpAmount = 1_950_000e18;
+    }
+
+    function _assertAddLiquidityZeroMaxAmount(bytes32 key) internal {
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(key, 0, 0);
+
+        (uint256[] memory amounts, uint256 minLpAmount) = _defaultAddLiquidityParams();
+
+        deal(address(usdc), address(almProxy), amounts[0]);
+        deal(address(usdt), address(almProxy), amounts[1]);
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
     }
 
-    function test_addLiquidityCurve_rateLimitBoundaryAsset0() public {
-        deal(address(usdc), address(almProxy), 1_000_000e6);
-        deal(address(usdt), address(almProxy), 1_000_000e6);
+    function test_addLiquidityCurve_zeroMaxAmount() public {
+        _assertAddLiquidityZeroMaxAmount(curveDepositKey);
+    }
 
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1_000_000e6 + 1;
-        amounts[1] = 1_000_000e6;
+    function test_addLiquidityCurve_zeroMaxAmount_asset0Deposit() public {
+        _assertAddLiquidityZeroMaxAmount(curveUsdcDepositKey);
+    }
 
-        uint256 minLpAmount = 1_950_000e18;
+    function test_addLiquidityCurve_zeroMaxAmount_asset1Deposit() public {
+        _assertAddLiquidityZeroMaxAmount(curveUsdtDepositKey);
+    }
 
-        vm.startPrank(relayer);
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
+    // Swap limits are charged even when nothing was swapped in, so both keys must be configured
+    function test_addLiquidityCurve_zeroMaxAmount_asset0Swap() public {
+        _assertAddLiquidityZeroMaxAmount(curveUsdcSwapKey);
+    }
 
-        amounts[0] = 1_000_000e6;
+    function test_addLiquidityCurve_zeroMaxAmount_asset1Swap() public {
+        _assertAddLiquidityZeroMaxAmount(curveUsdtSwapKey);
+    }
 
+    function test_addLiquidityCurve_legacySwapKeyNotHonoured() public {
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(curveLegacySwapKey, 0, 0);
+
+        (uint256[] memory amounts, uint256 minLpAmount) = _defaultAddLiquidityParams();
+
+        deal(address(usdc), address(almProxy), amounts[0]);
+        deal(address(usdt), address(almProxy), amounts[1]);
+
+        vm.prank(relayer);
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
     }
 
-    function test_addLiquidityCurve_rateLimitBoundaryAsset1() public {
-        deal(address(usdc), address(almProxy), 1_000_000e6);
-        deal(address(usdt), address(almProxy), 1_000_000e6);
+    // Learns the exact charge on `key` from a successful call, then replays it with the limit
+    // set one unit below (revert) and exactly at (success) that charge.
+    function _assertAddLiquidityRateLimitBoundary(bytes32 key, uint256[] memory amounts, uint256 minLpAmount) internal {
+        deal(address(usdc), address(almProxy), amounts[0]);
+        deal(address(usdt), address(almProxy), amounts[1]);
 
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 1_000_000e6;
-        amounts[1] = 1_000_000e6 + 1;
+        uint256 id = vm.snapshotState();
 
-        uint256 minLpAmount = 1_950_000e18;
+        uint256 limitBefore = rateLimits.getCurrentRateLimit(key);
 
-        vm.startPrank(relayer);
+        vm.prank(relayer);
+        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
+
+        uint256 charged = limitBefore - rateLimits.getCurrentRateLimit(key);
+
+        assertGt(charged, 0, "nothing charged");
+
+        vm.revertToState(id);
+
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(key, charged - 1, 0);
+
+        vm.prank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
 
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(key, charged, 0);
+
+        vm.prank(relayer);
+        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
+
+        assertEq(rateLimits.getCurrentRateLimit(key), 0);
+    }
+
+    function _assertAddLiquidityRateLimitBoundary(bytes32 key) internal {
+        (uint256[] memory amounts, uint256 minLpAmount) = _defaultAddLiquidityParams();
+        _assertAddLiquidityRateLimitBoundary(key, amounts, minLpAmount);
+    }
+
+    function test_addLiquidityCurve_rateLimitBoundary_aggregateDeposit() public {
+        _assertAddLiquidityRateLimitBoundary(curveDepositKey);
+    }
+
+    function test_addLiquidityCurve_rateLimitBoundary_asset0Deposit() public {
+        _assertAddLiquidityRateLimitBoundary(curveUsdcDepositKey);
+    }
+
+    function test_addLiquidityCurve_rateLimitBoundary_asset1Deposit() public {
+        _assertAddLiquidityRateLimitBoundary(curveUsdtDepositKey);
+    }
+
+    // The pool is skewed towards USDT, so a balanced deposit swaps USDC in and charges its swap limit
+    function test_addLiquidityCurve_rateLimitBoundary_asset0Swap() public {
+        _assertAddLiquidityRateLimitBoundary(curveUsdcSwapKey);
+    }
+
+    // One-sided USDT deposit so the USDT swap limit is charged with the swapped-in amount
+    function test_addLiquidityCurve_rateLimitBoundary_asset1Swap() public {
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(CURVE_POOL, 0.7e18);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 0;
         amounts[1] = 1_000_000e6;
 
-        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
+        _assertAddLiquidityRateLimitBoundary(curveUsdtSwapKey, amounts, 800_000e18);
     }
 
 }
@@ -223,8 +354,11 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), 0);
         assertEq(curveLp.totalSupply(),                startingTotalSupply);
 
-        assertEq(rateLimits.getCurrentRateLimit(curveDepositKey), 2_000_000e18);
-        assertEq(rateLimits.getCurrentRateLimit(curveSwapKey),    1_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(curveDepositKey),     2_100_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcDepositKey), 2_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtDepositKey), 2_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey),    1_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtSwapKey),    1_000_000e6);
 
         vm.prank(relayer);
         uint256 lpTokensReceived = mainnetController.addLiquidityCurve(
@@ -247,9 +381,24 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply + lpTokensReceived);
 
+        // Deposit limits are charged with the pro-rata pool balances backing the minted LP tokens,
+        // swap limits with whatever was put in on top of that share.
+        uint256[] memory deposited = _proRataBalances(lpTokensReceived);
+
         // NOTE: A large swap happened because of the balances in the pool being skewed towards USDT.
-        assertEq(rateLimits.getCurrentRateLimit(curveDepositKey), 0);
-        assertEq(rateLimits.getCurrentRateLimit(curveSwapKey),    465_022.869727319215817005e18);
+        assertEq(deposited[0], 465_059.586753e6);
+        assertEq(deposited[1], 1_535_013.847298e6);
+
+        // The balancing deposit is worth more than the 2m put in
+        assertEq(_toValue(deposited), 2_000_073.434051e18);
+
+        assertEq(rateLimits.getCurrentRateLimit(curveDepositKey),     2_100_000e18 - _toValue(deposited));
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcDepositKey), 2_000_000e6  - deposited[0]);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtDepositKey), 2_000_000e6  - deposited[1]);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey),    1_000_000e6  - (1_000_000e6 - deposited[0]));
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtSwapKey),    1_000_000e6);  // USDT share exceeds input, nothing swapped in
+
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey), 465_059.586753e6);
     }
 
     function test_addLiquidityCurve_swapRateLimit() public {
@@ -259,7 +408,7 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
 
         deal(address(usdc), address(almProxy), 1_000_000e6);
 
-        // Step 1: Add liquidity, check how much the rate limit was reduced
+        // Step 1: Add liquidity, check how much the rate limits were reduced
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = 1_000_000e6;
@@ -267,13 +416,15 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
 
         uint256 minLpAmount = 800_000e18;
 
-        uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 startingUsdcSwapLimit = rateLimits.getCurrentRateLimit(curveUsdcSwapKey);
+        uint256 startingUsdtSwapLimit = rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         vm.startPrank(relayer);
 
         uint256 lpTokens = mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
 
-        uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 derivedUsdcSwapped = startingUsdcSwapLimit - rateLimits.getCurrentRateLimit(curveUsdcSwapKey);
+        uint256 derivedUsdtSwapped = startingUsdtSwapLimit - rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         // Step 2: Withdraw full balance of LP tokens, withdrawing proportional amounts from the pool
 
@@ -284,37 +435,26 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
 
         uint256[] memory withdrawnAmounts = mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokens, minWithdrawnAmounts);
 
-        // Step 3: Calculate the average difference between the assets deposited and withdrawn, into an average swap amount
-        //         and compare against the derived swap amount
+        // Step 3: The USDC put in on top of the pro-rata USDC share was swapped into USDT
 
-        uint256[] memory rates = ICurvePoolLike(CURVE_POOL).stored_rates();
-
-        uint256 totalSwapped;
-        for (uint256 i; i < withdrawnAmounts.length; i++) {
-            totalSwapped += _absSubtraction(withdrawnAmounts[i] * rates[i], amounts[i] * rates[i]) / 1e18;
-        }
-        totalSwapped /= 2;
-
-        // Difference is accurate to within 1 unit of USDC
-        assertApproxEqAbs(derivedSwapAmount, totalSwapped, 0.000001e18);
-
-        // Check real values, comparing amount of USDC deposited with amount withdrawn as a result of the "swap"
         assertEq(withdrawnAmounts[0], 265_480.996766e6);
         assertEq(withdrawnAmounts[1], 734_605.036920e6);
 
-        // Some accuracy differences because of fees
-        assertEq(derivedSwapAmount,                 734_562.020077130663332756e18);
-        assertEq(1_000_000e6 - withdrawnAmounts[0], 734_519.003234e6);
+        // Difference is accurate to within 1 unit of USDC (pro-rata rounding)
+        assertApproxEqAbs(derivedUsdcSwapped, 1_000_000e6 - withdrawnAmounts[0], 1);
+
+        assertEq(derivedUsdcSwapped, 734_519.003234e6);
+        assertEq(derivedUsdtSwapped, 0);
     }
 
     function testFuzz_addLiquidityCurve_swapRateLimit(uint256 usdcAmount, uint256 usdtAmount) public {
         // Set slippage to be zero and unlimited rate limits for purposes of this test
         // Not using actual unlimited rate limit because need to get swap amount to be reduced.
+        _setUnlimitedCurveRateLimits();
         vm.startPrank(GROVE_PROXY);
         mainnetController.setMaxSlippage(CURVE_POOL, 1);  // 1e-16%
-        rateLimits.setUnlimitedRateLimitData(curveDepositKey);
-        rateLimits.setUnlimitedRateLimitData(curveWithdrawKey);
-        rateLimits.setRateLimitData(curveSwapKey, type(uint256).max - 1, type(uint256).max - 1);
+        rateLimits.setRateLimitData(curveUsdcSwapKey, type(uint256).max - 1, type(uint256).max - 1);
+        rateLimits.setRateLimitData(curveUsdtSwapKey, type(uint256).max - 1, type(uint256).max - 1);
         vm.stopPrank();
 
         usdcAmount = _bound(usdcAmount, 1_000_000e6, 10_000_000_000e6);
@@ -323,19 +463,21 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
         deal(address(usdc), address(almProxy), usdcAmount);
         deal(address(usdt), address(almProxy), usdtAmount);
 
-        // Step 1: Add liquidity with fuzzed inputs, check how much the rate limit was reduced
+        // Step 1: Add liquidity with fuzzed inputs, check how much the rate limits were reduced
 
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = usdcAmount;
         amounts[1] = usdtAmount;
 
-        uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 startingUsdcSwapLimit = rateLimits.getCurrentRateLimit(curveUsdcSwapKey);
+        uint256 startingUsdtSwapLimit = rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         vm.startPrank(relayer);
 
         uint256 lpTokens = mainnetController.addLiquidityCurve(CURVE_POOL, amounts, 1e18);
 
-        uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 derivedUsdcSwapped = startingUsdcSwapLimit - rateLimits.getCurrentRateLimit(curveUsdcSwapKey);
+        uint256 derivedUsdtSwapped = startingUsdtSwapLimit - rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         // Step 2: Withdraw full balance of LP tokens, withdrawing proportional amounts from the pool
 
@@ -345,19 +487,11 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
 
         uint256[] memory withdrawnAmounts = mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokens, minWithdrawnAmounts);
 
-        // Step 3: Calculate the average difference between the assets deposited and withdrawn, into an average swap amount
-        //         and compare against the derived swap amount
+        // Step 3: Whatever was deposited above the proportional withdrawal is the amount swapped in per token
 
-        uint256[] memory rates = ICurvePoolLike(CURVE_POOL).stored_rates();
-
-        uint256 totalSwapped;
-        for (uint256 i; i < withdrawnAmounts.length; i++) {
-            totalSwapped += _absSubtraction(withdrawnAmounts[i] * rates[i], amounts[i] * rates[i]) / 1e18;
-        }
-        totalSwapped /= 2;
-
-        // Difference is accurate to within 1 unit of USDC
-        assertApproxEqAbs(derivedSwapAmount, totalSwapped, 0.000001e18);
+        // Difference is accurate to within 1 unit of each token (pro-rata rounding)
+        assertApproxEqAbs(derivedUsdcSwapped, _swappedIn(amounts[0], withdrawnAmounts[0]), 1);
+        assertApproxEqAbs(derivedUsdtSwapped, _swappedIn(amounts[1], withdrawnAmounts[1]), 1);
     }
 
 }
@@ -436,45 +570,61 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
     }
 
-    function test_removeLiquidityCurve_zeroMaxAmount() public {
-        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+    function _defaultMinWithdrawAmounts() internal pure returns (uint256[] memory minWithdrawAmounts) {
+        // Skewed pool, so min withdraw amounts are as well
+        minWithdrawAmounts = new uint256[](2);
+        minWithdrawAmounts[0] = 465_000e6;
+        minWithdrawAmounts[1] = 1_535_000e6;
+    }
 
+    function _assertRemoveLiquidityZeroMaxAmount(bytes32 key) internal {
         vm.prank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveWithdraw, 0, 0);
+        rateLimits.setRateLimitData(key, 0, 0);
 
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
-        uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = 1_535_000e6;
+        uint256[] memory minWithdrawAmounts = _defaultMinWithdrawAmounts();
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
         mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
     }
 
-    function test_removeLiquidityCurve_rateLimitBoundary() public {
+    function test_removeLiquidityCurve_zeroMaxAmount() public {
+        _assertRemoveLiquidityZeroMaxAmount(curveWithdrawKey);
+    }
+
+    function test_removeLiquidityCurve_zeroMaxAmount_asset0() public {
+        _assertRemoveLiquidityZeroMaxAmount(curveUsdcWithdrawKey);
+    }
+
+    function test_removeLiquidityCurve_zeroMaxAmount_asset1() public {
+        _assertRemoveLiquidityZeroMaxAmount(curveUsdtWithdrawKey);
+    }
+
+    // Learns the exact charge on `key` from a successful call, then replays it with the limit
+    // set one unit below (revert) and exactly at (success) that charge.
+    function _assertRemoveLiquidityRateLimitBoundary(bytes32 key) internal {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
-        uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = 1_535_000e6;
+        uint256[] memory minWithdrawAmounts = _defaultMinWithdrawAmounts();
 
         uint256 id = vm.snapshotState();
 
-        // Use a success call to see how many tokens are returned from burning all LP tokens
-        vm.prank(relayer);
-        uint256[] memory withdrawnAmounts = mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+        uint256 limitBefore = rateLimits.getCurrentRateLimit(key);
 
-        uint256 totalWithdrawn = (withdrawnAmounts[0] + withdrawnAmounts[1]) * 1e12;
+        vm.prank(relayer);
+        mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+
+        uint256 charged = limitBefore - rateLimits.getCurrentRateLimit(key);
+
+        assertGt(charged, 0, "nothing charged");
 
         vm.revertToState(id);
 
-        bytes32 curveWithdraw = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
-
         // Set to below boundary
         vm.prank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveWithdraw, totalWithdrawn - 1, totalWithdrawn / 1 days);
+        rateLimits.setRateLimitData(key, charged - 1, charged / 1 days);
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
@@ -482,10 +632,44 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
 
         // Set to boundary
         vm.prank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveWithdraw, totalWithdrawn, totalWithdrawn / 1 days);
+        rateLimits.setRateLimitData(key, charged, charged / 1 days);
 
         vm.prank(relayer);
         mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+
+        assertEq(rateLimits.getCurrentRateLimit(key), 0);
+    }
+
+    function test_removeLiquidityCurve_rateLimitBoundary() public {
+        _assertRemoveLiquidityRateLimitBoundary(curveWithdrawKey);
+    }
+
+    function test_removeLiquidityCurve_rateLimitBoundary_asset0() public {
+        _assertRemoveLiquidityRateLimitBoundary(curveUsdcWithdrawKey);
+    }
+
+    function test_removeLiquidityCurve_rateLimitBoundary_asset1() public {
+        _assertRemoveLiquidityRateLimitBoundary(curveUsdtWithdrawKey);
+    }
+
+    // Received amounts are measured from the proxy balance rather than trusting the pool
+    function test_removeLiquidityCurve_minAmountOutNotMet() public {
+        uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
+
+        uint256[] memory minWithdrawAmounts = _defaultMinWithdrawAmounts();
+
+        // Pool "succeeds" without transferring anything out
+        vm.mockCall(
+            CURVE_POOL,
+            abi.encodeWithSelector(ICurvePoolLike.remove_liquidity.selector),
+            ""
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert("CurveLib/min-amount-out-not-met");
+        mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+
+        vm.clearMockedCalls();
     }
 
 }
@@ -512,7 +696,9 @@ contract MainnetControllerRemoveLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply);
 
-        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey), 3_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey),     3_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcWithdrawKey), 3_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtWithdrawKey), 3_000_000e6);
 
         uint256[] memory minWithdrawAmounts = new uint256[](2);
         minWithdrawAmounts[0] = 465_000e6;
@@ -547,7 +733,9 @@ contract MainnetControllerRemoveLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), 0);
         assertEq(curveLp.totalSupply(),                startingTotalSupply - lpTokensReceived);
 
-        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey), 3_000_000e18 - sumAssetsReceived);
+        assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKey),     3_000_000e18 - sumAssetsReceived);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcWithdrawKey), 3_000_000e6  - assetsReceived[0]);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtWithdrawKey), 3_000_000e6  - assetsReceived[1]);
     }
 
 }
@@ -633,14 +821,56 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
     }
 
     function test_swapCurve_zeroMaxAmount() public {
-        bytes32 curveSwap = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(), CURVE_POOL);
-
         vm.prank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveSwap, 0, 0);
+        rateLimits.setRateLimitData(curveUsdtSwapKey, 0, 0);
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
         mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+    }
+
+    // The swap limit is keyed on the input token; the other token's key is not consulted
+    function test_swapCurve_otherTokenKeyNotHonoured() public {
+        _addLiquidity();
+        skip(1 days);  // Recharge swap rate limit from deposit
+
+        deal(address(usdt), address(almProxy), 1_000_000e6);
+
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(curveUsdcSwapKey, 0, 0);
+
+        vm.prank(relayer);
+        mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+    }
+
+    function test_swapCurve_legacyKeyNotHonoured() public {
+        _addLiquidity();
+        skip(1 days);  // Recharge swap rate limit from deposit
+
+        deal(address(usdt), address(almProxy), 1_000_000e6);
+
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(curveLegacySwapKey, 0, 0);
+
+        vm.prank(relayer);
+        mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+    }
+
+    // The output amount is measured from the proxy balance, not trusted from the pool's return value
+    function test_swapCurve_minAmountOutNotMet() public {
+        deal(address(usdt), address(almProxy), 1_000_000e6);
+
+        vm.mockCall(
+            CURVE_POOL,
+            abi.encodeWithSelector(ICurvePoolLike.exchange.selector),
+            abi.encode(uint256(980_000e6))
+        );
+
+        vm.prank(relayer);
+        vm.expectRevert("CurveLib/min-amount-out-not-met");
+        mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+
+        vm.clearMockedCalls();
     }
 
     function test_swapCurve_rateLimitBoundary() public {
@@ -678,7 +908,8 @@ contract MainnetControllerSwapCurveSuccessTests is CurveTestBase {
         assertEq(usdc.balanceOf(address(almProxy)), 0);
         assertEq(usdc.balanceOf(CURVE_POOL),        startingUsdcBalance);
 
-        assertEq(rateLimits.getCurrentRateLimit(curveSwapKey), 1_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtSwapKey), 1_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey), 1_000_000e6);
 
         assertEq(usdc.allowance(address(almProxy), CURVE_POOL), 0);
         assertEq(usdt.allowance(address(almProxy), CURVE_POOL), 0);
@@ -697,7 +928,8 @@ contract MainnetControllerSwapCurveSuccessTests is CurveTestBase {
         assertEq(usdc.balanceOf(address(almProxy)), amountOut);
         assertEq(usdc.balanceOf(CURVE_POOL),        startingUsdcBalance - amountOut);
 
-        assertEq(rateLimits.getCurrentRateLimit(curveSwapKey), 0);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdtSwapKey), 0);
+        assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey), 1_000_000e6);
     }
 
 }
@@ -705,11 +937,7 @@ contract MainnetControllerSwapCurveSuccessTests is CurveTestBase {
 contract MainnetControllerGetVirtualPriceStressTests is CurveTestBase {
 
     function test_getVirtualPrice_stressTest() public {
-        vm.startPrank(GROVE_PROXY);
-        rateLimits.setUnlimitedRateLimitData(curveDepositKey);
-        rateLimits.setUnlimitedRateLimitData(curveSwapKey);
-        rateLimits.setUnlimitedRateLimitData(curveWithdrawKey);
-        vm.stopPrank();
+        _setUnlimitedCurveRateLimits();
 
         _addLiquidity(100_000_000e6, 100_000_000e6);
 
@@ -774,21 +1002,34 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
     IERC20 lbtc = IERC20(0x8236a87084f8B84306f72007F36F2618A5634494);
     IERC20 wbtc = IERC20(0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599);
 
+    address[3] tokens = [address(ebtc), address(lbtc), address(wbtc)];
+
     bytes32 curveDepositKey;
-    bytes32 curveSwapKey;
     bytes32 curveWithdrawKey;
+
+    bytes32[3] curveSwapKeys;
+    bytes32[3] curveDepositKeys;
+    bytes32[3] curveWithdrawKeys;
 
     function setUp() public virtual override  {
         super.setUp();
 
         curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveSwapKey     = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
         curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  5_000_000e18, uint256(5_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(curveSwapKey,     5_000_000e18, uint256(5_000_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 5_000_000e18, uint256(5_000_000e18) / 1 days);
+
+        for (uint256 i = 0; i < 3; i++) {
+            curveSwapKeys[i]     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     tokens[i], CURVE_POOL);
+            curveDepositKeys[i]  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  tokens[i], CURVE_POOL);
+            curveWithdrawKeys[i] = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), tokens[i], CURVE_POOL);
+
+            rateLimits.setRateLimitData(curveSwapKeys[i],     5_000e8, uint256(5_000e8) / 1 days);
+            rateLimits.setRateLimitData(curveDepositKeys[i],  5_000e8, uint256(5_000e8) / 1 days);
+            rateLimits.setRateLimitData(curveWithdrawKeys[i], 5_000e8, uint256(5_000e8) / 1 days);
+        }
         vm.stopPrank();
 
         // Set a higher slippage to allow for successes
@@ -803,7 +1044,7 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
     function test_addLiquidityCurve_swapRateLimit() public {
         deal(address(ebtc), address(almProxy), 2_000e8);
 
-        // Step 1: Add liquidity, check how much the rate limit was reduced
+        // Step 1: Add liquidity, check how much the rate limits were reduced
 
         uint256[] memory amounts = new uint256[](3);
         amounts[0] = 1e8;
@@ -812,13 +1053,19 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
 
         uint256 minLpAmount = 0.1e18;
 
-        uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256[3] memory startingSwapLimits;
+        for (uint256 i = 0; i < 3; i++) {
+            startingSwapLimits[i] = rateLimits.getCurrentRateLimit(curveSwapKeys[i]);
+        }
 
         vm.startPrank(relayer);
 
         uint256 lpTokens = mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
 
-        uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256[3] memory derivedSwapped;
+        for (uint256 i = 0; i < 3; i++) {
+            derivedSwapped[i] = startingSwapLimits[i] - rateLimits.getCurrentRateLimit(curveSwapKeys[i]);
+        }
 
         // Step 2: Withdraw full balance of LP tokens, withdrawing proportional amounts from the pool
 
@@ -829,16 +1076,25 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
 
         uint256[] memory withdrawnAmounts = mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokens, minWithdrawnAmounts);
 
-        // Step 3: Show "swapped" asset results, demonstrate that the swap rate limit was reduced by the amount
-        //         of eBTC that was reduced, 1e8 deposited + ~0.35e8 withdrawn = ~0.65e8 swapped
+        // Step 3: Show "swapped" asset results, demonstrate that only the eBTC swap rate limit was reduced,
+        //         by the amount of eBTC swapped in: 1e8 deposited - ~0.35e8 withdrawn = ~0.65e8 swapped
 
         assertEq(withdrawnAmounts[0], 0.35689723e8);
         assertEq(withdrawnAmounts[1], 0.22809783e8);
         assertEq(withdrawnAmounts[2], 0.41478858e8);
 
-        // Some accuracy differences because of fees
-        assertEq(derivedSwapAmount,         0.642994597417510402e18);
-        assertEq(1e8 - withdrawnAmounts[0], 0.64310277e8);
+        // Difference is accurate to within 1 unit of eBTC (pro-rata rounding)
+        assertApproxEqAbs(derivedSwapped[0], 1e8 - withdrawnAmounts[0], 1);
+
+        assertEq(derivedSwapped[0], 0.64310277e8);
+        assertEq(derivedSwapped[1], 0);
+        assertEq(derivedSwapped[2], 0);
+
+        // Each token's pro-rata share backing the position was charged to its deposit limit
+        for (uint256 i = 0; i < 3; i++) {
+            assertApproxEqAbs(rateLimits.getCurrentRateLimit(curveDepositKeys[i]), 5_000e8 - withdrawnAmounts[i], 1);
+            assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKeys[i]),         5_000e8 - withdrawnAmounts[i]);
+        }
     }
 
 }
@@ -850,20 +1106,38 @@ contract MainnetControllerSUsdsUsdtSwapRateLimitTest is ForkTestBase {
     IERC20 curveLp = IERC20(CURVE_POOL);
 
     bytes32 curveDepositKey;
-    bytes32 curveSwapKey;
     bytes32 curveWithdrawKey;
+
+    bytes32 curveSUsdsSwapKey;
+    bytes32 curveUsdtSwapKey;
+    bytes32 curveSUsdsDepositKey;
+    bytes32 curveUsdtDepositKey;
+    bytes32 curveSUsdsWithdrawKey;
+    bytes32 curveUsdtWithdrawKey;
 
     function setUp() public virtual override  {
         super.setUp();
 
         curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveSwapKey     = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
         curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+
+        curveSUsdsSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(susds), CURVE_POOL);
+        curveUsdtSwapKey      = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdt),  CURVE_POOL);
+        curveSUsdsDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(susds), CURVE_POOL);
+        curveUsdtDepositKey   = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdt),  CURVE_POOL);
+        curveSUsdsWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(susds), CURVE_POOL);
+        curveUsdtWithdrawKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdt),  CURVE_POOL);
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  5_000_000e18, uint256(5_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(curveSwapKey,     5_000_000e18, uint256(5_000_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 5_000_000e18, uint256(5_000_000e18) / 1 days);
+
+        rateLimits.setRateLimitData(curveSUsdsSwapKey,     5_000_000e18, uint256(5_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtSwapKey,      5_000_000e6,  uint256(5_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(curveSUsdsDepositKey,  5_000_000e18, uint256(5_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtDepositKey,   5_000_000e6,  uint256(5_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(curveSUsdsWithdrawKey, 5_000_000e18, uint256(5_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(curveUsdtWithdrawKey,  5_000_000e6,  uint256(5_000_000e6)  / 1 days);
         vm.stopPrank();
 
         // Set a higher slippage to allow for successes
@@ -904,13 +1178,15 @@ contract MainnetControllerSUsdsUsdtSwapRateLimitTest is ForkTestBase {
 
         uint256 minLpAmount = 100_000e18;
 
-        uint256 startingRateLimit = rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 startingSUsdsSwapLimit = rateLimits.getCurrentRateLimit(curveSUsdsSwapKey);
+        uint256 startingUsdtSwapLimit  = rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         vm.startPrank(relayer);
 
         uint256 lpTokens = mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
 
-        uint256 derivedSwapAmount = startingRateLimit - rateLimits.getCurrentRateLimit(curveSwapKey);
+        uint256 derivedSUsdsSwapped = startingSUsdsSwapLimit - rateLimits.getCurrentRateLimit(curveSUsdsSwapKey);
+        uint256 derivedUsdtSwapped  = startingUsdtSwapLimit  - rateLimits.getCurrentRateLimit(curveUsdtSwapKey);
 
         // Step 2: Withdraw full balance of LP tokens, withdrawing proportional amounts from the pool
 
@@ -920,16 +1196,17 @@ contract MainnetControllerSUsdsUsdtSwapRateLimitTest is ForkTestBase {
 
         uint256[] memory withdrawnAmounts = mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokens, minWithdrawnAmounts);
 
-        // Step 3: Show "swapped" asset results, demonstrate that the swap rate limit was reduced by the dollar amount
-        //         of sUSDS that was reduced, 1m deposited + ~666k withdrawn = ~333k swapped
+        // Step 3: Show "swapped" asset results, demonstrate that the sUSDS swap rate limit was reduced by the
+        //         amount of sUSDS swapped in (in sUSDS units): 1m deposited - ~666k withdrawn = ~333k swapped
 
         assertEq(susds.convertToAssets(withdrawnAmounts[0]), 666_655.261741191232680640e18);
         assertEq(withdrawnAmounts[1],                        333_327.974363e6);
 
-        // Some accuracy differences because of fees
-        assertEq(derivedSwapAmount, 333_336.356311008220852225e18);
+        // Difference is accurate to within 1 unit of sUSDS (pro-rata rounding)
+        assertApproxEqAbs(derivedSUsdsSwapped, susdsAmount - withdrawnAmounts[0], 1);
 
-        assertEq(1_000_000e18 - susds.convertToAssets(withdrawnAmounts[0]), 333_344.738258808767319360e18);
+        assertEq(susds.convertToAssets(derivedSUsdsSwapped), 333_344.738258808767319358e18);
+        assertEq(derivedUsdtSwapped,                         0);
     }
 
 }
@@ -1062,20 +1339,30 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
     IERC20 curveLp = IERC20(CURVE_POOL);
 
     bytes32 curveDepositKey;
-    bytes32 curveSwapKey;
     bytes32 curveWithdrawKey;
 
     function setUp() public virtual override  {
         super.setUp();
 
         curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveSwapKey     = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(),     CURVE_POOL);
         curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
 
+        bytes32 swapId     = mainnetController.LIMIT_CURVE_SWAP();
+        bytes32 depositId  = mainnetController.LIMIT_CURVE_DEPOSIT();
+        bytes32 withdrawId = mainnetController.LIMIT_CURVE_WITHDRAW();
+
+        // NOTE: Aggregate deposit limit has headroom because the pro-rata value of a balancing deposit
+        //       can exceed the value put in.
         vm.startPrank(GROVE_PROXY);
-        rateLimits.setRateLimitData(curveDepositKey,  2_000_000e18, uint256(2_000_000e18) / 1 days);
-        rateLimits.setRateLimitData(curveSwapKey,     1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(curveDepositKey,  2_100_000e18, uint256(2_100_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 3_000_000e18, uint256(3_000_000e18) / 1 days);
+
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(swapId,     address(susds), CURVE_POOL), 1_000_000e18, uint256(1_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(swapId,     address(usdt),  CURVE_POOL), 1_000_000e6,  uint256(1_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(depositId,  address(susds), CURVE_POOL), 2_000_000e18, uint256(2_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(depositId,  address(usdt),  CURVE_POOL), 2_000_000e6,  uint256(2_000_000e6)  / 1 days);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(withdrawId, address(susds), CURVE_POOL), 3_000_000e18, uint256(3_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetDestinationKey(withdrawId, address(usdt),  CURVE_POOL), 3_000_000e6,  uint256(3_000_000e6)  / 1 days);
         vm.stopPrank();
 
         // Set a higher slippage to allow for successes
