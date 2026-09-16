@@ -166,14 +166,6 @@ contract ForeignController is AccessControl {
         _;
     }
 
-    modifier rateLimitExists(bytes32 key) {
-        require(
-            rateLimits.getRateLimitData(key).maxAmount > 0,
-            "ForeignController/invalid-action"
-        );
-        _;
-    }
-
     /**********************************************************************************************/
     /*** Admin functions                                                                        ***/
     /**********************************************************************************************/
@@ -475,7 +467,7 @@ contract ForeignController is AccessControl {
 
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
-        ERC7540Lib.requestDeposit(ERC7540Lib.RequestParams({
+        ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
             rateLimitId : LIMIT_7540_DEPOSIT,
@@ -496,12 +488,12 @@ contract ForeignController is AccessControl {
 
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
-        ERC7540Lib.requestRedeem(ERC7540Lib.RequestParams({
+        ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
             rateLimitId : LIMIT_7540_REDEEM,
             token       : token,
-            amount      : shares
+            shares      : shares
         }));
     }
 
