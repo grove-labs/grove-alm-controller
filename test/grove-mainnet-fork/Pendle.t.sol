@@ -14,13 +14,14 @@ contract PendleTestBase is ForkTestBase {
 
     bytes32 redeemKey;
 
+    // Pre-hardening key `(LIMIT_PENDLE_PT_REDEEM, market)`, no longer consulted
+    bytes32 legacyRedeemKey;
+
     function setUp() public virtual override {
         super.setUp();
 
-        redeemKey = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_PENDLE_PT_REDEEM(),
-            address(pendleMarket)
-        );
+        redeemKey       = _getRedeemKey(pendleMarket);
+        legacyRedeemKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_PENDLE_PT_REDEEM(), address(pendleMarket));
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(redeemKey, 10_000_000e18, uint256(10_000_000e18) / 1 days);
@@ -29,6 +30,11 @@ contract PendleTestBase is ForkTestBase {
 
     function _getBlock() internal pure override returns (uint256) {
         return 23319550;  // 8 Sep 2025
+    }
+
+    function _getRedeemKey(IPendleMarket market) internal view returns (bytes32) {
+        (, address pt,) = market.readTokens();
+        return RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_PENDLE_PT_REDEEM(), pt, address(market));
     }
 
 }
@@ -82,6 +88,28 @@ contract MainnetControllerRedeemFailurePendleTests is PendleTestBase {
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
+        mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18, 1);
+
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(redeemKey, exactAmountOut, 1);
+
+        vm.prank(relayer);
+        mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18, 1);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 0);
+    }
+
+    function test_redeemPendlePT_legacyKeyNotHonoured() public {
+        vm.prank(GROVE_PROXY);
+        rateLimits.setRateLimitData(legacyRedeemKey, 0, 0);
+
+        (, address pt,) = pendleMarket.readTokens();
+        vm.prank(PT_WHALE);
+        IERC20(pt).transfer((address(almProxy)), 1_000_000e18);
+
+        vm.warp(pendleMarket.expiry());
+
+        vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 500_000e18, 1);
     }
 
@@ -155,6 +183,10 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
         assertEq(IERC20(pt).balanceOf(address(almProxy)),         1_000_000e18);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 0);
 
+        assertEq(IERC20(pt).allowance(address(almProxy), Ethereum.PENDLE_ROUTER), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 10_000_000e18);
+
         vm.warp(pendleMarket.expiry());
 
         uint256 pyIndexCurrent = IYT(yt).pyIndexCurrent();
@@ -166,6 +198,10 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
         assertEq(IERC20(pt).balanceOf(address(almProxy)), 500_000e18);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 500_000e18 * 1e18 / pyIndexCurrent);
 
+        assertEq(IERC20(pt).allowance(address(almProxy), Ethereum.PENDLE_ROUTER), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 10_000_000e18 - IERC20(yieldToken).balanceOf(address(almProxy)));
+
         vm.warp(block.timestamp + 14 days);
 
         pyIndexCurrent = IYT(yt).pyIndexCurrent();
@@ -176,14 +212,13 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
 
         assertEq(IERC20(pt).balanceOf(address(almProxy)), 0);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 1_000_000e18 * 1e18 / pyIndexCurrent);
+
+        assertEq(IERC20(pt).allowance(address(almProxy), Ethereum.PENDLE_ROUTER), 0);
     }
 
     function test_redeemPendlePT_USDe() public {
         pendleMarket = IPendleMarket(0x6d98a2b6CDbF44939362a3E99793339Ba2016aF4);
-        redeemKey = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_PENDLE_PT_REDEEM(),
-            address(pendleMarket)
-        );
+        redeemKey    = _getRedeemKey(pendleMarket);
 
         vm.prank(GROVE_PROXY);
         rateLimits.setRateLimitData(redeemKey, 10_000_000e18, uint256(10_000_000e18) / 1 days);
@@ -227,10 +262,7 @@ contract MainnetControllerRedeemSuccessPendleTests is PendleTestBase {
 
     function test_redeemPendlePT_stETH() public {
         pendleMarket = IPendleMarket(0xC374f7eC85F8C7DE3207a10bB1978bA104bdA3B2);
-        redeemKey = RateLimitHelpers.makeAssetKey(
-            mainnetController.LIMIT_PENDLE_PT_REDEEM(),
-            address(pendleMarket)
-        );
+        redeemKey    = _getRedeemKey(pendleMarket);
 
         vm.prank(GROVE_PROXY);
         rateLimits.setRateLimitData(redeemKey, 10e18, uint256(10e18) / 1 days);

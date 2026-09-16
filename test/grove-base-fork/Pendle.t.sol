@@ -14,13 +14,16 @@ contract PendleTestBase is ForkTestBase {
 
     bytes32 redeemKey;
 
+    // Pre-hardening key `(LIMIT_PENDLE_PT_REDEEM, market)`, no longer consulted
+    bytes32 legacyRedeemKey;
+
     function setUp() public virtual override {
         super.setUp();
 
-        redeemKey = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_PENDLE_PT_REDEEM(),
-            address(pendleMarket)
-        );
+        (, address pt,) = pendleMarket.readTokens();
+
+        redeemKey       = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_PENDLE_PT_REDEEM(), pt, address(pendleMarket));
+        legacyRedeemKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_PENDLE_PT_REDEEM(), address(pendleMarket));
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(redeemKey, 10_000_000e18, uint256(10_000_000e18) / 1 days);
@@ -78,6 +81,28 @@ contract ForeignControllerRedeemFailurePendleTests is PendleTestBase {
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.redeemPendlePT(address(pendleMarket), 50_000e18, 1);
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(redeemKey, exactAmountOut, 1);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.redeemPendlePT(address(pendleMarket), 50_000e18, 1);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 0);
+    }
+
+    function test_redeemPendlePT_legacyKeyNotHonoured() public {
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(legacyRedeemKey, 0, 0);
+
+        (, address pt,) = pendleMarket.readTokens();
+        vm.prank(PT_WHALE);
+        IERC20(pt).transfer((address(almProxy)), 100_000e18);
+
+        vm.warp(pendleMarket.expiry());
+
+        vm.prank(ALM_RELAYER);
         foreignController.redeemPendlePT(address(pendleMarket), 50_000e18, 1);
     }
 
@@ -151,6 +176,10 @@ contract ForeignControllerRedeemSuccessPendleTests is PendleTestBase {
         assertEq(IERC20(pt).balanceOf(address(almProxy)),         100_000e18);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 0);
 
+        assertEq(IERC20(pt).allowance(address(almProxy), PENDLE_ROUTER_BASE), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 10_000_000e18);
+
         vm.warp(pendleMarket.expiry());
 
         uint256 pyIndexCurrent = IYT(yt).pyIndexCurrent();
@@ -162,6 +191,10 @@ contract ForeignControllerRedeemSuccessPendleTests is PendleTestBase {
         assertEq(IERC20(pt).balanceOf(address(almProxy)), 50_000e18);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 50_000e18 * 1e18 / pyIndexCurrent);
 
+        assertEq(IERC20(pt).allowance(address(almProxy), PENDLE_ROUTER_BASE), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(redeemKey), 10_000_000e18 - IERC20(yieldToken).balanceOf(address(almProxy)));
+
         vm.warp(block.timestamp + 14 days);
 
         pyIndexCurrent = IYT(yt).pyIndexCurrent();
@@ -172,6 +205,8 @@ contract ForeignControllerRedeemSuccessPendleTests is PendleTestBase {
 
         assertEq(IERC20(pt).balanceOf(address(almProxy)), 0);
         assertEq(IERC20(yieldToken).balanceOf(address(almProxy)), 100_000e18 * 1e18 / pyIndexCurrent);
+
+        assertEq(IERC20(pt).allowance(address(almProxy), PENDLE_ROUTER_BASE), 0);
     }
 
 }
