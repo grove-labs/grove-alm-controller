@@ -24,6 +24,7 @@ import { CurveLib }      from "./libraries/CurveLib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
+import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
 import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
@@ -300,51 +301,28 @@ contract ForeignController is AccessControl {
     /*** Relayer PSM functions                                                                  ***/
     /**********************************************************************************************/
 
-    function depositPSM(address asset, uint256 amount)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_PSM_DEPOSIT, asset, amount)
-        returns (uint256 shares)
-    {
-        // Approve `asset` to PSM from the proxy (assumes the proxy has enough `asset`).
-        ERC20Lib.approve(proxy, asset, address(psm), amount);
-
-        // Deposit `amount` of `asset` in the PSM, decode the result to get `shares`.
-        shares = abi.decode(
-            proxy.doCall(
-                address(psm),
-                abi.encodeCall(
-                    psm.deposit,
-                    (asset, address(proxy), amount)
-                )
-            ),
-            (uint256)
-        );
+    function depositPSM(address asset, uint256 amount) external returns (uint256 shares) {
+        _checkRole(RELAYER);
+        return PSM3Lib.deposit(PSM3Lib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_PSM_DEPOSIT,
+            psm         : psm,
+            asset       : asset,
+            amount      : amount
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
-    function withdrawPSM(address asset, uint256 maxAmount)
-        external
-        onlyRole(RELAYER)
-        returns (uint256 assetsWithdrawn)
-    {
-        // Withdraw up to `maxAmount` of `asset` in the PSM, decode the result
-        // to get `assetsWithdrawn` (assumes the proxy has enough PSM shares).
-        assetsWithdrawn = abi.decode(
-            proxy.doCall(
-                address(psm),
-                abi.encodeCall(
-                    psm.withdraw,
-                    (asset, address(proxy), maxAmount)
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_PSM_WITHDRAW, asset),
-            assetsWithdrawn
-        );
+    function withdrawPSM(address asset, uint256 maxAmount) external returns (uint256 assetsWithdrawn) {
+        _checkRole(RELAYER);
+        return PSM3Lib.withdraw(PSM3Lib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_PSM_WITHDRAW,
+            psm         : psm,
+            asset       : asset,
+            maxAmount   : maxAmount
+        }));
     }
 
     /**********************************************************************************************/
