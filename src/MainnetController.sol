@@ -939,12 +939,12 @@ contract MainnetController is AccessControl {
     /*** Relayer Merkl functions                                                                ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external {
         _checkRole(RELAYER);
-
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
-            distributor : Ethereum.MERKL_DISTRIBUTOR,
+            rateLimits  : rateLimits,
+            distributor : distributor,
             operator    : operator
         }));
     }
