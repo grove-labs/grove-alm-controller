@@ -14,12 +14,20 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library ERC7540Lib {
 
-    struct RequestParams {
+    struct RequestDepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         bytes32     rateLimitId;
         address     token;
         uint256     amount;
+    }
+
+    struct RequestRedeemParams {
+        IALMProxy   proxy;
+        IRateLimits rateLimits;
+        bytes32     rateLimitId;
+        address     token;
+        uint256     shares;
     }
 
     struct ClaimParams {
@@ -29,13 +37,12 @@ library ERC7540Lib {
         address     token;
     }
 
-    function requestDeposit(RequestParams memory params) external {
+    function requestDeposit(RequestDepositParams memory params) external {
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
             params.amount
         );
 
-        // Note that whitelist is done by rate limits
         address asset = IERC7540(params.token).asset();
 
         // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
@@ -63,10 +70,10 @@ library ERC7540Lib {
         );
     }
 
-    function requestRedeem(RequestParams memory params) external {
+    function requestRedeem(RequestRedeemParams memory params) external {
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
-            IERC7540(params.token).convertToAssets(params.amount)
+            IERC7540(params.token).convertToAssets(params.shares)
         );
 
         // Submit redeem request by transferring shares
@@ -74,7 +81,7 @@ library ERC7540Lib {
             params.token,
             abi.encodeCall(
                 IERC7540(params.token).requestRedeem,
-                (params.amount, address(params.proxy), address(params.proxy))
+                (params.shares, address(params.proxy), address(params.proxy))
             )
         );
     }
