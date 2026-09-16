@@ -19,7 +19,8 @@ import { AllocatorVault }  from "dss-allocator/src/AllocatorVault.sol";
 
 import { ScriptTools } from "dss-test/ScriptTools.sol";
 
-import { IERC20 }  from "forge-std/interfaces/IERC20.sol";
+import { IERC20 }   from "forge-std/interfaces/IERC20.sol";
+import { IERC4626 } from "forge-std/interfaces/IERC4626.sol";
 import { Script }  from "forge-std/Script.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 
@@ -408,9 +409,9 @@ contract FullStagingDeploy is Script {
         _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18);
         _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6);
 
-        _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18);
-        _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18);
-        _onboardERC4626Token(mainnet, mainnetInst, FLUID_SUSDS_VAULT,           maxAmount18, slope18);
+        _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18, false);
+        _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18, false);
+        _onboardERC4626Token(mainnet, mainnetInst, FLUID_SUSDS_VAULT,           maxAmount18, slope18, false);
 
         vm.startBroadcast();
 
@@ -481,8 +482,8 @@ contract FullStagingDeploy is Script {
 
         _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
-        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
-        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
+        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6, true);
+        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6, true);
     }
 
     /**********************************************************************************************/
@@ -518,20 +519,26 @@ contract FullStagingDeploy is Script {
         ControllerInstance memory controllerInst,
         address                   token,
         uint256                   maxAmount,
-        uint256                   slope
+        uint256                   slope,
+        bool                      isForeign
     )
         internal
     {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
+        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this,
+        //       but ForeignController keys the deposit limit by (asset, token).
         bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_4626_DEPOSIT();
         bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_4626_WITHDRAW();
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  token), maxAmount,         slope);
+        bytes32 depositLimitKey = isForeign
+            ? RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token)
+            : RateLimitHelpers.makeAssetKey(depositKey, token);
+
+        rateLimits.setRateLimitData(depositLimitKey,                                   maxAmount,         slope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token), type(uint256).max, 0);
 
         vm.stopBroadcast();

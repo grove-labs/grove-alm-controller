@@ -70,7 +70,7 @@ contract MorphoBaseTest is ForkTestBase {
         supplyQueueUSDC[0] = MarketParamsLib.id(usdcParams);
         IMetaMorpho(MORPHO_VAULT_USDC).setSupplyQueue(supplyQueueUSDC);
 
-        usdsDepositKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_DEPOSIT(),  MORPHO_VAULT_USDS);
+        usdsDepositKey  = RateLimitHelpers.makeAddressAddressKey(foreignController.LIMIT_4626_DEPOSIT(), Base.USDS, MORPHO_VAULT_USDS);
         usdsWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_WITHDRAW(), MORPHO_VAULT_USDS);
 
         rateLimits.setRateLimitData(
@@ -79,8 +79,9 @@ contract MorphoBaseTest is ForkTestBase {
             uint256(5_000_000e18) / 1 days
         );
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
+            RateLimitHelpers.makeAddressAddressKey(
                 foreignController.LIMIT_4626_DEPOSIT(),
+                Base.USDC,
                 MORPHO_VAULT_USDC
             ),
             25_000_000e6,
@@ -127,9 +128,28 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
     }
 
     function test_morpho_deposit_zeroMaxAmount() external {
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
+
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.depositERC4626(makeAddr("fake-token"), 1e18, 0);
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1e18, 0);
+    }
+
+    function test_morpho_deposit_tokenOnlyKeyNotHonoured() external {
+        // A limit under the pre-facet (rateLimitId, token) key does not authorize deposits.
+        vm.startPrank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_DEPOSIT(), MORPHO_VAULT_USDS),
+            25_000_000e18,
+            uint256(5_000_000e18) / 1 days
+        );
+        vm.stopPrank();
+
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.depositERC4626(MORPHO_VAULT_USDS, 1e18, 0);
     }
 
     function test_morpho_usds_deposit_rateLimitedBoundary() external {

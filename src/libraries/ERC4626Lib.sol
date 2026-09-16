@@ -44,12 +44,13 @@ library ERC4626Lib {
     }
 
     function deposit(DepositParams memory params) external returns (uint256 shares) {
+        address asset = IERC4626(params.token).asset();
+
+        // Deposit limit key: keccak256(abi.encode(rateLimitId, asset, token)).
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, asset, params.token),
             params.amount
         );
-
-        address asset = IERC4626(params.token).asset();
 
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
         ERC20Lib.approve(params.proxy, asset, params.token, params.amount);
