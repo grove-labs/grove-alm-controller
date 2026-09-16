@@ -409,13 +409,13 @@ contract FullStagingDeploy is Script {
         _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18);
         _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6);
 
-        _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18, false);
-        _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18, false);
-        _onboardERC4626Token(mainnet, mainnetInst, FLUID_SUSDS_VAULT,           maxAmount18, slope18, false);
+        _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18);
+        _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18);
+        _onboardERC4626Token(mainnet, mainnetInst, FLUID_SUSDS_VAULT,           maxAmount18, slope18);
 
         vm.startBroadcast();
 
-        bytes32 susdeDepositKey = RateLimitHelpers.makeAssetKey(controller.LIMIT_4626_DEPOSIT(), address(controller.susde()));
+        bytes32 susdeDepositKey = RateLimitHelpers.makeAddressAddressKey(controller.LIMIT_4626_DEPOSIT(), address(controller.usde()), address(controller.susde()));
 
         bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
         bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
@@ -482,8 +482,8 @@ contract FullStagingDeploy is Script {
 
         _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
-        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6, true);
-        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6, true);
+        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
+        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
     }
 
     /**********************************************************************************************/
@@ -519,27 +519,21 @@ contract FullStagingDeploy is Script {
         ControllerInstance memory controllerInst,
         address                   token,
         uint256                   maxAmount,
-        uint256                   slope,
-        bool                      isForeign
+        uint256                   slope
     )
         internal
     {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this,
-        //       but ForeignController keys the deposit limit by (asset, token).
+        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this.
         bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_4626_DEPOSIT();
         bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_4626_WITHDRAW();
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        bytes32 depositLimitKey = isForeign
-            ? RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token)
-            : RateLimitHelpers.makeAssetKey(depositKey, token);
-
-        rateLimits.setRateLimitData(depositLimitKey,                                   maxAmount,         slope);
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token), type(uint256).max, 0);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token), maxAmount,         slope);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token),                                  type(uint256).max, 0);
 
         vm.stopBroadcast();
     }
