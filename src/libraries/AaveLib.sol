@@ -37,15 +37,18 @@ library AaveLib {
     }
 
     function deposit(DepositParams memory params) external {
+        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
+        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
+
+        // Deposit limit key: keccak256(abi.encode(rateLimitId, underlying, pool, aToken)).
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.aToken),
+            RateLimitHelpers.makeAddressAddressAddressKey(
+                params.rateLimitId, address(underlying), address(pool), params.aToken
+            ),
             params.amount
         );
 
         require(params.maxSlippage != 0, "AaveLib/max-slippage-not-set");
-
-        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
 
         uint256 aTokenBalance = IERC20(params.aToken).balanceOf(address(params.proxy));
 
@@ -83,8 +86,9 @@ library AaveLib {
         // Measured from the proxy's balance rather than the pool's return value.
         amountWithdrawn = underlying.balanceOf(address(params.proxy)) - underlyingBalance;
 
+        // Withdraw limit key: keccak256(abi.encode(rateLimitId, pool, aToken)).
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.aToken),
+            RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, address(pool), params.aToken),
             amountWithdrawn
         );
     }
