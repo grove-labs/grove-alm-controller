@@ -3,7 +3,8 @@ pragma solidity >=0.8.0;
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
 
-import { ERC7540Lib } from "../../src/libraries/ERC7540Lib.sol";
+import { CentrifugeLib } from "../../src/libraries/CentrifugeLib.sol";
+import { ERC7540Lib }    from "../../src/libraries/ERC7540Lib.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -51,9 +52,15 @@ contract CentrifugeTestBase is ForkTestBase {
     bytes32 requestRedeemKey;
     bytes32 claimRedeemKey;
 
-    // Centrifuge cancel/claim-cancel paths still gate on the ForeignController 7540 ids.
-    bytes32 centrifugeDepositKey;
-    bytes32 centrifugeRedeemKey;
+    bytes32 cancelDepositKey;
+    bytes32 claimCancelDepositKey;
+    bytes32 cancelRedeemKey;
+    bytes32 claimCancelRedeemKey;
+    bytes32 transferKey;
+
+    // Pre-facet ForeignController ids, kept only to prove they no longer authorize anything.
+    bytes32 legacyDepositKey;
+    bytes32 legacyRedeemKey;
 
     function _getBlock() internal pure override returns (uint256) {
         return 65896755;  // July 22, 2025
@@ -86,8 +93,20 @@ contract CentrifugeTestBase is ForkTestBase {
         requestRedeemKey = RateLimitHelpers.makeAssetKey(ERC7540Lib.LIMIT_7540_REQUEST_REDEEM, address(centrifugeV3Vault));
         claimRedeemKey   = RateLimitHelpers.makeAssetKey(ERC7540Lib.LIMIT_7540_CLAIM_REDEEM,   address(centrifugeV3Vault));
 
-        centrifugeDepositKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_7540_DEPOSIT(), address(centrifugeV3Vault));
-        centrifugeRedeemKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_7540_REDEEM(),  address(centrifugeV3Vault));
+        cancelDepositKey      = RateLimitHelpers.makeAssetKey(CentrifugeLib.LIMIT_CENTRIFUGE_CANCEL_DEPOSIT,       address(centrifugeV3Vault));
+        claimCancelDepositKey = RateLimitHelpers.makeAssetKey(CentrifugeLib.LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT, address(centrifugeV3Vault));
+        cancelRedeemKey       = RateLimitHelpers.makeAssetKey(CentrifugeLib.LIMIT_CENTRIFUGE_CANCEL_REDEEM,        address(centrifugeV3Vault));
+        claimCancelRedeemKey  = RateLimitHelpers.makeAssetKey(CentrifugeLib.LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM,  address(centrifugeV3Vault));
+
+        transferKey = RateLimitHelpers.makeAddressUint16AddressKey(
+            foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+            address(centrifugeV3Vault),
+            DESTINATION_CENTRIFUGE_ID,
+            address(spoke)
+        );
+
+        legacyDepositKey = RateLimitHelpers.makeAssetKey(keccak256("LIMIT_7540_DEPOSIT"), address(centrifugeV3Vault));
+        legacyRedeemKey  = RateLimitHelpers.makeAssetKey(keccak256("LIMIT_7540_REDEEM"),  address(centrifugeV3Vault));
     }
 }
 
@@ -111,7 +130,7 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
     function test_requestDepositERC7540_legacyDepositKeyNotHonoured() external {
         // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
-        rateLimits.setRateLimitData(centrifugeDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(legacyDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -403,6 +422,26 @@ contract ForeignControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
         foreignController.cancelCentrifugeDepositRequest(makeAddr("fake-vault"));
     }
 
+    function test_cancelCentrifugeDepositRequest_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize cancels.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.cancelCentrifugeDepositRequest(address(centrifugeV3Vault));
+    }
+
+    function test_cancelCentrifugeDepositRequest_claimCancelKeyNotHonoured() external {
+        // The claim-cancel id does not authorize the cancel itself.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(claimCancelDepositKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.cancelCentrifugeDepositRequest(address(centrifugeV3Vault));
+    }
+
 }
 
 contract ForeignControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestBase {
@@ -419,7 +458,7 @@ contract ForeignControllerCancelCentrifugeDepositSuccessTests is CentrifugeTestB
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(key, 1_000_000e6, uint256(1_000_000e6) / 1 days);
-        rateLimits.setUnlimitedRateLimitData(centrifugeDepositKey);
+        rateLimits.setUnlimitedRateLimitData(cancelDepositKey);
         vm.stopPrank();
     }
 
@@ -458,6 +497,26 @@ contract ForeignControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
         foreignController.claimCentrifugeCancelDepositRequest(makeAddr("fake-vault"));
     }
 
+    function test_claimCentrifugeCancelDepositRequest_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize claims.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.claimCentrifugeCancelDepositRequest(address(centrifugeV3Vault));
+    }
+
+    function test_claimCentrifugeCancelDepositRequest_cancelKeyNotHonoured() external {
+        // The cancel id does not authorize claiming the cancel.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(cancelDepositKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.claimCentrifugeCancelDepositRequest(address(centrifugeV3Vault));
+    }
+
 }
 
 contract ForeignControllerClaimCentrifugeCancelDepositSuccessTests is CentrifugeTestBase {
@@ -474,7 +533,8 @@ contract ForeignControllerClaimCentrifugeCancelDepositSuccessTests is Centrifuge
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(key, 1_000_000e6, uint256(1_000_000e6) / 1 days);
-        rateLimits.setUnlimitedRateLimitData(centrifugeDepositKey);
+        rateLimits.setUnlimitedRateLimitData(cancelDepositKey);
+        rateLimits.setUnlimitedRateLimitData(claimCancelDepositKey);
         vm.stopPrank();
     }
 
@@ -551,7 +611,7 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
     function test_requestRedeemERC7540_legacyRedeemKeyNotHonoured() external {
         // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
-        rateLimits.setRateLimitData(centrifugeRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(legacyRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -865,6 +925,26 @@ contract ForeignControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
         foreignController.cancelCentrifugeRedeemRequest(makeAddr("fake-vault"));
     }
 
+    function test_cancelCentrifugeRedeemRequest_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize cancels.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.cancelCentrifugeRedeemRequest(address(centrifugeV3Vault));
+    }
+
+    function test_cancelCentrifugeRedeemRequest_claimCancelKeyNotHonoured() external {
+        // The claim-cancel id does not authorize the cancel itself.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(claimCancelRedeemKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.cancelCentrifugeRedeemRequest(address(centrifugeV3Vault));
+    }
+
 }
 
 contract ForeignControllerCancelCentrifugeRedeemRequestSuccessTests is CentrifugeTestBase {
@@ -882,7 +962,7 @@ contract ForeignControllerCancelCentrifugeRedeemRequestSuccessTests is Centrifug
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(key, 1_000_000e6, uint256(1_000_000e6) / 1 days);
-        rateLimits.setUnlimitedRateLimitData(centrifugeRedeemKey);
+        rateLimits.setUnlimitedRateLimitData(cancelRedeemKey);
         vm.stopPrank();
     }
 
@@ -924,6 +1004,26 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
         foreignController.claimCentrifugeCancelRedeemRequest(makeAddr("fake-vault"));
     }
 
+    function test_claimCentrifugeCancelRedeemRequest_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize claims.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.claimCentrifugeCancelRedeemRequest(address(centrifugeV3Vault));
+    }
+
+    function test_claimCentrifugeCancelRedeemRequest_cancelKeyNotHonoured() external {
+        // The cancel id does not authorize claiming the cancel.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(cancelRedeemKey);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("CentrifugeLib/invalid-action");
+        foreignController.claimCentrifugeCancelRedeemRequest(address(centrifugeV3Vault));
+    }
+
 }
 
 contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is CentrifugeTestBase {
@@ -941,7 +1041,8 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestSuccessTests is Cent
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(key, 1_000_000e6, uint256(1_000_000e6) / 1 days);
-        rateLimits.setUnlimitedRateLimitData(centrifugeRedeemKey);
+        rateLimits.setUnlimitedRateLimitData(cancelRedeemKey);
+        rateLimits.setUnlimitedRateLimitData(claimCancelRedeemKey);
         vm.stopPrank();
     }
 
@@ -1013,6 +1114,25 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID);
+    }
+
+    function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (id, token, centrifugeId) key does not authorize transfers.
+        vm.startPrank(GROVE_EXECUTOR);
+        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(foreignController.LIMIT_CENTRIFUGE_TRANSFER(), CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
+            10_000_000e6,
+            0
+        );
+        vm.stopPrank();
+
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
         foreignController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID);
@@ -1024,11 +1144,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );
@@ -1060,11 +1176,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(GROVE_EXECUTOR);
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );
@@ -1103,11 +1215,7 @@ contract ForeignControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
         bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );

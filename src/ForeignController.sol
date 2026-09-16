@@ -74,8 +74,6 @@ contract ForeignController is AccessControl {
 
     bytes32 public LIMIT_4626_DEPOSIT        = keccak256("LIMIT_4626_DEPOSIT");
     bytes32 public LIMIT_4626_WITHDRAW       = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT        = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM         = keccak256("LIMIT_7540_REDEEM");
     bytes32 public LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public LIMIT_AAVE_V4_DEPOSIT     = keccak256("LIMIT_AAVE_V4_DEPOSIT");
@@ -216,6 +214,7 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
+        require(recipient != bytes32(0), "ForeignController/zero-recipient");
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
     }
@@ -515,7 +514,6 @@ contract ForeignController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
             requestId   : CENTRIFUGE_REQUEST_ID
         }));
     }
@@ -526,7 +524,6 @@ contract ForeignController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
             requestId   : CENTRIFUGE_REQUEST_ID
         }));
     }
@@ -537,7 +534,6 @@ contract ForeignController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
             requestId   : CENTRIFUGE_REQUEST_ID
         }));
     }
@@ -548,7 +544,6 @@ contract ForeignController is AccessControl {
             proxy       : proxy,
             rateLimits  : rateLimits,
             token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
             requestId   : CENTRIFUGE_REQUEST_ID
         }));
     }

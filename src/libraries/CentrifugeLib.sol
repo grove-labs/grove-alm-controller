@@ -14,11 +14,16 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library CentrifugeLib {
 
+    // Facet-aligned ids. Cancel / claim-cancel are exists-only gates keyed by vault token.
+    bytes32 public constant LIMIT_CENTRIFUGE_CANCEL_DEPOSIT       = keccak256("LIMIT_CENTRIFUGE_CANCEL_DEPOSIT");
+    bytes32 public constant LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT = keccak256("LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT");
+    bytes32 public constant LIMIT_CENTRIFUGE_CANCEL_REDEEM        = keccak256("LIMIT_CENTRIFUGE_CANCEL_REDEEM");
+    bytes32 public constant LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM  = keccak256("LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM");
+
     struct CentrifugeRequestParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         address     token;
-        bytes32     rateLimitId;
         uint256     requestId;
     }
 
@@ -33,7 +38,7 @@ library CentrifugeLib {
     }
 
     function cancelCentrifugeDepositRequest(CentrifugeRequestParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_CENTRIFUGE_CANCEL_DEPOSIT, params.token));
 
         // NOTE: While the cancelation is pending, no new deposit request can be submitted
         params.proxy.doCall(
@@ -46,7 +51,7 @@ library CentrifugeLib {
     }
 
     function claimCentrifugeCancelDepositRequest(CentrifugeRequestParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT, params.token));
 
         params.proxy.doCall(
             params.token,
@@ -58,7 +63,7 @@ library CentrifugeLib {
     }
 
     function cancelCentrifugeRedeemRequest(CentrifugeRequestParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_CENTRIFUGE_CANCEL_REDEEM, params.token));
 
         // NOTE: While the cancelation is pending, no new redeem request can be submitted
         params.proxy.doCall(
@@ -71,7 +76,7 @@ library CentrifugeLib {
     }
 
     function claimCentrifugeCancelRedeemRequest(CentrifugeRequestParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM, params.token));
 
         params.proxy.doCall(
             params.token,
@@ -83,17 +88,24 @@ library CentrifugeLib {
     }
 
     function transferSharesCentrifuge(CentrifugeTransferParams memory params) external {
-        _rateLimited(
-            params.rateLimits,
-            keccak256(abi.encode(params.rateLimitId, params.token, params.destinationCentrifugeId)),
-            params.amount
-        );
-
         require(params.recipient != 0, "CentrifugeLib/centrifuge-id-not-configured");
 
         ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(params.token);
 
         address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
+
+        // Transfer limit key: keccak256(abi.encode(rateLimitId, token, destinationCentrifugeId, spoke)).
+        // NOTE: Trusting that the amount transferred by the spoke call is the same as requested.
+        _rateLimited(
+            params.rateLimits,
+            RateLimitHelpers.makeAddressUint16AddressKey(
+                params.rateLimitId,
+                params.token,
+                params.destinationCentrifugeId,
+                spoke
+            ),
+            params.amount
+        );
 
         // Initiate cross-chain transfer via the specific spoke address
         params.proxy.doCallWithValue{value: msg.value}(
