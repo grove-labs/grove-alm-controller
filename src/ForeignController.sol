@@ -19,22 +19,18 @@ import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
-import { AaveV4Lib }    from "./libraries/AaveV4Lib.sol";
-import { CurveLib }     from "./libraries/CurveLib.sol";
-import { MerklLib }     from "./libraries/MerklLib.sol";
-import { MidnightLib }  from "./libraries/MidnightLib.sol";
-import { PendleLib }    from "./libraries/PendleLib.sol";
-import { CCTPLib }      from "./libraries/CCTPLib.sol";
-import { ERC20Lib }     from "./libraries/common/ERC20Lib.sol";
-import { UniswapV3Lib } from "./libraries/UniswapV3Lib.sol";
+import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
+import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
+import { CurveLib }      from "./libraries/CurveLib.sol";
+import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
+import { MerklLib }      from "./libraries/MerklLib.sol";
+import { MidnightLib }   from "./libraries/MidnightLib.sol";
+import { PendleLib }     from "./libraries/PendleLib.sol";
+import { CCTPLib }       from "./libraries/CCTPLib.sol";
+import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
+import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 
-
-import { ISwapRouter, INonfungiblePositionManager }                    from "./interfaces/UniswapV3Interfaces.sol";
-import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike, ISpokeLike } from "./interfaces/CentrifugeInterfaces.sol";
-
-import "./interfaces/ILayerZero.sol";
-
-import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
+import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
 
@@ -43,8 +39,6 @@ interface IATokenWithPool is IAToken {
 }
 
 contract ForeignController is AccessControl {
-
-    using OptionsBuilder for bytes;
 
     /**********************************************************************************************/
     /*** Events                                                                                 ***/
@@ -418,9 +412,6 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    // NOTE: !!! This function was deployed without integration testing !!!
-    //       KEEP RATE LIMIT AT ZERO until LayerZero dependencies are live and
-    //       all functionality has been thoroughly integration tested.
     function transferTokenLayerZero(
         address oftAddress,
         uint256 amount,
@@ -429,41 +420,15 @@ contract ForeignController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_LAYERZERO_TRANSFER, oftAddress, destinationEndpointId)),
-            amount
-        );
-
-        // NOTE: Full integration testing of this logic is not possible without OFTs with
-        //       approvalRequired == true. Add integration testing for this case before
-        //       using in production.
-        if (ILayerZero(oftAddress).approvalRequired()) {
-            ERC20Lib.approve(proxy, ILayerZero(oftAddress).token(), oftAddress, amount);
-        }
-
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200_000, 0);
-
-        SendParam memory sendParams = SendParam({
-            dstEid       : destinationEndpointId,
-            to           : layerZeroRecipients[destinationEndpointId],
-            amountLD     : amount,
-            minAmountLD  : 0,
-            extraOptions : options,
-            composeMsg   : "",
-            oftCmd       : ""
-        });
-
-        // Query the min amount received on the destination chain and set it.
-        ( ,, OFTReceipt memory receipt ) = ILayerZero(oftAddress).quoteOFT(sendParams);
-        sendParams.minAmountLD = receipt.amountReceivedLD;
-
-        MessagingFee memory fee = ILayerZero(oftAddress).quoteSend(sendParams, false);
-
-        proxy.doCallWithValue{value: fee.nativeFee}(
-            oftAddress,
-            abi.encodeCall(ILayerZero.send, (sendParams, fee, address(proxy))),
-            fee.nativeFee
-        );
+        LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
+            proxy                 : proxy,
+            rateLimits            : rateLimits,
+            rateLimitId           : LIMIT_LAYERZERO_TRANSFER,
+            oftAddress            : oftAddress,
+            amount                : amount,
+            destinationEndpointId : destinationEndpointId,
+            layerZeroRecipient    : layerZeroRecipients[destinationEndpointId]
+        }));
     }
 
     /**********************************************************************************************/
@@ -620,62 +585,48 @@ contract ForeignController is AccessControl {
 
     // NOTE: These cancelation methods are compatible with ERC-7887
 
-    function cancelCentrifugeDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        // NOTE: While the cancelation is pending, no new deposit request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelDepositRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelDepositRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelDepositRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function cancelCentrifugeRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        // NOTE: While the cancelation is pending, no new redeem request can be submitted
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).cancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy))
-            )
-        );
+    function cancelCentrifugeRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.cancelCentrifugeRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
-    function claimCentrifugeCancelRedeemRequest(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        proxy.doCall(
-            token,
-            abi.encodeCall(
-                ICentrifugeV3VaultLike(token).claimCancelRedeemRequest,
-                (CENTRIFUGE_REQUEST_ID, address(proxy), address(proxy))
-            )
-        );
+    function claimCentrifugeCancelRedeemRequest(address token) external {
+        _checkRole(RELAYER);
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            token       : token,
+            rateLimitId : LIMIT_7540_REDEEM,
+            requestId   : CENTRIFUGE_REQUEST_ID
+        }));
     }
 
     function transferSharesCentrifuge(
@@ -686,34 +637,15 @@ contract ForeignController is AccessControl {
         external payable
     {
         _checkRole(RELAYER);
-        _rateLimited(
-            keccak256(abi.encode(LIMIT_CENTRIFUGE_TRANSFER, token, destinationCentrifugeId)),
-            amount
-        );
-
-        bytes32 recipient = centrifugeRecipients[destinationCentrifugeId];
-        require(recipient != 0, "ForeignController/centrifuge-id-not-configured");
-
-        ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(token);
-
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
-
-        // Initiate cross-chain transfer via the specific spoke address
-        proxy.doCallWithValue{value: msg.value}(
-            spoke,
-            abi.encodeCall(
-                ISpokeLike(spoke).crosschainTransferShares,
-                (
-                    destinationCentrifugeId,
-                    centrifugeVault.poolId(),
-                    centrifugeVault.scId(),
-                    recipient,
-                    amount,
-                    0
-                )
-            ),
-            msg.value
-        );
+        CentrifugeLib.transferSharesCentrifuge(CentrifugeLib.CentrifugeTransferParams({
+            proxy                   : proxy,
+            rateLimits              : rateLimits,
+            token                   : token,
+            destinationCentrifugeId : destinationCentrifugeId,
+            amount                  : amount,
+            recipient               : centrifugeRecipients[destinationCentrifugeId],
+            rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+        }));
     }
 
     /**********************************************************************************************/
