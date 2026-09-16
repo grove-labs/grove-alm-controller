@@ -406,9 +406,9 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(mainnetInst.rateLimits);
 
-        _onboardAAVEToken(mainnet, mainnetInst, AUSDC,  maxAmount6,  slope6,  false);
-        _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18, false);
-        _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6,  false);
+        _onboardAAVEToken(mainnet, mainnetInst, AUSDC,  maxAmount6,  slope6);
+        _onboardAAVEToken(mainnet, mainnetInst, AUSDS,  maxAmount18, slope18);
+        _onboardAAVEToken(mainnet, mainnetInst, SPUSDC, maxAmount6,  slope6);
 
         _onboardERC4626Token(mainnet, mainnetInst, address(controller.susde()), maxAmount18, slope18);
         _onboardERC4626Token(mainnet, mainnetInst, Ethereum.SUSDS,              maxAmount18, slope18);
@@ -481,7 +481,7 @@ contract FullStagingDeploy is Script {
     function _setBaseRateLimits() internal {
         _setForeignControllerRateLimits(base, baseInst);
 
-        _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6, true);
+        _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
         _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
         _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
@@ -496,37 +496,32 @@ contract FullStagingDeploy is Script {
         ControllerInstance memory controllerInst,
         address                   aToken,
         uint256                   maxAmount,
-        uint256                   slope,
-        bool                      isForeign
+        uint256                   slope
     )
         internal
     {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this,
-        //       but ForeignController keys the limits by (underlying, pool, aToken) / (pool, aToken).
+        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this.
         bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_AAVE_DEPOSIT();
         bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_AAVE_WITHDRAW();
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        bytes32 depositLimitKey;
-        bytes32 withdrawLimitKey;
+        address underlying = IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS();
+        address pool       = IATokenWithPool(aToken).POOL();
 
-        if (isForeign) {
-            address underlying = IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS();
-            address pool       = IATokenWithPool(aToken).POOL();
-
-            depositLimitKey  = RateLimitHelpers.makeAddressAddressAddressKey(depositKey, underlying, pool, aToken);
-            withdrawLimitKey = RateLimitHelpers.makeAddressAddressKey(withdrawKey, pool, aToken);
-        } else {
-            depositLimitKey  = RateLimitHelpers.makeAssetKey(depositKey,  aToken);
-            withdrawLimitKey = RateLimitHelpers.makeAssetKey(withdrawKey, aToken);
-        }
-
-        rateLimits.setRateLimitData(depositLimitKey,  maxAmount,         slope);
-        rateLimits.setRateLimitData(withdrawLimitKey, type(uint256).max, 0);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressAddressKey(depositKey, underlying, pool, aToken),
+            maxAmount,
+            slope
+        );
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressKey(withdrawKey, pool, aToken),
+            type(uint256).max,
+            0
+        );
 
         vm.stopBroadcast();
     }
