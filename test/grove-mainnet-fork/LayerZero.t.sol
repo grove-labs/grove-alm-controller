@@ -23,6 +23,8 @@ import {ForeignController} from "../../src/ForeignController.sol";
 import {RateLimits} from "../../src/RateLimits.sol";
 import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 
+import {ILayerZero} from "../../src/interfaces/ILayerZero.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
@@ -185,8 +187,13 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients, centrifugeRecipients
         );
 
-        destinationRateLimitKey =
-            keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), usdt0OftPlasma, sourceEndpointId));
+        destinationRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(address(usdt0OftPlasma)).token(),
+            address(usdt0OftPlasma),
+            ILayerZero(address(usdt0OftPlasma)).peers(sourceEndpointId),
+            sourceEndpointId
+        );
 
         uint256 usdt0PlasmaMaxAmount = 5_000_000e6;
         uint256 usdt0PlasmaSlope     = uint256(1_000_000e6) / 4 hours;

@@ -8,6 +8,8 @@ import { ILayerZero, MessagingFee, SendParam } from "../interfaces/ILayerZero.so
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 
+import { RateLimitHelpers } from "../RateLimitHelpers.sol";
+
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 library LayerZeroLib {
@@ -41,16 +43,23 @@ library LayerZeroLib {
             layerZeroRecipient    : params.layerZeroRecipient
         }));
 
+        address token = ILayerZero(params.oftAddress).token();
+
+        // Transfer limit key: keccak256(abi.encode(rateLimitId, token, oft, peer, destinationEndpointId)).
         params.rateLimits.triggerRateLimitDecrease(
-            keccak256(abi.encode(params.rateLimitId, params.oftAddress, params.destinationEndpointId)),
+            RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+                params.rateLimitId,
+                token,
+                params.oftAddress,
+                ILayerZero(params.oftAddress).peers(params.destinationEndpointId),
+                params.destinationEndpointId
+            ),
             params.amount
         );
 
-        bool    approvalRequired = ILayerZero(params.oftAddress).approvalRequired();
-        address token;
+        bool approvalRequired = ILayerZero(params.oftAddress).approvalRequired();
 
         if (approvalRequired) {
-            token = ILayerZero(params.oftAddress).token();
             ERC20Lib.approve(params.proxy, token, params.oftAddress, params.amount);
         }
 

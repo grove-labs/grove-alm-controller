@@ -347,11 +347,13 @@ contract ForeignControllerLayerZeroTestBase is ArbitrumChainLayerZeroTestBase {
         super.setUp();
         destination.selectFork();
 
-        key = keccak256(abi.encode(
+        key = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
             foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(USDT_OFT).token(),
             USDT_OFT,
+            ILayerZero(USDT_OFT).peers(destinationEndpointId),
             destinationEndpointId
-        ));
+        );
 
         target = bytes32(uint256(uint160(makeAddr("layerZeroRecipient"))));
     }
@@ -447,6 +449,21 @@ contract ForeignControllerTransferLayerZeroFailureTests is ForeignControllerLaye
 
     function test_transferTokenLayerZero_zeroMaxAmount() external {
         _configure(0);
+
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        vm.prank(relayer);
+        foreignController.transferTokenLayerZero(USDT_OFT, 1e6, destinationEndpointId);
+    }
+
+    function test_transferTokenLayerZero_legacyKeyNotHonoured() external {
+        // A limit under the pre-facet (rateLimitId, oft, eid) key does not authorize transfers.
+        _configure(0);
+
+        bytes32 legacyKey =
+            keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), USDT_OFT, destinationEndpointId));
+
+        vm.prank(SPARK_EXECUTOR);
+        foreignRateLimits.setRateLimitData(legacyKey, 10_000_000e6, 0);
 
         vm.expectRevert("RateLimits/zero-maxAmount");
         vm.prank(relayer);
