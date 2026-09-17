@@ -92,16 +92,21 @@ library UniswapV3Lib {
         SwapCache memory cache = _populateSwapCache(context, params);
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), params.amountIn);
 
-        uint256 startingBalance = IERC20(params.tokenIn).balanceOf(address(context.proxy));
-        amountOut               = _callSwap(context, params, cache);
-        uint256 endingBalance   = IERC20(params.tokenIn).balanceOf(address(context.proxy));
+        uint256 startingBalanceIn  = IERC20(params.tokenIn).balanceOf(address(context.proxy));
+        uint256 startingBalanceOut = IERC20(cache.tokenOut).balanceOf(address(context.proxy));
+
+        _callSwap(context, params, cache);
+
+        amountOut = IERC20(cache.tokenOut).balanceOf(address(context.proxy)) - startingBalanceOut;
+
+        require(amountOut >= params.minAmountOut, "UniswapV3Lib/min-amount-out-not-met");
 
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
 
         context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
-            startingBalance - endingBalance
+            startingBalanceIn - IERC20(params.tokenIn).balanceOf(address(context.proxy))
         );
     }
 
@@ -139,27 +144,24 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
 
-        context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, address(pool)),
-            amount0
-        );
-        context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, address(pool)),
-            amount1
-        );
+        _decreaseRateLimits(context, token0, token1, amount0, amount1);
     }
 
     function removeLiquidity(UniV3Context calldata context, RemoveLiquidityParams calldata params)
         external
-        returns (uint256 amount0Collected, uint256 amount1Collected)
+        returns (uint256 amount0, uint256 amount1)
     {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
         (address token0, address token1) = _validateRemoveLiquidityParams(pool, params);
         require(params.positionManager.ownerOf(params.tokenId) == address(context.proxy), "UniswapV3Lib/proxy-does-not-own-token-id");
+        require(params.maxSlippage > 0,                                                    "UniswapV3Lib/max-slippage-not-set");
 
-        uint256 amount0CollectedBefore = IERC20(token0).balanceOf(address(context.proxy));
-        uint256 amount1CollectedBefore = IERC20(token1).balanceOf(address(context.proxy));
+        // Collect accrued fees first so they are not counted as withdrawn principal.
+        _collectAll(context.proxy, address(params.positionManager), params.tokenId);
+
+        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
 
         _decreaseLiquidityCall(
             context.proxy,
@@ -170,31 +172,15 @@ library UniswapV3Lib {
             params.deadline
         );
 
-        (amount0Collected, amount1Collected) = _collectAll(
-            context.proxy,
-            address(params.positionManager),
-            params.tokenId,
-            address(context.proxy)
-        );
+        _collectAll(context.proxy, address(params.positionManager), params.tokenId);
 
-        uint256 amount0CollectedAfter = IERC20(token0).balanceOf(address(context.proxy));
-        uint256 amount1CollectedAfter = IERC20(token1).balanceOf(address(context.proxy));
+        amount0 = IERC20(token0).balanceOf(address(context.proxy)) - startingBalance0;
+        amount1 = IERC20(token1).balanceOf(address(context.proxy)) - startingBalance1;
 
-        require(params.min.amount0 >= (amount0CollectedAfter - amount0CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
-        require(params.min.amount1 >= (amount1CollectedAfter - amount1CollectedBefore) * params.maxSlippage / 1e18, "UniswapV3Lib/min-amount-below-bound");
+        _validateMinAmount(params.min.amount0, amount0, params.maxSlippage);
+        _validateMinAmount(params.min.amount1, amount1, params.maxSlippage);
 
-        if (amount0Collected > 0) {
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
-                amount0Collected
-            );
-        }
-        if (amount1Collected > 0) {
-            context.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
-                amount1Collected
-            );
-        }
+        _decreaseRateLimits(context, token0, token1, amount0, amount1);
     }
 
     /**********************************************************************************************/
@@ -492,28 +478,39 @@ library UniswapV3Lib {
         );
     }
 
-    function _collectAll(
-        IALMProxy proxy,
-        address positionManager,
-        uint256 tokenId,
-        address recipient
-    )
-        internal
-        returns (uint256 amount0, uint256 amount1)
-    {
-        bytes memory result = proxy.doCall(
+    function _collectAll(IALMProxy proxy, address positionManager, uint256 tokenId) internal {
+        proxy.doCall(
             positionManager,
             abi.encodeWithSelector(
                 INonfungiblePositionManager.collect.selector,
                 INonfungiblePositionManager.CollectParams({
                     tokenId    : tokenId,
-                    recipient  : recipient,
+                    recipient  : address(proxy),
                     amount0Max : type(uint128).max,
                     amount1Max : type(uint128).max
                 })
             )
         );
+    }
 
-        (amount0, amount1) = abi.decode(result, (uint256, uint256));
+    //-- Rate limit helper functions
+
+    function _decreaseRateLimits(
+        UniV3Context calldata context,
+        address token0,
+        address token1,
+        uint256 amount0,
+        uint256 amount1
+    )
+        internal
+    {
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+            amount0
+        );
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+            amount1
+        );
     }
 }
