@@ -19,7 +19,6 @@ library MerklLib {
     }
 
     function toggleOperator(MerklToggleOperatorParams memory params) external {
-        // Exists-only gate: keccak256(abi.encode(LIMIT_MERKL_TOGGLE_OPERATOR, operator, distributor)).
         require(
             params.rateLimits.getRateLimitData(
                 RateLimitHelpers.makeAddressAddressKey(

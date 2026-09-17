@@ -86,7 +86,6 @@ contract MainnetControllerToggleOperatorMerklFailureTests is MerklBaseTest {
     }
 
     function test_toggleOperatorMerkl_reversedKeyNotHonoured() external {
-        // The facet key is (id, operator, distributor); the reverse order does not authorize.
         vm.prank(GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(RateLimitHelpers.makeAddressAddressKey(
             MerklLib.LIMIT_MERKL_TOGGLE_OPERATOR, address(merklDistributor), operator1
