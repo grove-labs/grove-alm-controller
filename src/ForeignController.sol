@@ -16,6 +16,7 @@ import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 import { IALMProxy }     from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
+import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -23,6 +24,7 @@ import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
 import { CurveLib }      from "./libraries/CurveLib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
+import { MidnightLib }   from "./libraries/MidnightLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
 import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
@@ -55,6 +57,14 @@ contract ForeignController is AccessControl {
     event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
     event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+    event MidnightMarketConfigSet(
+        bytes32 indexed marketId,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint32  maxContinuousFee,
+        uint128 maxLossFactor
+    );
+    event MidnightSet(address indexed midnight);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
     event MerklDistributorSet(address indexed merklDistributor);
@@ -87,6 +97,9 @@ contract ForeignController is AccessControl {
     bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
+    bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
+    bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
+    bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -109,12 +122,15 @@ contract ForeignController is AccessControl {
     IERC20      public usdc;
     address     public pendleRouter;
     address     public merklDistributor;
+    address     public midnight;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+
+    mapping(bytes32 marketId => MidnightLib.MarketConfig config) public midnightMarketConfigs;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -274,6 +290,32 @@ contract ForeignController is AccessControl {
     {
         merklDistributor = merklDistributor_;
         emit MerklDistributorSet(merklDistributor_);
+    }
+
+    function setMidnight(address midnight_)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        // Old-venue markets stay sellable (venue comes from the offer) but redeem only after a repoint back.
+        midnight = midnight_;
+        emit MidnightSet(midnight_);
+    }
+
+    function setMidnightMarketConfig(bytes32 marketId, MidnightLib.MarketConfig memory config)
+        external
+    {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+        MidnightLib.validateMarketConfig(config);
+
+        midnightMarketConfigs[marketId] = config;
+
+        emit MidnightMarketConfigSet(
+            marketId,
+            config.maxBuyTick,
+            config.minSellTick,
+            config.maxContinuousFee,
+            config.maxLossFactor
+        );
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -786,6 +828,62 @@ contract ForeignController is AccessControl {
     }
 
     /**********************************************************************************************/
+    /*** Relayer Midnight functions                                                             ***/
+    /**********************************************************************************************/
+
+    // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
+
+    function buyMidnight(
+        bytes32   marketId,
+        Offer[]   memory offers,
+        bytes[]   memory ratifierData,
+        uint256[] memory units,
+        uint256   maxAssetsIn
+    )
+        external returns (uint256 assetsSpent)
+    {
+        _checkRole(RELAYER);
+
+        assetsSpent = MidnightLib.buy(
+            _midnightTakeParams(marketId, offers, ratifierData, units, maxAssetsIn)
+        );
+    }
+
+    function sellMidnight(
+        bytes32   marketId,
+        Offer[]   memory offers,
+        bytes[]   memory ratifierData,
+        uint256[] memory units,
+        uint256   minAssetsOut
+    )
+        external returns (uint256 assetsReceived)
+    {
+        _checkRole(RELAYER);
+
+        assetsReceived = MidnightLib.sell(
+            _midnightTakeParams(marketId, offers, ratifierData, units, minAssetsOut)
+        );
+    }
+
+    function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
+        external returns (uint256 assetsWithdrawn)
+    {
+        _checkRole(RELAYER);
+
+        assetsWithdrawn = MidnightLib.redeem(MidnightLib.RedeemParams({
+            proxy             : proxy,
+            rateLimits        : rateLimits,
+            midnight          : midnight,
+            buyRateLimitId    : LIMIT_MIDNIGHT_BUY,
+            redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
+            marketId          : marketId,
+            config            : midnightMarketConfigs[marketId],
+            units             : units,
+            minAssetsOut      : minAssetsOut
+        }));
+    }
+
+    /**********************************************************************************************/
     /*** Relayer Pendle functions                                                               ***/
     /**********************************************************************************************/
 
@@ -913,6 +1011,30 @@ contract ForeignController is AccessControl {
 
     function _rateLimited(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitDecrease(key, amount);
+    }
+
+    function _midnightTakeParams(
+        bytes32   marketId,
+        Offer[]   memory offers,
+        bytes[]   memory ratifierData,
+        uint256[] memory units,
+        uint256   assetsBound
+    )
+        internal view returns (MidnightLib.TakeParams memory)
+    {
+        return MidnightLib.TakeParams({
+            proxy           : proxy,
+            rateLimits      : rateLimits,
+            midnight        : midnight,
+            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
+            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
+            marketId        : marketId,
+            config          : midnightMarketConfigs[marketId],
+            offers          : offers,
+            ratifierData    : ratifierData,
+            units           : units,
+            assetsBound     : assetsBound
+        });
     }
 
     /**********************************************************************************************/
