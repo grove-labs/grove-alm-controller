@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
-import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
-
 import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
@@ -18,6 +15,7 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
+import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
 import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
 import { CurveLib }      from "./libraries/CurveLib.sol";
@@ -32,10 +30,6 @@ import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
-
-interface IATokenWithPool is IAToken {
-    function POOL() external view returns(address);
-}
 
 contract ForeignController is AccessControl {
 
@@ -583,60 +577,30 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave functions                                                                 ***/
     /**********************************************************************************************/
 
-    function depositAave(address aToken, uint256 amount)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount)
-    {
-        require(maxSlippages[aToken] != 0, "ForeignController/max-slippage-not-set");
-
-        IERC20    underlying = IERC20(IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
-
-        uint256 aTokenBalance = IERC20(aToken).balanceOf(address(proxy));
-
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        ERC20Lib.approve(proxy, address(underlying), address(pool), amount);
-
-        // Deposit underlying into Aave pool, proxy receives aTokens.
-        proxy.doCall(
-            address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), amount, address(proxy), 0))
-        );
-
-        uint256 newATokens = IERC20(aToken).balanceOf(address(proxy)) - aTokenBalance;
-
-        require(
-            newATokens >= amount * maxSlippages[aToken] / 1e18,
-            "ForeignController/slippage-too-high"
-        );
+    function depositAave(address aToken, uint256 amount) external {
+        _checkRole(RELAYER);
+        AaveLib.deposit(AaveLib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_DEPOSIT,
+            aToken      : aToken,
+            amount      : amount,
+            maxSlippage : maxSlippages[aToken]
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdrawAave(address aToken, uint256 amount)
         external
-        onlyRole(RELAYER)
         returns (uint256 amountWithdrawn)
     {
-        IAavePool pool = IAavePool(IATokenWithPool(aToken).POOL());
-
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS(), amount, address(proxy))
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
-            amountWithdrawn
-        );
+        _checkRole(RELAYER);
+        return AaveLib.withdraw(AaveLib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_WITHDRAW,
+            aToken      : aToken,
+            amount      : amount
+        }));
     }
 
     /**********************************************************************************************/
