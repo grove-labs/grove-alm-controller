@@ -2,7 +2,6 @@
 pragma solidity ^0.8.21;
 
 import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC20Metadata } from "openzeppelin-contracts/contracts/interfaces/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
@@ -496,7 +495,6 @@ library UniswapV3Lib {
 
     //-- Rate limit helper functions
 
-    // Summing both amounts normalized to 18 decimals assumes the pool tokens are pegged 1:1.
     function _decreaseRateLimits(
         UniV3Context calldata context,
         address token0,
@@ -507,10 +505,6 @@ library UniswapV3Lib {
         internal
     {
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(context.rateLimitId, context.pool),
-            _toNormalizedAmount(token0, amount0) + _toNormalizedAmount(token1, amount1)
-        );
-        context.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
             amount0
         );
@@ -518,9 +512,5 @@ library UniswapV3Lib {
             RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
             amount1
         );
-    }
-
-    function _toNormalizedAmount(address token, uint256 amount) internal view returns (uint256) {
-        return amount * 1e18 / 10 ** IERC20Metadata(token).decimals();
     }
 }
