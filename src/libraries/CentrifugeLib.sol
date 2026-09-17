@@ -14,7 +14,6 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library CentrifugeLib {
 
-    // Facet-aligned ids. Cancel / claim-cancel are exists-only gates keyed by vault token.
     bytes32 public constant LIMIT_CENTRIFUGE_CANCEL_DEPOSIT       = keccak256("LIMIT_CENTRIFUGE_CANCEL_DEPOSIT");
     bytes32 public constant LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT = keccak256("LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT");
     bytes32 public constant LIMIT_CENTRIFUGE_CANCEL_REDEEM        = keccak256("LIMIT_CENTRIFUGE_CANCEL_REDEEM");
@@ -94,7 +93,6 @@ library CentrifugeLib {
 
         address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
 
-        // Transfer limit key: keccak256(abi.encode(rateLimitId, token, destinationCentrifugeId, spoke)).
         // NOTE: Trusting that the amount transferred by the spoke call is the same as requested.
         _rateLimited(
             params.rateLimits,

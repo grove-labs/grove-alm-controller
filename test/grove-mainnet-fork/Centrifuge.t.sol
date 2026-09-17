@@ -86,7 +86,6 @@ contract CentrifugeTestBase is ForkTestBase {
     bytes32 cancelRedeemKey;
     bytes32 claimCancelRedeemKey;
 
-    // Pre-facet MainnetController ids, kept only to prove they no longer authorize anything.
     bytes32 legacyDepositKey;
     bytes32 legacyRedeemKey;
 
@@ -135,7 +134,6 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
     }
 
     function test_requestDepositERC7540_legacyDepositKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize requests.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(legacyDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -382,7 +380,6 @@ contract MainnetControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
     }
 
     function test_cancelCentrifugeDepositRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize cancels.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
 
@@ -392,7 +389,6 @@ contract MainnetControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
     }
 
     function test_cancelCentrifugeDepositRequest_claimCancelKeyNotHonoured() external {
-        // The claim-cancel id does not authorize the cancel itself.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(claimCancelDepositKey);
 
@@ -457,7 +453,6 @@ contract MainnetControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
     }
 
     function test_claimCentrifugeCancelDepositRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize claims.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
 
@@ -467,7 +462,6 @@ contract MainnetControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
     }
 
     function test_claimCentrifugeCancelDepositRequest_cancelKeyNotHonoured() external {
-        // The cancel id does not authorize claiming the cancel.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(cancelDepositKey);
 
@@ -567,7 +561,6 @@ contract MainnetControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
     }
 
     function test_requestRedeemERC7540_legacyRedeemKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize requests.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(legacyRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -838,7 +831,6 @@ contract MainnetControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
     }
 
     function test_cancelCentrifugeRedeemRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize cancels.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
 
@@ -848,7 +840,6 @@ contract MainnetControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
     }
 
     function test_cancelCentrifugeRedeemRequest_claimCancelKeyNotHonoured() external {
-        // The claim-cancel id does not authorize the cancel itself.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(claimCancelRedeemKey);
 
@@ -917,7 +908,6 @@ contract MainnetControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
     }
 
     function test_claimCentrifugeCancelRedeemRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize claims.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
 
@@ -927,7 +917,6 @@ contract MainnetControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
     }
 
     function test_claimCentrifugeCancelRedeemRequest_cancelKeyNotHonoured() external {
-        // The cancel id does not authorize claiming the cancel.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setUnlimitedRateLimitData(cancelRedeemKey);
 

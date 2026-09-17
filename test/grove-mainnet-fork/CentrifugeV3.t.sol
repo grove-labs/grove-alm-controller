@@ -74,7 +74,6 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (id, token, centrifugeId) key does not authorize transfers.
         vm.startPrank(GROVE_PROXY);
         mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
         rateLimits.setRateLimitData(

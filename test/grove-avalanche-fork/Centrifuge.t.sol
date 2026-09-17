@@ -58,7 +58,6 @@ contract CentrifugeTestBase is ForkTestBase {
     bytes32 claimCancelRedeemKey;
     bytes32 transferKey;
 
-    // Pre-facet ForeignController ids, kept only to prove they no longer authorize anything.
     bytes32 legacyDepositKey;
     bytes32 legacyRedeemKey;
 
@@ -128,7 +127,6 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
     }
 
     function test_requestDepositERC7540_legacyDepositKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(legacyDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -205,7 +203,6 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
     function test_requestDepositERC7540_clearsApprovalWhenVaultPullsLess() external {
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
-        // Simulate a vault that accepts the request without pulling the full amount.
         vm.mockCall(
             address(centrifugeV3Vault),
             abi.encodeWithSelector(
@@ -423,7 +420,6 @@ contract ForeignControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
     }
 
     function test_cancelCentrifugeDepositRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize cancels.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
 
@@ -433,7 +429,6 @@ contract ForeignControllerCancelCentrifugeDepositFailureTests is CentrifugeTestB
     }
 
     function test_cancelCentrifugeDepositRequest_claimCancelKeyNotHonoured() external {
-        // The claim-cancel id does not authorize the cancel itself.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(claimCancelDepositKey);
 
@@ -498,7 +493,6 @@ contract ForeignControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
     }
 
     function test_claimCentrifugeCancelDepositRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize claims.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(legacyDepositKey);
 
@@ -508,7 +502,6 @@ contract ForeignControllerClaimCentrifugeCancelDepositFailureTests is Centrifuge
     }
 
     function test_claimCentrifugeCancelDepositRequest_cancelKeyNotHonoured() external {
-        // The cancel id does not authorize claiming the cancel.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(cancelDepositKey);
 
@@ -609,7 +602,6 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
     }
 
     function test_requestRedeemERC7540_legacyRedeemKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(legacyRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -926,7 +918,6 @@ contract ForeignControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
     }
 
     function test_cancelCentrifugeRedeemRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize cancels.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
 
@@ -936,7 +927,6 @@ contract ForeignControllerCancelCentrifugeRedeemRequestFailureTests is Centrifug
     }
 
     function test_cancelCentrifugeRedeemRequest_claimCancelKeyNotHonoured() external {
-        // The claim-cancel id does not authorize the cancel itself.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(claimCancelRedeemKey);
 
@@ -1005,7 +995,6 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
     }
 
     function test_claimCentrifugeCancelRedeemRequest_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize claims.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(legacyRedeemKey);
 
@@ -1015,7 +1004,6 @@ contract ForeignControllerClaimCentrifugeCancelRedeemRequestFailureTests is Cent
     }
 
     function test_claimCentrifugeCancelRedeemRequest_cancelKeyNotHonoured() external {
-        // The cancel id does not authorize claiming the cancel.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(cancelRedeemKey);
 
@@ -1123,7 +1111,6 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (id, token, centrifugeId) key does not authorize transfers.
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
         rateLimits.setRateLimitData(
