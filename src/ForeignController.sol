@@ -214,7 +214,7 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(recipient != bytes32(0), "ForeignController/zero-recipient");
+        require(recipient != bytes32(0), "FC/zero-recipient");
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
     }

@@ -110,7 +110,7 @@ contract MainnetControllerSetCentrifugeRecipientTests is MainnetControllerAdminT
 
     function test_setCentrifugeRecipient_zeroRecipient() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/zero-recipient");
+        vm.expectRevert("MC/zero-recipient");
         mainnetController.setCentrifugeRecipient(1, bytes32(0));
     }
 
@@ -573,7 +573,7 @@ contract ForeignControllerSetCentrifugeRecipientTests is ForeignControllerAdminT
 
     function test_setCentrifugeRecipient_zeroRecipient() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/zero-recipient");
+        vm.expectRevert("FC/zero-recipient");
         foreignController.setCentrifugeRecipient(1, bytes32(0));
     }
 

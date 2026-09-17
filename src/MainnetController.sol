@@ -248,7 +248,7 @@ contract MainnetController is AccessControl {
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(recipient != bytes32(0), "MainnetController/zero-recipient");
+        require(recipient != bytes32(0), "MC/zero-recipient");
         centrifugeRecipients[centrifugeId] = recipient;
         emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
