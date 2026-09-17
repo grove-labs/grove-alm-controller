@@ -45,7 +45,6 @@ library LayerZeroLib {
 
         address token = ILayerZero(params.oftAddress).token();
 
-        // Transfer limit key: keccak256(abi.encode(rateLimitId, token, oft, peer, destinationEndpointId)).
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
                 params.rateLimitId,
@@ -69,7 +68,6 @@ library LayerZeroLib {
             fee.nativeFee
         );
 
-        // The controller cannot receive ETH, so anything sent above the fee would be stuck here.
         uint256 excess = address(this).balance;
         if (excess != 0) {
             ( bool success, ) = address(params.proxy).call{value: excess}("");
@@ -81,8 +79,6 @@ library LayerZeroLib {
         }
     }
 
-    // Fee-only entry point for the controller's view; decoding the full SendParam there costs
-    // ~500 bytes of controller bytecode for no relayer benefit.
     function quoteTransferFee(QuoteParams memory params)
         external view returns (MessagingFee memory fee)
     {
@@ -94,8 +90,6 @@ library LayerZeroLib {
     {
         require(params.layerZeroRecipient != bytes32(0), "LayerZeroLib/recipient-not-set");
 
-        // The OFT truncates to its shared decimals, so this is the exact amount that arrives; it is
-        // computed here rather than taken from the OFT's own quote.
         uint256 decimalConversionRate = ILayerZero(params.oftAddress).decimalConversionRate();
         uint256 minAmountLD           = (params.amount / decimalConversionRate) * decimalConversionRate;
 
@@ -111,7 +105,6 @@ library LayerZeroLib {
             oftCmd       : ""
         });
 
-        // Quoted from the proxy, which is the account that will call send.
         ( bool success, bytes memory returnData ) = address(params.proxy).staticcall(
             abi.encodeCall(
                 IALMProxy.doCall,

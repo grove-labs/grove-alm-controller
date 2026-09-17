@@ -155,7 +155,6 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
     }
 
     function test_transferTokenLayerZero_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, oft, eid) key does not authorize transfers.
         _configure(0);
 
         bytes32 legacyKey =
@@ -284,7 +283,6 @@ contract MainnetControllerTransferLayerZeroSuccessTests is MainnetControllerLaye
     }
 
     function test_transferTokenLayerZero_controllerBalanceSweptToProxy() external {
-        // Any ETH already sitting in the controller is swept too, not only this call's excess.
         deal(address(mainnetController), 0.5 ether);
 
         uint256 fee = _fee(10_000_000e6);
@@ -556,7 +554,6 @@ contract ForeignControllerTransferLayerZeroFailureTests is ForeignControllerLaye
     }
 
     function test_transferTokenLayerZero_legacyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, oft, eid) key does not authorize transfers.
         _configure(0);
 
         bytes32 legacyKey =
@@ -682,7 +679,6 @@ contract ForeignControllerTransferLayerZeroSuccessTests is ForeignControllerLaye
     }
 
     function test_transferTokenLayerZero_controllerBalanceSweptToProxy() external {
-        // Any ETH already sitting in the controller is swept too, not only this call's excess.
         deal(address(foreignController), 0.5 ether);
 
         uint256 fee = _fee(10_000_000e6);

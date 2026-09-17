@@ -232,7 +232,6 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
          */
         _afterSetUp();
 
-        // The destination transfer key includes the OFT's peer, which variants configure in _afterSetUp.
         destination.selectFork();
 
         address destinationOft = _getDestinationOftAddress();
