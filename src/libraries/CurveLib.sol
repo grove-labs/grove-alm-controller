@@ -275,8 +275,6 @@ library CurveLib {
         }
     }
 
-    // Input above the pro-rata slice backing the minted shares was effectively swapped in, so it is
-    // charged to that token's swap limit; the slice itself is charged to the deposit limits.
     function _decreaseAddLiquidityRateLimits(
         AddLiquidityParams calldata params,
         ICurvePoolLike              curvePool,
