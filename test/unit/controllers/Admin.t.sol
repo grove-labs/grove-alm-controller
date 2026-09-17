@@ -114,6 +114,12 @@ contract MainnetControllerSetLayerZeroRecipientTests is MainnetControllerAdminTe
         mainnetController.setMintRecipient(1, mintRecipient1);
     }
 
+    function test_setLayerZeroRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("MainnetController/zero-recipient");
+        mainnetController.setLayerZeroRecipient(1, bytes32(0));
+    }
+
     function test_setLayerZeroRecipient() public {
         assertEq(mainnetController.layerZeroRecipients(1), bytes32(0));
         assertEq(mainnetController.layerZeroRecipients(2), bytes32(0));
@@ -543,6 +549,12 @@ contract ForeignControllerSetLayerZeroRecipientTests is ForeignControllerAdminTe
             DEFAULT_ADMIN_ROLE
         ));
         foreignController.setLayerZeroRecipient(1, layerZeroRecipient1);
+    }
+
+    function test_setLayerZeroRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("ForeignController/zero-recipient");
+        foreignController.setLayerZeroRecipient(1, bytes32(0));
     }
 
     function test_setLayerZeroRecipient() public {

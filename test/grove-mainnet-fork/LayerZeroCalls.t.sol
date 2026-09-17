@@ -24,6 +24,8 @@ import {ALMProxy} from "../../src/ALMProxy.sol";
 import {ForeignController} from "../../src/ForeignController.sol";
 import {RateLimits} from "../../src/RateLimits.sol";
 
+import {ILayerZero} from "../../src/interfaces/ILayerZero.sol";
+
 import {MyOFT} from "lib/devtools/examples/oft/contracts/MyOFT.sol";
 import {MyOFTAdapter} from "lib/devtools/examples/oft-adapter/contracts/MyOFTAdapter.sol";
 
@@ -188,15 +190,10 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
             controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients, centrifugeRecipients
         );
 
-        destinationRateLimitKey = keccak256(
-            abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), _getDestinationOftAddress(), sourceEndpointId)
-        );
+        vm.stopPrank();
 
         uint256 maxAmount = 5_000_000e18;
         uint256 slope     = uint256(1_000_000e18) / 4 hours;
-
-        foreignRateLimits.setRateLimitData(destinationRateLimitKey, maxAmount, slope);
-        vm.stopPrank();
 
         /**
          * Step 4: Set up mainnet **
@@ -211,8 +208,14 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
 
         vm.startPrank(Ethereum.GROVE_PROXY);
 
-        sourceRateLimitKey = keccak256(
-            abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), _getSourceOftAddress(), destinationEndpointId)
+        address sourceOft = _getSourceOftAddress();
+
+        sourceRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(sourceOft).token(),
+            sourceOft,
+            ILayerZero(sourceOft).peers(destinationEndpointId),
+            destinationEndpointId
         );
 
         rateLimits.setRateLimitData(sourceRateLimitKey, maxAmount, slope);
@@ -228,6 +231,24 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
          * Step 5: Final setup and labels **
          */
         _afterSetUp();
+
+        destination.selectFork();
+
+        address destinationOft = _getDestinationOftAddress();
+
+        destinationRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(destinationOft).token(),
+            destinationOft,
+            ILayerZero(destinationOft).peers(sourceEndpointId),
+            sourceEndpointId
+        );
+
+        vm.prank(Avalanche.GROVE_EXECUTOR);
+        foreignRateLimits.setRateLimitData(destinationRateLimitKey, maxAmount, slope);
+
+        source.selectFork();
+
         _labelAddresses();
     }
 }
