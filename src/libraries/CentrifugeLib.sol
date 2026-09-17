@@ -93,7 +93,6 @@ library CentrifugeLib {
 
         address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
 
-        // NOTE: Trusting that the amount transferred by the spoke call is the same as requested.
         _rateLimited(
             params.rateLimits,
             RateLimitHelpers.makeAddressUint16AddressKey(
