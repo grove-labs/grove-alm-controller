@@ -5,6 +5,8 @@ import { IERC20 } from "forge-std/interfaces/IERC20.sol";
 
 import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike } from "../../src/interfaces/CentrifugeInterfaces.sol";
 
+import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract CentrifugeTestBase is ForkTestBase {
@@ -24,6 +26,8 @@ contract CentrifugeTestBase is ForkTestBase {
     uint64  poolId;
     bytes16 scId;
 
+    bytes32 transferKey;
+
     function setUp() public override {
         super.setUp();
 
@@ -34,6 +38,13 @@ contract CentrifugeTestBase is ForkTestBase {
 
         poolId = centrifugeVault.poolId();
         scId   = centrifugeVault.scId();
+
+        transferKey = RateLimitHelpers.makeAddressUint16AddressKey(
+            mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+            CENTRIFUGE_VAULT,
+            DESTINATION_CENTRIFUGE_ID,
+            spoke
+        );
     }
 
     function _getBlock() internal pure override returns (uint256) {
@@ -54,6 +65,24 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        vm.prank(GROVE_PROXY);
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        mainnetController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID);
+    }
+
+    function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        rateLimits.setRateLimitData(
+            keccak256(abi.encode(mainnetController.LIMIT_CENTRIFUGE_TRANSFER(), CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
+            10_000_000e6,
+            0
+        );
+        vm.stopPrank();
+
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
         mainnetController.transferSharesCentrifuge(CENTRIFUGE_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID);
@@ -65,11 +94,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );
@@ -101,11 +126,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(GROVE_PROXY);
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );
@@ -144,11 +165,7 @@ contract MainnetControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
         bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
 
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(
-                mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
-                CENTRIFUGE_VAULT,
-                DESTINATION_CENTRIFUGE_ID
-            )),
+            transferKey,
             10_000_000e6,
             0
         );
