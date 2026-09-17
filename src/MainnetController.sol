@@ -198,7 +198,7 @@ contract MainnetController is AccessControl {
 
     function setMaxSlippage(address pool, uint256 maxSlippage) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(maxSlippage <= 1e18, "MainnetController/max-slippage-out-of-bounds");
+        require(maxSlippage <= 1e18, "MC/max-slippage-oob");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
     }
@@ -209,7 +209,7 @@ contract MainnetController is AccessControl {
         require(
             maxTickDelta > 0 &&
             maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "MainnetController/max-tick-delta-out-of-bounds"
+            "MC/max-tick-delta-oob"
         );
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
@@ -219,7 +219,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MC/lower-tick-oob");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -227,7 +227,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MC/upper-tick-oob");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
@@ -237,7 +237,7 @@ contract MainnetController is AccessControl {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         // Required due to casting in UniswapV3OracleLibrary.consult
         // Limits twapSecondsAgo to approximately 68 years
-        require(twapSecondsAgo < uint32(type(int32).max), "MainnetController/twap-seconds-ago-out-of-bounds");
+        require(twapSecondsAgo < uint32(type(int32).max), "MC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
@@ -251,7 +251,7 @@ contract MainnetController is AccessControl {
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        require(token != address(0), "MainnetController/token-zero-address");
+        require(token != address(0), "MC/token-zero-address");
 
         emit MaxExchangeRateSet(
             token,
