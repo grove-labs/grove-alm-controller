@@ -38,10 +38,8 @@ library PSM3Lib {
             params.amount
         );
 
-        // Approve `asset` to PSM from the proxy (assumes the proxy has enough `asset`).
         ERC20Lib.approve(params.proxy, params.asset, address(params.psm), params.amount);
 
-        // Deposit `amount` of `asset` in the PSM, decode the result to get `shares`.
         shares = abi.decode(
             params.proxy.doCall(
                 address(params.psm),
@@ -56,7 +54,6 @@ library PSM3Lib {
     function withdraw(WithdrawParams memory params) external returns (uint256 assetsWithdrawn) {
         uint256 startingAssets = IERC20(params.asset).balanceOf(address(params.proxy));
 
-        // Withdraw up to `maxAmount` of `asset` in the PSM (assumes the proxy has enough PSM shares).
         params.proxy.doCall(
             address(params.psm),
             abi.encodeCall(IPSM3.withdraw, (params.asset, address(params.proxy), params.maxAmount))

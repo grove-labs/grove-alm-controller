@@ -94,8 +94,6 @@ contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase
     function test_depositPSM_clearsApprovalWhenPsmPullsLess() external {
         deal(address(usdsBase), address(almProxy), 100e18);
 
-        // A PSM that accepts the deposit without pulling the full amount would otherwise
-        // leave a standing allowance from the proxy.
         vm.mockCall(
             address(psmBase),
             abi.encodeCall(IPSM3.deposit, (address(usdsBase), address(almProxy), 100e18)),
@@ -323,7 +321,6 @@ contract ForeignControllerWithdrawPSMTests is ForeignControllerPSMSuccessTestBas
 
         uint256 limitBefore = rateLimits.getCurrentRateLimit(key);
 
-        // A PSM reporting more than it actually transfers must not drain the rate limit.
         vm.mockCall(
             address(psmBase),
             abi.encodeCall(IPSM3.withdraw, (address(usdsBase), address(almProxy), 100e18)),
