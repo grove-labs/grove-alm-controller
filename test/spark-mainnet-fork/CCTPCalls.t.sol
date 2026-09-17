@@ -150,7 +150,6 @@ contract MainnetControllerTransferUSDCToCCTPFailureTests is ForkTestBase {
         mainnetController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
     }
 
-    // The approval is cleared even if the messenger does not pull the full amount
     function test_transferUSDCToCCTP_approvalCleared() external {
         deal(address(usdc), address(almProxy), 1e6);
 
@@ -449,7 +448,6 @@ contract ForeignControllerTransferUSDCToCCTPFailureTests is BaseChainUSDCToCCTPT
         foreignController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
     }
 
-    // The approval is cleared even if the messenger does not pull the full amount
     function test_transferUSDCToCCTP_approvalCleared() external {
         deal(address(usdcBase), address(foreignAlmProxy), 1e6);
 
