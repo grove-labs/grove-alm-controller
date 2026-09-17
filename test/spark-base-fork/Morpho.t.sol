@@ -137,7 +137,6 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
     }
 
     function test_morpho_deposit_tokenOnlyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, token) key does not authorize deposits.
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
         rateLimits.setRateLimitData(
@@ -340,7 +339,6 @@ contract MorphoWithdrawSuccessTests is MorphoBaseTest {
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
 
-        // Withdraw charges the withdraw limit by the assets received; the deposit limit is untouched.
         assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }
@@ -463,7 +461,6 @@ contract MorphoRedeemSuccessTests is MorphoBaseTest {
         assertEq(usdsVault.convertToAssets(usdsVault.balanceOf(address(almProxy))), 0);
         assertEq(IERC20(Base.USDS).balanceOf(address(almProxy)),                    1_000_000e18);
 
-        // Redeem charges the withdraw limit by the assets received; the deposit limit is untouched.
         assertEq(rateLimits.getCurrentRateLimit(usdsDepositKey),  24_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(usdsWithdrawKey), 9_000_000e18);
     }

@@ -69,7 +69,6 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
     }
 
     function test_depositERC4626_tokenOnlyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, token) key does not authorize deposits.
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(depositKey, 0, 0);
         rateLimits.setRateLimitData(

@@ -46,7 +46,6 @@ library ERC4626Lib {
     function deposit(DepositParams memory params) external returns (uint256 shares) {
         address asset = IERC4626(params.token).asset();
 
-        // Deposit limit key: keccak256(abi.encode(rateLimitId, asset, token)).
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, asset, params.token),
             params.amount
@@ -55,7 +54,6 @@ library ERC4626Lib {
         // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
         ERC20Lib.approve(params.proxy, asset, params.token, params.amount);
 
-        // Shares are measured on the proxy rather than trusted from the vault's return value.
         uint256 startingShares = IERC20(params.token).balanceOf(address(params.proxy));
 
         params.proxy.doCall(
@@ -72,7 +70,6 @@ library ERC4626Lib {
             "ERC4626Lib/exchange-rate-too-high"
         );
 
-        // Clear approval in case the vault pulled less than approved.
         ERC20Lib.approve(params.proxy, asset, params.token, 0);
     }
 
@@ -97,7 +94,6 @@ library ERC4626Lib {
 
         require(shares <= params.maxSharesIn, "ERC4626Lib/shares-burned-too-high");
 
-        // Charge the withdraw limit by the assets actually received.
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
             assets
@@ -122,7 +118,6 @@ library ERC4626Lib {
 
         require(assets >= params.minAssetsOut, "ERC4626Lib/min-assets-out-not-met");
 
-        // Charge the withdraw limit by the assets actually received.
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
             assets

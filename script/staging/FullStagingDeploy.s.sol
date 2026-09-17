@@ -526,7 +526,7 @@ contract FullStagingDeploy is Script {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this.
+        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
         bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_4626_DEPOSIT();
         bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_4626_WITHDRAW();
 
