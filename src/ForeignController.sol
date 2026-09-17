@@ -51,7 +51,6 @@ contract ForeignController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
-    event MerklDistributorSet(address indexed merklDistributor);
 
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
@@ -100,7 +99,6 @@ contract ForeignController is AccessControl {
     IRateLimits public rateLimits;
     IERC20      public usdc;
     address     public pendleRouter;
-    address     public merklDistributor;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
@@ -250,14 +248,6 @@ contract ForeignController is AccessControl {
         require(twapSecondsAgo < uint32(type(int32).max), "FC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
-    }
-
-    function setMerklDistributor(address merklDistributor_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        merklDistributor = merklDistributor_;
-        emit MerklDistributorSet(merklDistributor_);
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -687,14 +677,13 @@ contract ForeignController is AccessControl {
     /*** Relayer Merkl functions                                                                 ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external {
         _checkRole(RELAYER);
-        require(address(merklDistributor) != address(0), "FC/merkl-distributor-not-set");
-
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
-            proxy        : proxy,
-            distributor  : merklDistributor,
-            operator     : operator
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            distributor : distributor,
+            operator    : operator
         }));
     }
 
