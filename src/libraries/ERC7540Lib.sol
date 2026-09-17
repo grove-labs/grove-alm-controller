@@ -14,11 +14,6 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library ERC7540Lib {
 
-    // Rate limit keys:
-    //   request deposit: keccak256(abi.encode(LIMIT_7540_REQUEST_DEPOSIT, asset, token))
-    //   claim deposit:   keccak256(abi.encode(LIMIT_7540_CLAIM_DEPOSIT, token))
-    //   request redeem:  keccak256(abi.encode(LIMIT_7540_REQUEST_REDEEM, token))
-    //   claim redeem:    keccak256(abi.encode(LIMIT_7540_CLAIM_REDEEM, token))
     bytes32 public constant LIMIT_7540_REQUEST_DEPOSIT = keccak256("LIMIT_7540_REQUEST_DEPOSIT");
     bytes32 public constant LIMIT_7540_CLAIM_DEPOSIT   = keccak256("LIMIT_7540_CLAIM_DEPOSIT");
     bytes32 public constant LIMIT_7540_REQUEST_REDEEM  = keccak256("LIMIT_7540_REQUEST_REDEEM");

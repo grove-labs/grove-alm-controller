@@ -51,7 +51,6 @@ contract CentrifugeTestBase is ForkTestBase {
     bytes32 requestRedeemKey;
     bytes32 claimRedeemKey;
 
-    // Centrifuge cancel/claim-cancel paths still gate on the ForeignController 7540 ids.
     bytes32 centrifugeDepositKey;
     bytes32 centrifugeRedeemKey;
 
@@ -109,7 +108,6 @@ contract ForeignControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
     }
 
     function test_requestDepositERC7540_legacyDepositKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(centrifugeDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -186,7 +184,6 @@ contract ForeignControllerRequestDepositERC7540SuccessTests is CentrifugeTestBas
     function test_requestDepositERC7540_clearsApprovalWhenVaultPullsLess() external {
         deal(address(usdcAvalanche), address(almProxy), 1_000_000e6);
 
-        // Simulate a vault that accepts the request without pulling the full amount.
         vm.mockCall(
             address(centrifugeV3Vault),
             abi.encodeWithSelector(
@@ -549,7 +546,6 @@ contract ForeignControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
     }
 
     function test_requestRedeemERC7540_legacyRedeemKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize requests.
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(centrifugeRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 

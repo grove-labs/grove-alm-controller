@@ -80,7 +80,6 @@ contract CentrifugeTestBase is ForkTestBase {
     bytes32 requestRedeemKey;
     bytes32 claimRedeemKey;
 
-    // Centrifuge cancel/claim-cancel paths still gate on the MainnetController 7540 ids.
     bytes32 centrifugeDepositKey;
     bytes32 centrifugeRedeemKey;
 
@@ -124,7 +123,6 @@ contract MainnetControllerRequestDepositERC7540FailureTests is CentrifugeTestBas
     }
 
     function test_requestDepositERC7540_legacyDepositKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_DEPOSIT, token) key does not authorize requests.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(centrifugeDepositKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
@@ -515,7 +513,6 @@ contract MainnetControllerRequestRedeemERC7540FailureTests is CentrifugeTestBase
     }
 
     function test_requestRedeemERC7540_legacyRedeemKeyNotHonoured() external {
-        // A limit under the pre-facet (LIMIT_7540_REDEEM, token) key does not authorize requests.
         vm.prank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(centrifugeRedeemKey, 1_000_000e6, uint256(1_000_000e6) / 1 days);
 
