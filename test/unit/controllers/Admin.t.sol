@@ -448,7 +448,6 @@ contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAd
 
 }
 
-
 contract ForeignControllerAdminTestBase is UnitTestBase {
 
     event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
@@ -1071,7 +1070,6 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         uint128 maxLossFactor
     );
 
-    // The setter is keyed by id; Midnight itself rejects markets for another chain or venue.
     bytes32 marketId = keccak256("market");
 
     function _config(uint16 maxBuyTick, uint16 minSellTick, uint32 maxContinuousFee)
@@ -1172,7 +1170,6 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         assertEq(maxContinuousFee, 100);
         assertEq(maxLossFactor,    1e18);
 
-        // Another id is untouched.
         ( maxBuyTick, minSellTick, maxContinuousFee, maxLossFactor )
             = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
 
@@ -1181,7 +1178,6 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         assertEq(maxContinuousFee, 0);
         assertEq(maxLossFactor,    0);
 
-        // A zero maxBuyTick disables entry, the exit floor stays in place, and any loss factor is legal.
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
         emit MidnightMarketConfigSet(

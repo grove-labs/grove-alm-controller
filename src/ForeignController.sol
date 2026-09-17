@@ -296,10 +296,7 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        // Market ids commit to the Midnight address, so repointing moves where entries are allowed;
-        // markets onboarded under the old venue keep their configs and stay sellable (the sell path
-        // takes the venue from the offer). Redemption follows the configured venue, so matured
-        // old-venue positions need a repoint back to redeem.
+        // Old-venue markets stay sellable (venue comes from the offer) but redeem only after a repoint back.
         midnight = midnight_;
         emit MidnightSet(midnight_);
     }
@@ -834,8 +831,7 @@ contract ForeignController is AccessControl {
     /*** Relayer Midnight functions                                                             ***/
     /**********************************************************************************************/
 
-    // NOTE: A brand new market has to be touched once on Midnight, by anyone, before it trades here.
-    //       `marketId` selects the onboarded config; the library checks every offer against it.
+    // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
 
     function buyMidnight(
         bytes32   marketId,

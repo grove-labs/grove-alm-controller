@@ -2,10 +2,8 @@
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370,
-// src/interfaces/IMidnight.sol. Structs are copied verbatim because the market id is a CREATE2
-// address derived from abi.encode(market) (see MidnightIdLib). IMidnight is trimmed to the
-// lend-side surface used here.
+// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/interfaces/IMidnight.sol.
+// Structs verbatim (the market id hashes abi.encode(market)); IMidnight trimmed to the lend-side surface.
 
 struct CollateralParams {
     address token;
@@ -63,8 +61,6 @@ interface IMidnight {
         external view returns (uint128 newCredit, uint128 newPendingFee, uint128 accruedFee);
 
     function toMarket(bytes32 id) external view returns (Market memory);
-
-    function credit(bytes32 id, address user) external view returns (uint128);
 
     function debt(bytes32 id, address user) external view returns (uint128);
 

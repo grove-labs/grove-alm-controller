@@ -2,11 +2,8 @@
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370,
-// src/libraries/TickLib.sol. Midnight exposes no tick-to-price view, so bounding offer
-// prices on-chain needs the conversion here. Two deviations, neither changing results:
-// `priceToTick` is omitted, and `require(cond, CustomError())` is rewritten as an if
-// with a revert, which solc 0.8.25 needs.
+// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/libraries/TickLib.sol.
+// `priceToTick` omitted; `require(cond, CustomError())` rewritten as if/revert for solc 0.8.25.
 
 int256  constant LN_ONE_PLUS_DELTA = 0.004987541511039073e18;  // floor(ln(1.005) * 1e18)
 uint256 constant MAX_TICK          = 6744;
