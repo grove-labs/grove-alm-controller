@@ -37,12 +37,12 @@ library AaveLib {
     }
 
     function deposit(DepositParams memory params) external {
-        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
+        address   underlying = IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS();
         IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressAddressKey(
-                params.rateLimitId, address(underlying), address(pool), params.aToken
+                params.rateLimitId, underlying, address(pool), params.aToken
             ),
             params.amount
         );
@@ -51,11 +51,11 @@ library AaveLib {
 
         uint256 aTokenBalance = IERC20(params.aToken).balanceOf(address(params.proxy));
 
-        ERC20Lib.approve(params.proxy, address(underlying), address(pool), params.amount);
+        ERC20Lib.approve(params.proxy, underlying, address(pool), params.amount);
 
         params.proxy.doCall(
             address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), params.amount, address(params.proxy), 0))
+            abi.encodeCall(pool.supply, (underlying, params.amount, address(params.proxy), 0))
         );
 
         uint256 newATokens = IERC20(params.aToken).balanceOf(address(params.proxy)) - aTokenBalance;
@@ -65,7 +65,7 @@ library AaveLib {
             "AaveLib/slippage-too-high"
         );
 
-        ERC20Lib.approve(params.proxy, address(underlying), address(pool), 0);
+        ERC20Lib.approve(params.proxy, underlying, address(pool), 0);
     }
 
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
