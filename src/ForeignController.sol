@@ -64,7 +64,6 @@ contract ForeignController is AccessControl {
         uint32  maxContinuousFee,
         uint128 maxLossFactor
     );
-    event MidnightSet(address indexed midnight);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
     event MerklDistributorSet(address indexed merklDistributor);
@@ -155,7 +154,8 @@ contract ForeignController is AccessControl {
         address cctp_,
         address pendleRouter_,
         address uniswapV3Router_,
-        address uniswapV3PositionManager_
+        address uniswapV3PositionManager_,
+        address midnight_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -167,6 +167,7 @@ contract ForeignController is AccessControl {
         pendleRouter             = pendleRouter_;
         uniswapV3Router          = ISwapRouter(uniswapV3Router_);
         uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
+        midnight                 = midnight_;
     }
 
     /**********************************************************************************************/
@@ -290,15 +291,6 @@ contract ForeignController is AccessControl {
     {
         merklDistributor = merklDistributor_;
         emit MerklDistributorSet(merklDistributor_);
-    }
-
-    function setMidnight(address midnight_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        // Old-venue markets stay sellable (venue comes from the offer) but redeem only after a repoint back.
-        midnight = midnight_;
-        emit MidnightSet(midnight_);
     }
 
     function setMidnightMarketConfig(bytes32 marketId, MidnightLib.MarketConfig memory config)

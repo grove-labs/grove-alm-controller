@@ -110,7 +110,8 @@ contract ForeignControllerRemoveRelayerTests is UnitTestBase {
             makeAddr("cctp"),
             makeAddr("pendleRouter"),
             makeAddr("uniswapV3Router"),
-            makeAddr("uniswapV3PositionManager")
+            makeAddr("uniswapV3PositionManager"),
+            makeAddr("midnight")
         );
 
         vm.startPrank(admin);
