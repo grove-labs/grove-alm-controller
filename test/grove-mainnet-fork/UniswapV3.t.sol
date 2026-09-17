@@ -137,7 +137,6 @@ contract UniswapV3TestBase is ForkTestBase {
         return amount * 1e18 / 10 ** IERC20Metadata(address(token)).decimals();
     }
 
-    // Swaps `amount` of token0 into token1 and back as an external actor so the pool accrues fees.
     function _generateFees(uint256 amount) internal {
         deal(address(token0), stranger, amount);
 
@@ -413,7 +412,6 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    // The output amount is measured from the proxy balance, not trusted from the router's return value
     function test_swapUniswapV3_minAmountOutNotMet() public {
         uint256 amountIn     = 1_000e6;
         uint256 minAmountOut = 990e6;
@@ -1015,7 +1013,6 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    // The per-asset limit (1m) would allow this deposit; only the aggregate limit blocks it
     function test_addLiquidityUniswapV3_rateLimitExceeded_aggregate() public {
         uint256 amount0 = 900_000e6;
         uint256 amount1 = 0;
@@ -1945,15 +1942,12 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         assertApproxEqRel(amount1Used, amount1Added * liquidity_ / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
     }
 
-    // Fees accrued by the position are collected to the proxy but are neither reported as
-    // withdrawn principal nor charged against the withdraw rate limits.
     function _removeLiquidityWithFeesAndValidate(bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal {
         _generateFees(1_000_000 * 10 ** IERC20Metadata(address(token0)).decimals());
 
         uint256 proxyBalance0Before = token0.balanceOf(address(almProxy));
         uint256 proxyBalance1Before = token1.balanceOf(address(almProxy));
 
-        // Remove half the position; all accrued fees are still collected
         (uint256 amount0Used, uint256 amount1Used) = _removeLiquidity(
             tokenId,
             totalLiquidity / 2,

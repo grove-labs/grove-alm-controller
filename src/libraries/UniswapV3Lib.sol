@@ -496,8 +496,7 @@ library UniswapV3Lib {
 
     //-- Rate limit helper functions
 
-    // The aggregate limit sums both amounts normalized to 18 decimals, which assumes the pool tokens
-    // are pegged and valued equally (i.e. 1.000000 USDC == 1.000000000000000000 USDS).
+    // Summing both amounts normalized to 18 decimals assumes the pool tokens are pegged 1:1.
     function _decreaseRateLimits(
         UniV3Context calldata context,
         address token0,
