@@ -41,6 +41,8 @@ import { MainnetControllerInit } from "../../deploy/MainnetControllerInit.sol";
 
 import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
 
+import { IATokenWithPool } from "../../src/libraries/AaveLib.sol";
+
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 import { MockJug }          from "./mocks/MockJug.sol";
@@ -507,8 +509,19 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  aToken), maxAmount,         slope);
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, aToken), type(uint256).max, 0);
+        address underlying = IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS();
+        address pool       = IATokenWithPool(aToken).POOL();
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressAddressKey(depositKey, underlying, pool, aToken),
+            maxAmount,
+            slope
+        );
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressKey(withdrawKey, pool, aToken),
+            type(uint256).max,
+            0
+        );
 
         vm.stopBroadcast();
     }

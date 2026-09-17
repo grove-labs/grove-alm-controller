@@ -37,25 +37,25 @@ library AaveLib {
     }
 
     function deposit(DepositParams memory params) external {
+        address   underlying = IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS();
+        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
+
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.aToken),
+            RateLimitHelpers.makeAddressAddressAddressKey(
+                params.rateLimitId, underlying, address(pool), params.aToken
+            ),
             params.amount
         );
 
         require(params.maxSlippage != 0, "AaveLib/max-slippage-not-set");
 
-        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
-
         uint256 aTokenBalance = IERC20(params.aToken).balanceOf(address(params.proxy));
 
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        ERC20Lib.approve(params.proxy, address(underlying), address(pool), params.amount);
+        ERC20Lib.approve(params.proxy, underlying, address(pool), params.amount);
 
-        // Deposit underlying into Aave pool, proxy receives aTokens.
         params.proxy.doCall(
             address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), params.amount, address(params.proxy), 0))
+            abi.encodeCall(pool.supply, (underlying, params.amount, address(params.proxy), 0))
         );
 
         uint256 newATokens = IERC20(params.aToken).balanceOf(address(params.proxy)) - aTokenBalance;
@@ -64,30 +64,25 @@ library AaveLib {
             newATokens >= params.amount * params.maxSlippage / 1e18,
             "AaveLib/slippage-too-high"
         );
+
+        ERC20Lib.approve(params.proxy, underlying, address(pool), 0);
     }
 
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
-        IAavePool pool = IAavePool(IATokenWithPool(params.aToken).POOL());
+        IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
+        IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
 
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            params.proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (
-                        IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS(),
-                        params.amount,
-                        address(params.proxy)
-                    )
-                )
-            ),
-            (uint256)
+        uint256 underlyingBalance = underlying.balanceOf(address(params.proxy));
+
+        params.proxy.doCall(
+            address(pool),
+            abi.encodeCall(pool.withdraw, (address(underlying), params.amount, address(params.proxy)))
         );
 
+        amountWithdrawn = underlying.balanceOf(address(params.proxy)) - underlyingBalance;
+
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.aToken),
+            RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, address(pool), params.aToken),
             amountWithdrawn
         );
     }
