@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
-
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
 import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
@@ -20,6 +18,7 @@ import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
 import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
 import { CurveLib }      from "./libraries/CurveLib.sol";
 import { ERC4626Lib }    from "./libraries/ERC4626Lib.sol";
+import { ERC7540Lib }    from "./libraries/ERC7540Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
@@ -157,14 +156,6 @@ contract ForeignController is AccessControl {
 
     modifier rateLimitedAsset(bytes32 key, address asset, uint256 amount) {
         rateLimits.triggerRateLimitDecrease(RateLimitHelpers.makeAssetKey(key, asset), amount);
-        _;
-    }
-
-    modifier rateLimitExists(bytes32 key) {
-        require(
-            rateLimits.getRateLimitData(key).maxAmount > 0,
-            "FC/invalid-action"
-        );
         _;
     }
 
@@ -444,64 +435,46 @@ contract ForeignController is AccessControl {
     /*** Relayer ERC7540 functions                                                              ***/
     /**********************************************************************************************/
 
-    function requestDepositERC7540(address token, uint256 amount)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_7540_DEPOSIT, token, amount)
-    {
-
-        // Note that whitelist is done by rate limits
-        IERC20 asset = IERC20(IERC7540(token).asset());
-
-        // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
-        ERC20Lib.approve(proxy, address(asset), token, amount);
-
-        // Submit deposit request by transferring assets
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestDeposit, (amount, address(proxy), address(proxy)))
-        );
+    function requestDepositERC7540(address token, uint256 amount) external {
+        _checkRole(RELAYER);
+        ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            token       : token,
+            amount      : amount
+        }));
     }
 
-    function claimDepositERC7540(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token))
-    {
-
-        uint256 shares = IERC7540(token).maxMint(address(proxy));
-
-        // Claim shares from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC4626(token).mint, (shares, address(proxy)))
-        );
+    function claimDepositERC7540(address token) external {
+        _checkRole(RELAYER);
+        ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_7540_DEPOSIT,
+            token       : token
+        }));
     }
 
-    function requestRedeemERC7540(address token, uint256 shares)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_7540_REDEEM, token, IERC7540(token).convertToAssets(shares))
-    {
-        // Submit redeem request by transferring shares
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestRedeem, (shares, address(proxy), address(proxy)))
-        );
+    function requestRedeemERC7540(address token, uint256 shares) external {
+        _checkRole(RELAYER);
+        ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_7540_REDEEM,
+            token       : token,
+            shares      : shares
+        }));
     }
 
-    function claimRedeemERC7540(address token)
-        external
-        onlyRole(RELAYER)
-        rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token))
-    {
-        uint256 assets = IERC7540(token).maxWithdraw(address(proxy));
-
-        // Claim assets from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).withdraw, (assets, address(proxy), address(proxy)))
-        );
+    function claimRedeemERC7540(address token) external {
+        _checkRole(RELAYER);
+        ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_7540_REDEEM,
+            token       : token
+        }));
     }
 
     /**********************************************************************************************/
