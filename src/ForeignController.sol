@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
-import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
-
 import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
@@ -18,9 +15,11 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
+import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
 import { CentrifugeLib } from "./libraries/CentrifugeLib.sol";
 import { CurveLib }      from "./libraries/CurveLib.sol";
+import { ERC4626Lib }    from "./libraries/ERC4626Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
@@ -31,10 +30,6 @@ import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
-
-interface IATokenWithPool is IAToken {
-    function POOL() external view returns(address);
-}
 
 contract ForeignController is AccessControl {
 
@@ -67,8 +62,6 @@ contract ForeignController is AccessControl {
     /**********************************************************************************************/
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
-
-    uint256 public constant EXCHANGE_RATE_PRECISION = 1e36;
 
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
@@ -283,7 +276,7 @@ contract ForeignController is AccessControl {
 
         emit MaxExchangeRateSet(
             token,
-            maxExchangeRates[token] = _getExchangeRate(shares, maxExpectedAssets)
+            maxExchangeRates[token] = ERC4626Lib.getExchangeRate(shares, maxExpectedAssets)
         );
     }
 
@@ -406,68 +399,45 @@ contract ForeignController is AccessControl {
 
     function depositERC4626(address token, uint256 amount)
         external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_4626_DEPOSIT, token, amount)
         returns (uint256 shares)
     {
-        // Note that whitelist is done by rate limits.
-        IERC20 asset = IERC20(IERC4626(token).asset());
-
-        // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
-        ERC20Lib.approve(proxy, address(asset), token, amount);
-
-        // Deposit asset into the token, proxy receives token shares, decode the resulting shares.
-        shares = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).deposit, (amount, address(proxy)))
-            ),
-            (uint256)
-        );
-
-        require(
-            _getExchangeRate(shares, amount) <= maxExchangeRates[token],
-            "ForeignController/exchange-rate-too-high"
-        );
+        _checkRole(RELAYER);
+        return ERC4626Lib.deposit(ERC4626Lib.DepositParams({
+            proxy           : proxy,
+            rateLimits      : rateLimits,
+            rateLimitId     : LIMIT_4626_DEPOSIT,
+            token           : token,
+            amount          : amount,
+            maxExchangeRate : maxExchangeRates[token]
+        }));
     }
 
     function withdrawERC4626(address token, uint256 amount)
         external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_4626_WITHDRAW, token, amount)
         returns (uint256 shares)
     {
-        // Withdraw asset from a token, decode resulting shares.
-        // Assumes proxy has adequate token shares.
-        shares = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).withdraw, (amount, address(proxy), address(proxy)))
-            ),
-            (uint256)
-        );
+        _checkRole(RELAYER);
+        return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_4626_WITHDRAW,
+            token       : token,
+            amount      : amount
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function redeemERC4626(address token, uint256 shares)
         external
-        onlyRole(RELAYER)
         returns (uint256 assets)
     {
-        // Redeem shares for assets from the token, decode the resulting assets.
-        // Assumes proxy has adequate token shares.
-        assets = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).redeem, (shares, address(proxy), address(proxy)))
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, token),
-            assets
-        );
+        _checkRole(RELAYER);
+        return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_4626_WITHDRAW,
+            token       : token,
+            shares      : shares
+        }));
     }
 
     /**********************************************************************************************/
@@ -607,60 +577,30 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave functions                                                                 ***/
     /**********************************************************************************************/
 
-    function depositAave(address aToken, uint256 amount)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount)
-    {
-        require(maxSlippages[aToken] != 0, "ForeignController/max-slippage-not-set");
-
-        IERC20    underlying = IERC20(IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
-
-        uint256 aTokenBalance = IERC20(aToken).balanceOf(address(proxy));
-
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        ERC20Lib.approve(proxy, address(underlying), address(pool), amount);
-
-        // Deposit underlying into Aave pool, proxy receives aTokens.
-        proxy.doCall(
-            address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), amount, address(proxy), 0))
-        );
-
-        uint256 newATokens = IERC20(aToken).balanceOf(address(proxy)) - aTokenBalance;
-
-        require(
-            newATokens >= amount * maxSlippages[aToken] / 1e18,
-            "ForeignController/slippage-too-high"
-        );
+    function depositAave(address aToken, uint256 amount) external {
+        _checkRole(RELAYER);
+        AaveLib.deposit(AaveLib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_DEPOSIT,
+            aToken      : aToken,
+            amount      : amount,
+            maxSlippage : maxSlippages[aToken]
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdrawAave(address aToken, uint256 amount)
         external
-        onlyRole(RELAYER)
         returns (uint256 amountWithdrawn)
     {
-        IAavePool pool = IAavePool(IATokenWithPool(aToken).POOL());
-
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS(), amount, address(proxy))
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
-            amountWithdrawn
-        );
+        _checkRole(RELAYER);
+        return AaveLib.withdraw(AaveLib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_WITHDRAW,
+            aToken      : aToken,
+            amount      : amount
+        }));
     }
 
     /**********************************************************************************************/
@@ -913,20 +853,6 @@ contract ForeignController is AccessControl {
 
     function _rateLimited(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitDecrease(key, amount);
-    }
-
-    /**********************************************************************************************/
-    /*** Exchange rate helper functions                                                         ***/
-    /**********************************************************************************************/
-
-    function _getExchangeRate(uint256 shares, uint256 assets) internal pure returns (uint256) {
-        // Return 0 for zero assets first, to handle the valid case of 0 shares and 0 assets.
-        if (assets == 0) return 0;
-
-        // Zero shares with non-zero assets is invalid (infinite exchange rate).
-        if (shares == 0) revert("ForeignController/zero-shares");
-
-        return (EXCHANGE_RATE_PRECISION * assets) / shares;
     }
 
 }
