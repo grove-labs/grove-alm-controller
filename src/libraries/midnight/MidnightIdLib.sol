@@ -4,9 +4,7 @@ pragma solidity ^0.8.21;
 
 import { Market } from "../../interfaces/MidnightInterfaces.sol";
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370,
-// src/libraries/IdLib.sol (toId only). The singleton exposes no toId, and the id is the
-// CREATE2 address of the market config stored as bytecode, with salt 0.
+// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/libraries/IdLib.sol (toId only).
 
 library MidnightIdLib {
 

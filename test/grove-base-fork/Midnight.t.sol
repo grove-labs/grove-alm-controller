@@ -12,7 +12,6 @@ import { MidnightTickLib } from "../../src/libraries/midnight/MidnightTickLib.so
 
 import "./ForkTestBase.t.sol";
 
-// The parts of the real singleton the tests drive directly, which the integration itself never calls.
 interface IMidnightTestHarness {
     function configurator() external view returns (address);
     function consumed(address user, bytes32 group) external view returns (uint128);
@@ -74,11 +73,9 @@ contract MidnightTestBase is ForkTestBase {
 
     address constant MIDNIGHT = MIDNIGHT_BASE;
 
-    // Both already enabled on the Base singleton at the fork block.
     uint256 constant LLTV               = 0.86e18;
     uint256 constant LIQUIDATION_CURSOR = 0.3e18;
 
-    // Midnight's default tick spacing; offer ticks have to be multiples of it.
     uint16 constant TICK_SPACING = 4;
 
     // tickToPrice(3372) is exactly 0.5e18, and price rises with the tick.
@@ -117,7 +114,6 @@ contract MidnightTestBase is ForkTestBase {
         return MIDNIGHT_BASE;
     }
 
-    // Overridden by the suites that run the same flows against tokens which are not 18 decimals.
     function _loanTokenDecimals()       internal virtual pure returns (uint8) { return 18; }
     function _collateralTokenDecimals() internal virtual pure returns (uint8) { return 18; }
 
@@ -130,7 +126,6 @@ contract MidnightTestBase is ForkTestBase {
         loanToken       = new MockERC20("Loan",       "LOAN", _loanTokenDecimals());
         collateralToken = new MockERC20("Collateral", "COLL", _collateralTokenDecimals());
 
-        // A 1:1 valuation at ORACLE_PRICE_SCALE (1e36), scaled by the tokens' decimal difference.
         oracle   = new MockOracle(1e36 * loanUnit / collateralUnit);
         ratifier = new DummyRatifier();
 
@@ -149,10 +144,8 @@ contract MidnightTestBase is ForkTestBase {
 
         marketId = midnight.touchMarket(market);
 
-        // The vendored id derivation has to agree with the protocol's own.
         assertEq(marketId, MidnightIdLib.toId(market));
 
-        // The maker is the counterparty for every fill, collateralized so it can sell units.
         loanToken.mint(maker, 100_000_000 * loanUnit);
         collateralToken.mint(maker, 100_000_000 * collateralUnit);
 
@@ -168,7 +161,6 @@ contract MidnightTestBase is ForkTestBase {
         _wireRateLimitsAndConfig();
     }
 
-    // Split out so the live market suite can point the same wiring at a different market id.
     function _wireRateLimitsAndConfig() internal {
         buyKey    = RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_BUY(),    marketId);
         sellKey   = RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_SELL(),   marketId);
@@ -197,7 +189,6 @@ contract MidnightTestBase is ForkTestBase {
     /*** Test helpers                                                                           ***/
     /**********************************************************************************************/
 
-    // Consumed capacity is tracked per (maker, group), so each offer gets its own group by default.
     function _offer(bool buy, uint256 tick, uint128 maxUnits) internal returns (Offer memory) {
         return _offer(buy, tick, maxUnits, bytes32(++offerNonce), address(ratifier));
     }
@@ -242,7 +233,6 @@ contract MidnightTestBase is ForkTestBase {
         return midnight.settlementFee(marketId, timeToMaturity);
     }
 
-    // Mirrors Midnight's settlement arithmetic: pay the price plus the fee, receive it less the fee.
     function _buyerAssets(uint256 units, uint256 tick) internal view returns (uint256) {
         uint256 price = MidnightTickLib.tickToPrice(tick) + _settlementFee();
 
@@ -255,8 +245,6 @@ contract MidnightTestBase is ForkTestBase {
         return units * price / 1e18;
     }
 
-    // What the maker receives when it is the seller: the offer price, rounded up, no fee (the fee
-    // is added on the buyer's side).
     function _makerSellerAssets(uint256 units, uint256 tick) internal pure returns (uint256) {
         uint256 price = MidnightTickLib.tickToPrice(tick);
 
@@ -323,7 +311,6 @@ contract MidnightTestBase is ForkTestBase {
         );
     }
 
-    // Buys units into the proxy so the exit paths have a position to work with.
     function _seedCredit(uint256 units) internal returns (uint256 assetsSpent) {
         return _buy(_offer(false, TICK_98, uint128(units)), units, type(uint256).max);
     }
@@ -403,13 +390,11 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
             uint256[] memory units
         ) = _batch(offer, 1e18);
 
-        // An unonboarded market has an all zero config, so entry is closed by the same kill switch.
         vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/buy-not-enabled");
         foreignController.buyMidnight(MidnightIdLib.toId(otherMarket), offers, ratifierData, units, 1e18);
     }
 
-    // The id has to match the offers; an onboarded id cannot lend its config to another market.
     function test_buyMidnight_marketIdMismatch() public {
         Market memory otherMarket = market;
         otherMarket.maturity = market.maturity + 1 days;
@@ -421,7 +406,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         _buy(offer, 1e18, 1e18);
     }
 
-    // Governance can onboard any id, but entries only go to the configured venue.
     function test_buyMidnight_invalidMidnight() public {
         Market memory otherMarket = market;
         otherMarket.midnight = makeAddr("otherMidnight");
@@ -478,7 +462,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
     }
 
-    // The governance bound is on the all-in price, so a non-zero settlement fee eats into it.
     function test_buyMidnight_priceBoundIncludesSettlementFee() public {
         _setFees(5, 0.0025e18, 0);
 
@@ -486,7 +469,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
 
         assertGt(_settlementFee(), 0);
 
-        // The lowest tick whose price covers the tick price plus the fee.
         uint16 boundTick = TICK_98;
         while (MidnightTickLib.tickToPrice(boundTick) < allInPrice) boundTick++;
 
@@ -502,7 +484,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(_buy(_offer(false, TICK_98, 1e18), 1e18, 1e18), _buyerAssets(1e18, TICK_98));
     }
 
-    // The fee is reserved out of the tick bound, so a bound below the fee leaves no price to buy at.
     function test_buyMidnight_maxBuyTickBelowFee() public {
         _setFees(5, 0.0025e18, 0);
 
@@ -514,7 +495,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
     }
 
-    // Paying the maker at the proxy's own address would net the transfer to zero, hiding the spend.
     function test_buyMidnight_offerReceiverIsProxy() public {
         Offer memory offer = _offer(false, TICK_98, 1e18);
         offer.receiverIfMakerIsSeller = address(almProxy);
@@ -522,8 +502,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         vm.expectRevert("MidnightLib/invalid-offer-receiver");
         _buy(offer, 1e18, 1e18);
 
-        // Any other receiver is the maker's business; the spend is still measured in full. With a fee
-        // on, the maker gets the bare offer price and the proxy pays price plus fee.
         _setFees(5, 0.0025e18, 0);
 
         uint256 units    = 1_234.567e18;
@@ -545,8 +523,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey),  5_000_000e18 - expected);
     }
 
-    // Onboarding does not consult the singleton, so a market nobody has touched yet can be configured
-    // but not traded: the fee lookup is the first thing to hit the protocol.
     function test_buyMidnight_marketNotTouched() public {
         Market memory untouched = market;
         untouched.maturity = market.maturity + 1 days;
@@ -583,7 +559,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(untouchedBuyKey, 5_000_000e18, 0);
 
-        // Fees are zero on both markets, so the base market's quote carries over.
         vm.prank(ALM_RELAYER);
         assertEq(
             foreignController.buyMidnight(untouchedId, offers, ratifierData, units, 1e18),
@@ -610,7 +585,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
 
         Offer memory offer = _offer(false, TICK_98, uint128(units));
 
-        // Midnight can only pull up to the approval, so the token itself stops the overspend.
         vm.expectRevert(stdError.arithmeticError);
         _buy(offer, units, maxAssetsIn);
     }
@@ -660,7 +634,7 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(loanToken.balanceOf(address(almProxy)),       10_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(buyKey),       5_000_000e18);
 
-        // Bound above the fill so that a leftover approval would show, rather than be spent away.
+        // Bound above the fill so a leftover approval would show rather than be spent.
         uint256 assetsSpent = _buy(_offer(false, TICK_98, uint128(units)), units, expectedAssets + 1_000e18);
 
         assertEq(assetsSpent,                                  expectedAssets);
@@ -670,7 +644,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(loanToken.allowance(address(almProxy), MIDNIGHT), 0);
         assertEq(rateLimits.getCurrentRateLimit(buyKey),       5_000_000e18 - expectedAssets);
 
-        // A buy at a sub-par price is spending less than the units bought, which is the whole point.
         assertLt(expectedAssets, units);
     }
 
@@ -700,7 +673,6 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey),           5_000_000e18 - expectedAssets);
     }
 
-    // One bad offer takes the whole batch down: no partial entry.
     function test_buyMidnight_batchIsAtomic() public {
         Offer[] memory offers = new Offer[](2);
         offers[0] = _offer(false, TICK_98, 1_000e18, "group-0", address(ratifier));
@@ -752,7 +724,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         _sell(_offer(true, TICK_99, 1e18), 1e18, 0);
     }
 
-    // An unonboarded id has an all zero config, so exits from it are closed as well.
     function test_sellMidnight_sellNotEnabled() public {
         Market memory otherMarket = market;
         otherMarket.maturity = market.maturity + 1 days;
@@ -783,7 +754,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         _sell(_offer(true, TICK_99, 1e18), 1e18, 1);
     }
 
-    // The floor is on what actually lands in the proxy, so the settlement fee eats into it.
     function test_sellMidnight_priceBoundIncludesSettlementFee() public {
         _setFees(5, 0.0025e18, 0);
 
@@ -791,7 +761,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
 
         uint256 netPrice = MidnightTickLib.tickToPrice(TICK_99) - _settlementFee();
 
-        // The highest floor tick the net price still clears.
         uint16 boundTick = TICK_99;
         while (MidnightTickLib.tickToPrice(boundTick) > netPrice) boundTick--;
 
@@ -860,11 +829,9 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(loanToken.balanceOf(address(almProxy)),     balanceBefore + expected);
         assertEq(rateLimits.getCurrentRateLimit(sellKey),    5_000_000e18 - expected);
 
-        // Exiting hands back entry capacity, capped at the configured maximum.
         assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18 - buySpend + expected);
     }
 
-    // An oversized ask is clamped rather than reverting or turning into naked debt.
     function test_sellMidnight_clampsUnitsToCredit() public {
         uint256 expected = _sellerAssets(SEEDED_UNITS, TICK_99);
 
@@ -906,7 +873,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(sellKey),    5_000_000e18 - expected);
     }
 
-    // Running out of credit inside an offer clamps that fill rather than skipping or reverting it.
     function test_sellMidnight_batchClampsTheOfferThatExhaustsThePosition() public {
         uint256 units0 = 600_000e18;
         uint256 units1 = SEEDED_UNITS - units0;
@@ -948,12 +914,10 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(assetsReceived, expected);
         assertEq(_credit(),      0);
 
-        // The second offer was never reached, so its group budget is untouched.
         assertEq(harness.consumed(maker, "group-0"), SEEDED_UNITS);
         assertEq(harness.consumed(maker, "group-1"), 0);
     }
 
-    // Exits stay open when entry is shut off, both by the kill switch and by the fee guard.
     function test_sellMidnight_worksWhenBuysAreBlocked() public {
         _setFees(0, 0, 1);
         _setConfig(0, TICK_98, 0);
@@ -967,7 +931,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(_sell(_offer(true, TICK_99, uint128(units)), units, expected), expected);
     }
 
-    // With no entry capacity configured, exiting still works and simply has nothing to give back.
     function test_sellMidnight_buyLimitNotConfigured() public {
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(buyKey, 0, 0);
@@ -1005,7 +968,6 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         Market memory otherMarket = market;
         otherMarket.midnight = makeAddr("otherMidnight");
 
-        // A market on another venue has a different id, so governance never onboarded it.
         vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/market-not-onboarded");
         foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
@@ -1020,7 +982,6 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
     function test_redeemMidnight_minAssetsOutNotMet() public {
         _repay(100_000e18);
 
-        // Units are clamped to what the pool can serve, so the floor is on the assets actually out.
         vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/min-assets-out-not-met");
         foreignController.redeemMidnight(marketId, SEEDED_UNITS, 100_000e18 + 1);
@@ -1064,7 +1025,6 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
 
         uint256 assetsWithdrawn = _redeem(units, units);
 
-        // Credit redeems at par: one unit of credit for one unit of the loan token.
         assertEq(assetsWithdrawn,                            units);
         assertEq(_credit(),                                  SEEDED_UNITS - units);
         assertEq(midnight.debt(marketId, address(almProxy)), 0);
@@ -1103,7 +1063,6 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
     }
 
-    // The library resolves the market from the venue, so an id Midnight never touched cannot redeem.
     function test_redeemMidnight_marketNotCreated() public {
         bytes32 unknownId = keccak256("unknown");
 
@@ -1132,7 +1091,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
         _seedCredit(SEEDED_UNITS);
     }
 
-    // Craters the price, then liquidates repaying and seizing nothing, which socializes the bad debt.
     function _slash() internal {
         oracle.setPrice(1e36 / 100);
 
@@ -1142,7 +1100,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
         assertGt(midnight.lossFactor(marketId), 0);
     }
 
-    // Mirrors Midnight's own write down: credit is scaled by the unslashed share of the market.
     function _postSlashCredit(uint256 credit) internal view returns (uint256) {
         return credit * (type(uint128).max - midnight.lossFactor(marketId)) / type(uint128).max;
     }
@@ -1150,7 +1107,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
     function test_buyMidnight_lossFactorTooHigh() public {
         _slash();
 
-        // The price recovers, the realized loss does not.
         oracle.setPrice(1e36);
 
         uint128 lossFactor = midnight.lossFactor(marketId);
@@ -1168,7 +1124,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
         assertEq(_buy(_offer(false, TICK_98, 1e18), 1e18, 1e18), _buyerAssets(1e18, TICK_98));
     }
 
-    // Slashing writes down the position, so the credit delta is measured against the new balance.
     function test_sellMidnight_afterSlashing() public {
         uint256 creditBefore = _credit();
 
@@ -1181,7 +1136,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
 
         uint256 expected = _sellerAssets(slashedCredit, TICK_99);
 
-        // The oversized ask is clamped to the slashed position instead of turning into naked debt.
         assertEq(_sell(_offer(true, TICK_99, uint128(SEEDED_UNITS)), SEEDED_UNITS, expected), expected);
 
         assertEq(_credit(),                                  0);
@@ -1200,7 +1154,6 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
         assertEq(_credit(), 0);
     }
 
-    // Exits are never gated on the loss factor: the only way out of an impaired market is to use them.
     function test_midnightExits_workWhenEntryIsGatedOnLossFactor() public {
         _slash();
         oracle.setPrice(1e36);
@@ -1236,13 +1189,11 @@ contract ForeignControllerMidnightMaturityTests is MidnightTestBase {
         vm.warp(market.maturity + 1);
     }
 
-    // Midnight refuses to let a seller take on new debt after maturity, so entering is simply over.
     function test_buyMidnight_postMaturity() public {
         vm.expectRevert(abi.encodeWithSignature("CannotIncreaseDebtPostMaturity()"));
         _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
     }
 
-    // Exiting still works, because the maker is the buyer and only reduces its own debt.
     function test_sellMidnight_postMaturity() public {
         uint256 units    = 400_000e18;
         uint256 expected = _sellerAssets(units, TICK_99);
@@ -1261,7 +1212,6 @@ contract ForeignControllerMidnightMaturityTests is MidnightTestBase {
         assertEq(_credit(), 0);
     }
 
-    // Time to maturity has to be floored at zero rather than underflow into the long dated fees.
     function test_sellMidnight_postMaturityPricesAtTheFloorFee() public {
         _setFees(0, 0.000014e18, 0);  // the protocol's own cap for the zero day slot
         _setFees(5, 0.0025e18,   0);
@@ -1277,8 +1227,7 @@ contract ForeignControllerMidnightMaturityTests is MidnightTestBase {
 
 }
 
-// A maker callback that tries to make the proxy a party or a payer. Failures are swallowed so the
-// outer call still lands and its end state can be asserted.
+// Maker callback that tries to make the proxy a party or a payer; failures are swallowed so the end state can be asserted.
 contract HostileCallback {
 
     bytes32 constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
@@ -1317,22 +1266,18 @@ contract HostileCallback {
 
         allowanceSeen = IERC20(market.loanToken).allowance(proxy, midnight);
 
-        // Spend the approval still open for the rest of the batch, via an offer the proxy makes.
         try IMidnight(midnight).take(attackOffer, "", units, address(this), address(0), address(0), "") {
             tookOffer = true;
         } catch {}
 
-        // Move the proxy's position out from under it.
         try IMidnight(midnight).withdraw(market, units, proxy, address(this)) {
             withdrew = true;
         } catch {}
 
-        // Become an operator of the proxy for later.
         try IMidnightTestHarness(midnight).setIsAuthorized(address(this), true, proxy) {
             authorized = true;
         } catch {}
 
-        // Name the proxy as the payer of someone else's repayment; zero units isolates that check.
         try IMidnightTestHarness(midnight).repay(market, 0, address(this), proxy, "") {
             repaid = true;
         } catch {}
@@ -1355,7 +1300,6 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         hostile.approveMidnight(address(loanToken));
     }
 
-    // An offer that would make the proxy the payer, unratifiable because the proxy authorizes nobody.
     function _attackOffer(uint256 units) internal view returns (Offer memory offer) {
         offer = Offer({
             market                  : market,
@@ -1386,8 +1330,7 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
 
         uint256 balanceBefore = loanToken.balanceOf(address(almProxy));
 
-        // A bound above the fill leaves a live approval open while the callback runs; the exact
-        // bound would be spent before `onSell` and make the `take` leg fail on allowance alone.
+        // The exact bound would be spent before `onSell`, failing `take` on allowance alone.
         assertEq(_buy(offer, units, type(uint256).max), expected);
 
         assertGt(hostile.allowanceSeen(), _buyerAssets(units, TICK_98));
@@ -1397,7 +1340,6 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         assertFalse(hostile.authorized());
         assertFalse(hostile.repaid());
 
-        // The proxy paid exactly the fill and nothing else, and holds no leftover approval.
         assertEq(loanToken.balanceOf(address(almProxy)),            balanceBefore - expected);
         assertEq(loanToken.balanceOf(address(hostile)),             10_000_000e18);
         assertEq(loanToken.allowance(address(almProxy), MIDNIGHT),  0);
@@ -1406,7 +1348,6 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         assertFalse(harness.isAuthorized(address(almProxy), address(hostile)));
     }
 
-    // Consuming the rest of the batch from inside the first fill cannot leave the proxy half entered.
     function test_buyMidnight_hostileMakerCallbackCannotPartiallyFill() public {
         uint256 units = 1_000e18;
 
@@ -1414,7 +1355,6 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         offers[0] = _offer(false, TICK_98, uint128(units), "group-0", address(ratifier));
         offers[1] = _offer(false, TICK_98, uint128(units), "group-1", address(ratifier));
 
-        // The callback takes the batch's second offer for itself, exhausting that offer's budget.
         offers[0].callback     = address(hostile);
         offers[0].callbackData = abi.encode(address(almProxy), offers[1], units);
 
@@ -1433,8 +1373,7 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
 
 }
 
-// A maker callback that socializes a third borrower's bad debt while the proxy's fill is in flight,
-// then restores the price so the maker's own health check still passes.
+// Maker callback that socializes bad debt mid-fill, then restores the price so the maker's own health check passes.
 contract SlashingCallback {
 
     bytes32 constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
@@ -1461,7 +1400,6 @@ contract SlashingCallback {
         oracle.setPrice(price);
     }
 
-    // Maker is the seller: runs after the transfers of the proxy's buy.
     function onSell(bytes32, Market memory market, uint256, uint256, uint256, address, address, bytes memory)
         external returns (bytes32)
     {
@@ -1469,7 +1407,6 @@ contract SlashingCallback {
         return CALLBACK_SUCCESS;
     }
 
-    // Maker is the buyer: runs before the transfers of the proxy's sell, and this contract is the payer.
     function onBuy(bytes32, Market memory market, uint256, uint256, uint256, address, bytes memory)
         external returns (bytes32)
     {
@@ -1490,7 +1427,6 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
     function setUp() public override {
         super.setUp();
 
-        // A second borrower whose debt backs the proxy's credit and can be written off mid-fill.
         collateralToken.mint(victim, 2_000_000e18);
 
         vm.startPrank(victim);
@@ -1511,7 +1447,6 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
         slasher.approveMidnight(address(loanToken));
     }
 
-    // The exact credit delta check is what catches a write down landing inside the batch.
     function test_buyMidnight_slashedMidBatch() public {
         uint256 creditBefore = _credit();
 
@@ -1553,7 +1488,6 @@ contract ForeignControllerMidnightRateLimitPolicyTests is MidnightTestBase {
         _seedCredit(SEEDED_UNITS);
     }
 
-    // The intended production setting: exit keys unlimited, so only the entry key ever gates.
     function test_midnightExits_workWithUnlimitedExitKeysAndNoBuyKey() public {
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(buyKey, 0, 0);
@@ -1576,7 +1510,6 @@ contract ForeignControllerMidnightRateLimitPolicyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(redeemKey), type(uint256).max);
     }
 
-    // Selling above the entry price hands back more than was spent; the restore stops at the cap.
     function test_sellMidnight_restoreIsCappedAtMaxAmount() public {
         uint256 expected = _sellerAssets(SEEDED_UNITS, TICK_99);
 
@@ -1587,7 +1520,6 @@ contract ForeignControllerMidnightRateLimitPolicyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18);
     }
 
-    // A permitted continuous fee accrues against the position, and the decayed credit still exits whole.
     function test_midnight_continuousFeeRoundTrip() public {
         _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
 
@@ -1616,8 +1548,6 @@ contract ForeignControllerMidnightRateLimitPolicyTests is MidnightTestBase {
 
 contract ForeignControllerMidnightAuthorizationTests is MidnightTestBase {
 
-    // Taker mode authorizes nobody, which is what contains a maker callback. Maker mode will have to
-    // authorize a ratifier and replace this invariant with limits on what that ratifier signs.
     function test_midnight_proxyAuthorizesNobody() public {
         uint256 units = 1_000_000e18;
 
@@ -1635,14 +1565,11 @@ contract ForeignControllerMidnightAuthorizationTests is MidnightTestBase {
         assertFalse(harness.isAuthorized(address(almProxy), address(ratifier)));
         assertFalse(harness.isAuthorized(address(almProxy), MIDNIGHT));
 
-        // Nor does it leave an allowance behind between calls.
         assertEq(loanToken.allowance(address(almProxy), MIDNIGHT), 0);
     }
 
 }
 
-// Both legs are denominated in the loan token, so decimals travel through the price arithmetic. No
-// mainstream USD stablecoin has 8 decimals; real USDC covers 6 in the live market suite.
 abstract contract MidnightDecimalsTestBase is MidnightTestBase {
 
     function test_midnight_roundTrip() public {
@@ -1690,8 +1617,7 @@ contract ForeignControllerMidnightEightDecimalsTests is MidnightDecimalsTestBase
 
 contract ForeignControllerMidnightLiveMarketTests is MidnightTestBase {
 
-    // A market Midnight governance created on Base at block 48,417,793: real USDC loan token, real
-    // cbBTC collateral at 0.98 LLTV, maturing 2026-12-25.
+    // Real Base market at block 48,417,793: USDC loan token, cbBTC collateral, maturing 2026-12-25.
     bytes32 constant LIVE_MARKET_ID = 0xf3c7f4711fe76099bb55aabeeceb0010892e6fac3cde4c90415345b8079e1f3c;
 
     function setUp() public override {
@@ -1699,7 +1625,6 @@ contract ForeignControllerMidnightLiveMarketTests is MidnightTestBase {
 
         Market memory liveMarket = midnight.toMarket(LIVE_MARKET_ID);
 
-        // The reality check: the vendored derivation has to reproduce an id the protocol assigned.
         assertEq(MidnightIdLib.toId(liveMarket), LIVE_MARKET_ID);
 
         // Field by field because solc cannot copy an array of structs into storage.
@@ -1741,7 +1666,6 @@ contract ForeignControllerMidnightLiveMarketTests is MidnightTestBase {
         _wireRateLimitsAndConfig();
     }
 
-    // Governance onboarding of a market that already exists lands under the protocol's own id.
     function test_midnightLiveMarket_configIsKeyedByProtocolId() public view {
         ( uint16 maxBuyTick, uint16 minSellTick, , ) =
             foreignController.midnightMarketConfigs(LIVE_MARKET_ID);

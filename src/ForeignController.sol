@@ -823,8 +823,7 @@ contract ForeignController is AccessControl {
     /*** Relayer Midnight functions                                                             ***/
     /**********************************************************************************************/
 
-    // NOTE: A brand new market has to be touched once on Midnight, by anyone, before it trades here.
-    //       `marketId` selects the onboarded config; the library checks every offer against it.
+    // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
 
     function buyMidnight(
         bytes32   marketId,
