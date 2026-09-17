@@ -42,7 +42,6 @@ library PendleLib {
         });
     }
 
-    // Redeem limit is keyed `(rateLimitId, pt, market)` and charged with the yield token received
     function redeemPendlePT(RedeemPendlePTParams memory params) external {
         require(params.pendleMarket.isExpired(), "PendleLib/market-not-expired");
         require(params.minAmountOut != 0,        "PendleLib/min-amount-out-not-set");

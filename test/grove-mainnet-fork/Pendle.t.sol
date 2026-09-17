@@ -14,7 +14,6 @@ contract PendleTestBase is ForkTestBase {
 
     bytes32 redeemKey;
 
-    // Pre-hardening key `(LIMIT_PENDLE_PT_REDEEM, market)`, no longer consulted
     bytes32 legacyRedeemKey;
 
     function setUp() public virtual override {
