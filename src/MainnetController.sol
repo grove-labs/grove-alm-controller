@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
-import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
-
 import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
@@ -21,6 +18,7 @@ import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3
 
 import "./interfaces/ILayerZero.sol";
 
+import { AaveLib }                        from "./libraries/AaveLib.sol";
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
@@ -34,10 +32,6 @@ import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
-
-interface IATokenWithPool is IAToken {
-    function POOL() external view returns(address);
-}
 
 interface IEthenaMinterLike {
     function setDelegatedSigner(address delegateSigner) external;
@@ -204,7 +198,7 @@ contract MainnetController is AccessControl {
 
     function setMaxSlippage(address pool, uint256 maxSlippage) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(maxSlippage <= 1e18, "MainnetController/max-slippage-out-of-bounds");
+        require(maxSlippage <= 1e18, "MC/max-slippage-oob");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
     }
@@ -215,7 +209,7 @@ contract MainnetController is AccessControl {
         require(
             maxTickDelta > 0 &&
             maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "MainnetController/max-tick-delta-out-of-bounds"
+            "MC/max-tick-delta-oob"
         );
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
@@ -225,7 +219,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MC/lower-tick-oob");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -233,7 +227,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MC/upper-tick-oob");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
@@ -243,7 +237,7 @@ contract MainnetController is AccessControl {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         // Required due to casting in UniswapV3OracleLibrary.consult
         // Limits twapSecondsAgo to approximately 68 years
-        require(twapSecondsAgo < uint32(type(int32).max), "MainnetController/twap-seconds-ago-out-of-bounds");
+        require(twapSecondsAgo < uint32(type(int32).max), "MC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
@@ -257,7 +251,7 @@ contract MainnetController is AccessControl {
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        require(token != address(0), "MainnetController/token-zero-address");
+        require(token != address(0), "MC/token-zero-address");
 
         emit MaxExchangeRateSet(
             token,
@@ -489,58 +483,28 @@ contract MainnetController is AccessControl {
 
     function depositAave(address aToken, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount);
-
-        require(maxSlippages[aToken] != 0, "MainnetController/max-slippage-not-set");
-
-        IERC20    underlying = IERC20(IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
-
-        uint256 aTokenBalance = IERC20(aToken).balanceOf(address(proxy));
-
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        ERC20Lib.approve(proxy, address(underlying), address(pool), amount);
-
-        // Deposit underlying into Aave pool, proxy receives aTokens
-        proxy.doCall(
-            address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), amount, address(proxy), 0))
-        );
-
-        uint256 newATokens = IERC20(aToken).balanceOf(address(proxy)) - aTokenBalance;
-
-        require(
-            newATokens >= amount * maxSlippages[aToken] / 1e18,
-            "MainnetController/slippage-too-high"
-        );
+        AaveLib.deposit(AaveLib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_DEPOSIT,
+            aToken      : aToken,
+            amount      : amount,
+            maxSlippage : maxSlippages[aToken]
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdrawAave(address aToken, uint256 amount)
         external
         returns (uint256 amountWithdrawn)
     {
         _checkRole(RELAYER);
-
-        IAavePool pool = IAavePool(IATokenWithPool(aToken).POOL());
-
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS(), amount, address(proxy))
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
-            amountWithdrawn
-        );
+        return AaveLib.withdraw(AaveLib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_WITHDRAW,
+            aToken      : aToken,
+            amount      : amount
+        }));
     }
 
     /**********************************************************************************************/
