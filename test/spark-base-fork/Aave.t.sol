@@ -75,7 +75,6 @@ contract AaveV3BaseMarketDepositFailureTests is AaveV3BaseMarketTestBase {
     }
 
     function test_depositAave_aTokenOnlyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, aToken) key does not authorize deposits.
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(depositKey, 0, 0);
         rateLimits.setRateLimitData(
@@ -147,11 +146,9 @@ contract AaveV3BaseMarketDepositSuccessTests is AaveV3BaseMarketTestBase {
     function test_depositAave_usdc_clearsApprovalWhenPoolPullsLess() public {
         deal(Base.USDC, address(almProxy), 1_000_000e6);
 
-        // 1 wei slippage floor rounds to zero for this amount, so a pool that mints nothing still passes.
         vm.prank(Base.SPARK_EXECUTOR);
         foreignController.setMaxSlippage(ATOKEN_USDC, 1);
 
-        // Simulate a pool that accepts the supply without pulling the underlying.
         vm.mockCall(
             POOL,
             abi.encodeWithSelector(IAavePool.supply.selector, Base.USDC, 1_000_000e6, address(almProxy), uint16(0)),
@@ -266,7 +263,6 @@ contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
 
         assertEq(rateLimits.getCurrentRateLimit(key), 1_000_000e6);
 
-        // Simulate a pool that reports a withdrawal it did not perform.
         vm.mockCall(
             POOL,
             abi.encodeWithSelector(IAavePool.withdraw.selector, Base.USDC, 400_000e6, address(almProxy)),

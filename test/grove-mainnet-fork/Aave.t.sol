@@ -93,7 +93,6 @@ contract AaveV3MainMarketDepositFailureTests is AaveV3MainMarketBaseTest {
     }
 
     function test_depositAave_aTokenOnlyKeyNotHonoured() external {
-        // A limit under the pre-facet (rateLimitId, aToken) key does not authorize deposits.
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
         rateLimits.setRateLimitData(

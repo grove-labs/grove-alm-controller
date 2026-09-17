@@ -40,7 +40,6 @@ library AaveLib {
         IERC20    underlying = IERC20(IATokenWithPool(params.aToken).UNDERLYING_ASSET_ADDRESS());
         IAavePool pool       = IAavePool(IATokenWithPool(params.aToken).POOL());
 
-        // Deposit limit key: keccak256(abi.encode(rateLimitId, underlying, pool, aToken)).
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressAddressKey(
                 params.rateLimitId, address(underlying), address(pool), params.aToken
@@ -52,10 +51,8 @@ library AaveLib {
 
         uint256 aTokenBalance = IERC20(params.aToken).balanceOf(address(params.proxy));
 
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
         ERC20Lib.approve(params.proxy, address(underlying), address(pool), params.amount);
 
-        // Deposit underlying into Aave pool, proxy receives aTokens.
         params.proxy.doCall(
             address(pool),
             abi.encodeCall(pool.supply, (address(underlying), params.amount, address(params.proxy), 0))
@@ -77,16 +74,13 @@ library AaveLib {
 
         uint256 underlyingBalance = underlying.balanceOf(address(params.proxy));
 
-        // Withdraw underlying from Aave pool. Assumes proxy has adequate aTokens.
         params.proxy.doCall(
             address(pool),
             abi.encodeCall(pool.withdraw, (address(underlying), params.amount, address(params.proxy)))
         );
 
-        // Measured from the proxy's balance rather than the pool's return value.
         amountWithdrawn = underlying.balanceOf(address(params.proxy)) - underlyingBalance;
 
-        // Withdraw limit key: keccak256(abi.encode(rateLimitId, pool, aToken)).
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, address(pool), params.aToken),
             amountWithdrawn
