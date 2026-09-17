@@ -423,6 +423,7 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(domainKeyBase,                   maxAmount6,  slope6);
         rateLimits.setRateLimitData(domainKeyArbitrum,               maxAmount6,  slope6);
         rateLimits.setRateLimitData(controller.LIMIT_USDS_MINT(),    maxAmount18, slope18);
+        rateLimits.setRateLimitData(controller.LIMIT_USDS_BURN(),    maxAmount18, slope18);
         rateLimits.setRateLimitData(controller.LIMIT_USDS_TO_USDC(), maxAmount6,  slope6);
 
         rateLimits.setUnlimitedRateLimitData(controller.LIMIT_USDC_TO_CCTP());

@@ -292,6 +292,7 @@ contract ForkTestBase is DssTest {
 
         // NOTE: Using minimal config for test base setup
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_MINT(),    usdsMaxAmount, usdsSlope);
+        rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_BURN(),    usdsMaxAmount, usdsSlope);
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_TO_USDC(), usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(mainnetController.LIMIT_USDC_TO_CCTP(), usdcMaxAmount, usdcSlope);
         rateLimits.setRateLimitData(domainKeyAvalanche,                     usdcMaxAmount, usdcSlope);

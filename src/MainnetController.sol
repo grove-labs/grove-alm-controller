@@ -101,6 +101,7 @@ contract MainnetController is AccessControl {
     bytes32 public LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
     bytes32 public LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
     bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
+    bytes32 public LIMIT_USDS_BURN            = keccak256("LIMIT_USDS_BURN");
     bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
     bytes32 public LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
     bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
@@ -299,7 +300,7 @@ contract MainnetController is AccessControl {
 
     function burnUSDS(uint256 usdsAmount) external {
         _checkRole(RELAYER);
-        _cancelRateLimit(LIMIT_USDS_MINT, usdsAmount);
+        _rateLimited(LIMIT_USDS_BURN, usdsAmount);
 
         // Transfer USDS from the proxy to the buffer
         ERC20Lib.transfer(proxy, address(usds), buffer, usdsAmount);
@@ -979,10 +980,6 @@ contract MainnetController is AccessControl {
 
     function _rateLimitedAsset(bytes32 key, address asset, uint256 amount) internal {
         rateLimits.triggerRateLimitDecrease(RateLimitHelpers.makeAssetKey(key, asset), amount);
-    }
-
-    function _cancelRateLimit(bytes32 key, uint256 amount) internal {
-        rateLimits.triggerRateLimitIncrease(key, amount);
     }
 
     function _rateLimitExists(bytes32 key) internal view {
