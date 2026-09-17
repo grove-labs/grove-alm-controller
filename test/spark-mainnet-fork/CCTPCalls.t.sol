@@ -24,6 +24,8 @@ import { ForeignController } from "../../src/ForeignController.sol";
 import { RateLimits }        from "../../src/RateLimits.sol";
 import { RateLimitHelpers }  from "../../src/RateLimitHelpers.sol";
 
+import { ICCTPLike } from "../../src/interfaces/CCTPInterfaces.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract MainnetControllerTransferUSDCToCCTPFailureTests is ForkTestBase {
@@ -146,6 +148,21 @@ contract MainnetControllerTransferUSDCToCCTPFailureTests is ForkTestBase {
         vm.prank(relayer);
         vm.expectRevert("CCTPLib/domain-not-configured");
         mainnetController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
+    }
+
+    // The approval is cleared even if the messenger does not pull the full amount
+    function test_transferUSDCToCCTP_approvalCleared() external {
+        deal(address(usdc), address(almProxy), 1e6);
+
+        vm.mockCall(CCTP_MESSENGER, abi.encodeWithSelector(ICCTPLike.depositForBurn.selector), "");
+
+        vm.prank(relayer);
+        mainnetController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
+
+        vm.clearMockedCalls();
+
+        assertEq(usdc.balanceOf(address(almProxy)),                 1e6);  // Nothing was pulled
+        assertEq(usdc.allowance(address(almProxy), CCTP_MESSENGER), 0);
     }
 
 }
@@ -432,6 +449,21 @@ contract ForeignControllerTransferUSDCToCCTPFailureTests is BaseChainUSDCToCCTPT
         foreignController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
     }
 
+    // The approval is cleared even if the messenger does not pull the full amount
+    function test_transferUSDCToCCTP_approvalCleared() external {
+        deal(address(usdcBase), address(foreignAlmProxy), 1e6);
+
+        vm.mockCall(CCTP_MESSENGER_BASE, abi.encodeWithSelector(ICCTPLike.depositForBurn.selector), "");
+
+        vm.prank(relayer);
+        foreignController.transferUSDCToCCTP(1e6, CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM);
+
+        vm.clearMockedCalls();
+
+        assertEq(usdcBase.balanceOf(address(foreignAlmProxy)),                      1e6);  // Nothing was pulled
+        assertEq(usdcBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE), 0);
+    }
+
 }
 
 contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
@@ -465,7 +497,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdc.balanceOf(address(mainnetController)), 0);
         assertEq(usdc.totalSupply(),                         USDC_SUPPLY);
 
-        assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
+        assertEq(usdc.allowance(address(almProxy), CCTP_MESSENGER),  0);
 
         _expectEthereumCCTPEmit(1e6);
 
@@ -476,7 +508,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdc.balanceOf(address(mainnetController)), 0);
         assertEq(usdc.totalSupply(),                         USDC_SUPPLY - 1e6);
 
-        assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
+        assertEq(usdc.allowance(address(almProxy), CCTP_MESSENGER),  0);
 
         destination.selectFork();
 
@@ -498,7 +530,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdc.balanceOf(address(mainnetController)), 0);
         assertEq(usdc.totalSupply(),                         USDC_SUPPLY);
 
-        assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
+        assertEq(usdc.allowance(address(almProxy), CCTP_MESSENGER),  0);
 
         // Will split into 3 separate transactions at max 1m each
         _expectEthereumCCTPEmit(1_000_000e6);
@@ -512,7 +544,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdc.balanceOf(address(mainnetController)), 0);
         assertEq(usdc.totalSupply(),                         USDC_SUPPLY - 2_900_000e6);
 
-        assertEq(usds.allowance(address(almProxy), CCTP_MESSENGER),  0);
+        assertEq(usdc.allowance(address(almProxy), CCTP_MESSENGER),  0);
 
         destination.selectFork();
 
@@ -571,7 +603,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdcBase.balanceOf(address(foreignController)), 0);
         assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY);
 
-        assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        assertEq(usdcBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
         _expectBaseCCTPEmit(1e6);
 
@@ -582,7 +614,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdcBase.balanceOf(address(foreignController)), 0);
         assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY - 1e6);
 
-        assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        assertEq(usdcBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
         source.selectFork();
 
@@ -606,7 +638,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdcBase.balanceOf(address(foreignController)), 0);
         assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY);
 
-        assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        assertEq(usdcBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
         // Will split into three separate transactions at max 1m each
         _expectBaseCCTPEmit(1_000_000e6);
@@ -620,7 +652,7 @@ contract USDCToCCTPIntegrationTests is BaseChainUSDCToCCTPTestBase {
         assertEq(usdcBase.balanceOf(address(foreignController)), 0);
         assertEq(usdcBase.totalSupply(),                         USDC_BASE_SUPPLY - 2_600_000e6);
 
-        assertEq(usdsBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
+        assertEq(usdcBase.allowance(address(foreignAlmProxy), CCTP_MESSENGER_BASE),  0);
 
         source.selectFork();
 
