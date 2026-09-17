@@ -15,11 +15,9 @@ contract CurveTestBase is ForkTestBase {
 
     ICurvePoolLike curvePool = ICurvePoolLike(CURVE_POOL);
 
-    // Aggregate (pool-level) keys, charged in 18-decimal value terms
     bytes32 curveDepositKey;
     bytes32 curveWithdrawKey;
 
-    // Per-token keys, charged in token units
     bytes32 curveUsdcSwapKey;
     bytes32 curveUsdtSwapKey;
     bytes32 curveUsdcDepositKey;
@@ -27,7 +25,6 @@ contract CurveTestBase is ForkTestBase {
     bytes32 curveUsdcWithdrawKey;
     bytes32 curveUsdtWithdrawKey;
 
-    // Pre-hardening swap key `(LIMIT_CURVE_SWAP, pool)`, no longer consulted
     bytes32 curveLegacySwapKey;
 
     function setUp() public virtual override  {
@@ -45,8 +42,7 @@ contract CurveTestBase is ForkTestBase {
 
         curveLegacySwapKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(), CURVE_POOL);
 
-        // NOTE: The pool is skewed towards USDT, so a balanced 1m/1m deposit is worth slightly more
-        //       than 2m in pro-rata terms. The aggregate deposit limit has headroom for that.
+        // Skewed pool: a balanced 1m/1m deposit is worth slightly more than 2m pro-rata, hence the headroom.
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  2_100_000e18, uint256(2_100_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 3_000_000e18, uint256(3_000_000e18) / 1 days);
@@ -77,7 +73,6 @@ contract CurveTestBase is ForkTestBase {
         vm.stopPrank();
     }
 
-    // Pro-rata share of each pool balance backing `lpTokens`, i.e. what CurveLib treats as deposited
     function _proRataBalances(uint256 lpTokens) internal view returns (uint256[] memory amounts) {
         uint256 totalSupply = curveLp.totalSupply();
         amounts = new uint256[](2);
@@ -255,8 +250,6 @@ contract MainnetControllerAddLiquidityCurveFailureTests is CurveTestBase {
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
     }
 
-    // Learns the exact charge on `key` from a successful call, then replays it with the limit
-    // set one unit below (revert) and exactly at (success) that charge.
     function _assertAddLiquidityRateLimitBoundary(bytes32 key, uint256[] memory amounts, uint256 minLpAmount) internal {
         deal(address(usdc), address(almProxy), amounts[0]);
         deal(address(usdt), address(almProxy), amounts[1]);
@@ -307,12 +300,10 @@ contract MainnetControllerAddLiquidityCurveFailureTests is CurveTestBase {
         _assertAddLiquidityRateLimitBoundary(curveUsdtDepositKey);
     }
 
-    // The pool is skewed towards USDT, so a balanced deposit swaps USDC in and charges its swap limit
     function test_addLiquidityCurve_rateLimitBoundary_asset0Swap() public {
         _assertAddLiquidityRateLimitBoundary(curveUsdcSwapKey);
     }
 
-    // One-sided USDT deposit so the USDT swap limit is charged with the swapped-in amount
     function test_addLiquidityCurve_rateLimitBoundary_asset1Swap() public {
         vm.prank(GROVE_PROXY);
         mainnetController.setMaxSlippage(CURVE_POOL, 0.7e18);
@@ -381,15 +372,12 @@ contract MainnetControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply + lpTokensReceived);
 
-        // Deposit limits are charged with the pro-rata pool balances backing the minted LP tokens,
-        // swap limits with whatever was put in on top of that share.
         uint256[] memory deposited = _proRataBalances(lpTokensReceived);
 
         // NOTE: A large swap happened because of the balances in the pool being skewed towards USDT.
         assertEq(deposited[0], 465_059.586753e6);
         assertEq(deposited[1], 1_535_013.847298e6);
 
-        // The balancing deposit is worth more than the 2m put in
         assertEq(_toValue(deposited), 2_000_073.434051e18);
 
         assertEq(rateLimits.getCurrentRateLimit(curveDepositKey),     2_100_000e18 - _toValue(deposited));
@@ -571,7 +559,6 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
     }
 
     function _defaultMinWithdrawAmounts() internal pure returns (uint256[] memory minWithdrawAmounts) {
-        // Skewed pool, so min withdraw amounts are as well
         minWithdrawAmounts = new uint256[](2);
         minWithdrawAmounts[0] = 465_000e6;
         minWithdrawAmounts[1] = 1_535_000e6;
@@ -602,8 +589,6 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         _assertRemoveLiquidityZeroMaxAmount(curveUsdtWithdrawKey);
     }
 
-    // Learns the exact charge on `key` from a successful call, then replays it with the limit
-    // set one unit below (revert) and exactly at (success) that charge.
     function _assertRemoveLiquidityRateLimitBoundary(bytes32 key) internal {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
@@ -652,13 +637,11 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         _assertRemoveLiquidityRateLimitBoundary(curveUsdtWithdrawKey);
     }
 
-    // Received amounts are measured from the proxy balance rather than trusting the pool
     function test_removeLiquidityCurve_minAmountOutNotMet() public {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
         uint256[] memory minWithdrawAmounts = _defaultMinWithdrawAmounts();
 
-        // Pool "succeeds" without transferring anything out
         vm.mockCall(
             CURVE_POOL,
             abi.encodeWithSelector(ICurvePoolLike.remove_liquidity.selector),
@@ -829,7 +812,6 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
         mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
     }
 
-    // The swap limit is keyed on the input token; the other token's key is not consulted
     function test_swapCurve_otherTokenKeyNotHonoured() public {
         _addLiquidity();
         skip(1 days);  // Recharge swap rate limit from deposit
@@ -856,7 +838,6 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
         mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
     }
 
-    // The output amount is measured from the proxy balance, not trusted from the pool's return value
     function test_swapCurve_minAmountOutNotMet() public {
         deal(address(usdt), address(almProxy), 1_000_000e6);
 
@@ -1090,7 +1071,6 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
         assertEq(derivedSwapped[1], 0);
         assertEq(derivedSwapped[2], 0);
 
-        // Each token's pro-rata share backing the position was charged to its deposit limit
         for (uint256 i = 0; i < 3; i++) {
             assertApproxEqAbs(rateLimits.getCurrentRateLimit(curveDepositKeys[i]), 5_000e8 - withdrawnAmounts[i], 1);
             assertEq(rateLimits.getCurrentRateLimit(curveWithdrawKeys[i]),         5_000e8 - withdrawnAmounts[i]);
@@ -1351,8 +1331,7 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
         bytes32 depositId  = mainnetController.LIMIT_CURVE_DEPOSIT();
         bytes32 withdrawId = mainnetController.LIMIT_CURVE_WITHDRAW();
 
-        // NOTE: Aggregate deposit limit has headroom because the pro-rata value of a balancing deposit
-        //       can exceed the value put in.
+        // Skewed pool: a balancing deposit is worth more than the value put in, hence the headroom.
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  2_100_000e18, uint256(2_100_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 3_000_000e18, uint256(3_000_000e18) / 1 days);

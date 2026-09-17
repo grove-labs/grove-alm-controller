@@ -24,11 +24,9 @@ contract CurveTestBase is ForkTestBase {
 
     ICurvePoolLike curvePool = ICurvePoolLike(CURVE_POOL);
 
-    // Aggregate (pool-level) keys, charged in 18-decimal value terms
     bytes32 curveDepositKey;
     bytes32 curveWithdrawKey;
 
-    // Per-token keys, charged in token units
     bytes32 curveUsdcSwapKey;
     bytes32 curveCgUsdSwapKey;
     bytes32 curveUsdcDepositKey;
@@ -36,7 +34,6 @@ contract CurveTestBase is ForkTestBase {
     bytes32 curveUsdcWithdrawKey;
     bytes32 curveCgUsdWithdrawKey;
 
-    // Pre-hardening swap key `(LIMIT_CURVE_SWAP, pool)`, no longer consulted
     bytes32 curveLegacySwapKey;
 
     uint256 maxSlippage;
@@ -173,7 +170,6 @@ contract CurveTestBase is ForkTestBase {
         vm.stopPrank();
     }
 
-    // Pro-rata share of each pool balance backing `lpTokens`, i.e. what CurveLib treats as deposited
     function _proRataBalances(uint256 lpTokens) internal view returns (uint256[] memory amounts) {
         uint256 totalSupply = curveLp.totalSupply();
         amounts = new uint256[](2);
@@ -329,8 +325,6 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
         foreignController.addLiquidityCurve(CURVE_POOL, amounts, minLpAmount);
     }
 
-    // Learns the exact charge on `key` from a successful call, then replays it with the limit
-    // set one unit below (revert) and exactly at (success) that charge.
     function _assertAddLiquidityRateLimitBoundary(bytes32 key) internal {
         (uint256[] memory amounts, uint256 minLpAmount) = _defaultAddLiquidityParams();
 
@@ -378,7 +372,6 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
         _assertAddLiquidityRateLimitBoundary(curveCgUsdDepositKey);
     }
 
-    // One-sided deposit so the USDC swap limit is charged with the swapped-in amount
     function test_addLiquidityCurve_rateLimitBoundary_asset0Swap() public {
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMaxSlippage(CURVE_POOL, 0.1e18);
@@ -475,8 +468,6 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(curveLp.balanceOf(address(almProxy)), lpTokensReceived);
         assertEq(curveLp.totalSupply(),                startingTotalSupply + lpTokensReceived);
 
-        // Deposit limits are charged with the pro-rata pool balances backing the minted LP tokens,
-        // swap limits with whatever was put in on top of that share.
         uint256[] memory deposited = _proRataBalances(lpTokensReceived);
 
         assertApproxEqRel(deposited[0], 1_000_000e6, 0.01e18);
@@ -488,7 +479,6 @@ contract ForeignControllerAddLiquiditySuccessTests is CurveTestBase {
         assertEq(rateLimits.getCurrentRateLimit(curveUsdcSwapKey),     1_000_000e6  - _swappedIn(amounts[0], deposited[0]));
         assertEq(rateLimits.getCurrentRateLimit(curveCgUsdSwapKey),    1_000_000e6  - _swappedIn(amounts[1], deposited[1]));
 
-        // There was an imbalance so at least one swap limit was charged
         assertLt(
             rateLimits.getCurrentRateLimit(curveUsdcSwapKey) + rateLimits.getCurrentRateLimit(curveCgUsdSwapKey),
             2_000_000e6
@@ -677,8 +667,6 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         _assertRemoveLiquidityZeroMaxAmount(curveCgUsdWithdrawKey);
     }
 
-    // Learns the exact charge on `key` from a successful call, then replays it with the limit
-    // set one unit below (revert) and exactly at (success) that charge.
     function _assertRemoveLiquidityRateLimitBoundary(bytes32 key) internal {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
@@ -890,7 +878,6 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
         foreignController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
     }
 
-    // The swap limit is keyed on the input token; the other token's key is not consulted
     function test_swapCurve_otherTokenKeyNotHonoured() public {
         deal(address(cgUSD), address(almProxy), 1_000_000e6);
 
@@ -911,7 +898,6 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
         foreignController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
     }
 
-    // The output amount is measured from the proxy balance, not trusted from the pool's return value
     function test_swapCurve_minAmountOutNotMet() public {
         deal(address(cgUSD), address(almProxy), 1_000_000e6);
 

@@ -77,7 +77,6 @@ library CurveLib {
     /*** External functions                                                                     ***/
     /**********************************************************************************************/
 
-    // Swap limit is keyed per input token and charged in token units
     function swap(SwapCurveParams calldata params) external returns (uint256 amountOut) {
         require(params.inputIndex != params.outputIndex, "CurveLib/invalid-indices");
 
@@ -109,7 +108,6 @@ library CurveLib {
 
         amountOut = IERC20(tokenOut).balanceOf(address(params.proxy)) - startingBalance;
 
-        // Clear approvals of dust
         ERC20Lib.approve(params.proxy, tokenIn, params.pool, 0);
 
         require(amountOut >= params.minAmountOut, "CurveLib/min-amount-out-not-met");
@@ -122,7 +120,6 @@ library CurveLib {
 
         uint256 virtualPrice = curvePool.get_virtual_price();
 
-        // Prevent adding liquidity to unseeded pools
         require(virtualPrice != 0, "CurveLib/virtual-price-zero");
 
         address[] memory tokens = _getTokens(curvePool);
@@ -160,7 +157,6 @@ library CurveLib {
 
         require(shares >= params.minLpAmount, "CurveLib/min-shares-not-met");
 
-        // Clear approvals of dust
         for (uint256 i = 0; i < tokens.length; i++) {
             ERC20Lib.approve(params.proxy, tokens[i], params.pool, 0);
         }
@@ -279,10 +275,8 @@ library CurveLib {
         }
     }
 
-    // The minted shares are worth a pro-rata slice of every pool balance. Any input amount above
-    // that slice was effectively swapped into the other coins and is charged to that token's swap
-    // limit; the slice itself is what was deposited and is charged to the per-token deposit limit
-    // and, in value terms, to the pool-level deposit limit.
+    // Input above the pro-rata slice backing the minted shares was effectively swapped in, so it is
+    // charged to that token's swap limit; the slice itself is charged to the deposit limits.
     function _decreaseAddLiquidityRateLimits(
         AddLiquidityParams calldata params,
         ICurvePoolLike              curvePool,
