@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
-
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
 import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
@@ -23,6 +21,7 @@ import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
 import { LayerZeroLib }                   from "./libraries/LayerZeroLib.sol";
 import { ERC4626Lib }                     from "./libraries/ERC4626Lib.sol";
+import { ERC7540Lib }                     from "./libraries/ERC7540Lib.sol";
 import { MerklLib }                       from "./libraries/MerklLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
@@ -359,60 +358,40 @@ contract MainnetController is AccessControl {
 
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_7540_DEPOSIT, token, amount);
-
-        // Note that whitelist is done by rate limits
-        IERC20 asset = IERC20(IERC7540(token).asset());
-
-        // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
-        ERC20Lib.approve(proxy, address(asset), token, amount);
-
-        // Submit deposit request by transferring assets
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestDeposit, (amount, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            amount     : amount
+        }));
     }
 
     function claimDepositERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token));
-
-        uint256 shares = IERC7540(token).maxMint(address(proxy));
-
-        // Claim shares from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC4626(token).mint, (shares, address(proxy)))
-        );
+        ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
+        }));
     }
 
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(
-            LIMIT_7540_REDEEM,
-            token,
-            IERC7540(token).convertToAssets(shares)
-        );
-
-        // Submit redeem request by transferring shares
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestRedeem, (shares, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            shares     : shares
+        }));
     }
 
     function claimRedeemERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token));
-
-        uint256 assets = IERC7540(token).maxWithdraw(address(proxy));
-
-        // Claim assets from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).withdraw, (assets, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
+        }));
     }
 
     /**********************************************************************************************/
@@ -910,13 +889,6 @@ contract MainnetController is AccessControl {
 
     function _cancelRateLimit(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitIncrease(key, amount);
-    }
-
-    function _rateLimitExists(bytes32 key) internal view {
-        require(
-            rateLimits.getRateLimitData(key).maxAmount > 0,
-            "MainnetController/invalid-action"
-        );
     }
 
     /**********************************************************************************************/
