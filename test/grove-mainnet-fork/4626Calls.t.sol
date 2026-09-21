@@ -19,7 +19,7 @@ contract SUSDSTestBase is ForkTestBase {
     function setUp() override public {
         super.setUp();
 
-        depositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_DEPOSIT(),  Ethereum.SUSDS);
+        depositKey  = RateLimitHelpers.makeAddressAddressKey(mainnetController.LIMIT_4626_DEPOSIT(), Ethereum.USDS, Ethereum.SUSDS);
         withdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_WITHDRAW(), Ethereum.SUSDS);
 
         vm.startPrank(Ethereum.GROVE_PROXY);
@@ -56,13 +56,44 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
             address(this),
             RELAYER
         ));
-        mainnetController.depositERC4626(address(susds), 1e18);
+        mainnetController.depositERC4626(address(susds), 1e18, 0);
     }
 
     function test_depositERC4626_zeroMaxAmount() external {
+        vm.prank(Ethereum.GROVE_PROXY);
+        rateLimits.setRateLimitData(depositKey, 0, 0);
+
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.depositERC4626(makeAddr("fake-token"), 1e18);
+        mainnetController.depositERC4626(address(susds), 1e18, 0);
+    }
+
+    function test_depositERC4626_tokenOnlyKeyNotHonoured() external {
+        vm.startPrank(Ethereum.GROVE_PROXY);
+        rateLimits.setRateLimitData(depositKey, 0, 0);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_DEPOSIT(), Ethereum.SUSDS),
+            5_000_000e18,
+            uint256(1_000_000e18) / 4 hours
+        );
+        vm.stopPrank();
+
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        mainnetController.depositERC4626(address(susds), 1e18, 0);
+    }
+
+    function test_depositERC4626_minSharesOutNotMetBoundary() external {
+        vm.startPrank(relayer);
+        mainnetController.mintUSDS(5_000_000e18);
+
+        uint256 overBoundaryShares = susds.convertToShares(5_000_000e18) + 1;
+        uint256 atBoundaryShares   = susds.convertToShares(5_000_000e18);
+
+        vm.expectRevert("ERC4626Lib/min-shares-out-not-met");
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, overBoundaryShares);
+
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, atBoundaryShares);
     }
 
     function test_depositERC4626_rateLimitBoundary() external {
@@ -75,9 +106,9 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
         mainnetController.mintUSDS(100e18);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.depositERC4626(address(susds), 5_000_000e18 + 1);
+        mainnetController.depositERC4626(address(susds), 5_000_000e18 + 1, 0);
 
-        mainnetController.depositERC4626(address(susds), 5_000_000e18);
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, 0);
 
         vm.stopPrank();
     }
@@ -92,14 +123,14 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
 
         vm.prank(relayer);
         vm.expectRevert("ERC4626Lib/exchange-rate-too-high");
-        mainnetController.depositERC4626(address(susds), 5_000_000e18);
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, 0);
 
         vm.startPrank(Ethereum.GROVE_PROXY);
         mainnetController.setMaxExchangeRate(address(susds), susds.convertToShares(5_000_000e18), 5_000_000e18);
         vm.stopPrank();
 
         vm.prank(relayer);
-        mainnetController.depositERC4626(address(susds), 5_000_000e18);
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, 0);
     }
 
     function test_depositERC4626_zeroExchangeRate() external {
@@ -111,7 +142,7 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
 
         vm.prank(relayer);
         vm.expectRevert("ERC4626Lib/exchange-rate-too-high");
-        mainnetController.depositERC4626(address(susds), 5_000_000e18);
+        mainnetController.depositERC4626(address(susds), 5_000_000e18, 0);
     }
 
 }
@@ -134,7 +165,7 @@ contract MainnetControllerDepositERC4626Tests is SUSDSTestBase {
         assertEq(susds.balanceOf(address(almProxy)), 0);
 
         vm.prank(relayer);
-        uint256 shares = mainnetController.depositERC4626(address(susds), 1e18);
+        uint256 shares = mainnetController.depositERC4626(address(susds), 1e18, 0);
 
         assertEq(shares, SUSDS_CONVERTED_SHARES);
 
@@ -160,13 +191,34 @@ contract MainnetControllerWithdrawERC4626FailureTests is SUSDSTestBase {
             address(this),
             RELAYER
         ));
-        mainnetController.withdrawERC4626(address(susds), 1e18);
+        mainnetController.withdrawERC4626(address(susds), 1e18, type(uint256).max);
     }
 
     function test_withdrawERC4626_zeroMaxAmount() external {
-        vm.prank(relayer);
+        // Longer setup because rate limit revert is at the end of the function
+        vm.prank(Ethereum.GROVE_PROXY);
+        rateLimits.setRateLimitData(withdrawKey, 0, 0);
+
+        vm.startPrank(relayer);
+        mainnetController.mintUSDS(100e18);
+        mainnetController.depositERC4626(address(susds), 100e18, 0);
+
         vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.withdrawERC4626(makeAddr("fake-token"), 1e18);
+        mainnetController.withdrawERC4626(address(susds), 1e18, type(uint256).max);
+    }
+
+    function test_withdrawERC4626_maxSharesInBoundary() external {
+        vm.startPrank(relayer);
+        mainnetController.mintUSDS(1_000_000e18);
+        mainnetController.depositERC4626(address(susds), 1_000_000e18, 0);
+
+        uint256 underBoundaryShares = susds.previewWithdraw(500_000e18) - 1;
+        uint256 atBoundaryShares    = susds.previewWithdraw(500_000e18);
+
+        vm.expectRevert("ERC4626Lib/shares-burned-too-high");
+        mainnetController.withdrawERC4626(address(susds), 500_000e18, underBoundaryShares);
+
+        mainnetController.withdrawERC4626(address(susds), 500_000e18, atBoundaryShares);
     }
 
     function test_withdrawERC4626_rateLimitBoundary() external {
@@ -177,12 +229,12 @@ contract MainnetControllerWithdrawERC4626FailureTests is SUSDSTestBase {
         vm.startPrank(relayer);
 
         mainnetController.mintUSDS(10_000_000e18);
-        mainnetController.depositERC4626(address(susds), 10_000_000e18);
+        mainnetController.depositERC4626(address(susds), 10_000_000e18, 0);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.withdrawERC4626(address(susds), 5_000_000e18 + 1);
+        mainnetController.withdrawERC4626(address(susds), 5_000_000e18 + 1, type(uint256).max);
 
-        mainnetController.withdrawERC4626(address(susds), 5_000_000e18);
+        mainnetController.withdrawERC4626(address(susds), 5_000_000e18, type(uint256).max);
 
         vm.stopPrank();
     }
@@ -194,7 +246,7 @@ contract MainnetControllerWithdrawERC4626Tests is SUSDSTestBase {
     function test_withdrawERC4626() external {
         vm.startPrank(relayer);
         mainnetController.mintUSDS(1e18);
-        mainnetController.depositERC4626(address(susds), 1e18);
+        mainnetController.depositERC4626(address(susds), 1e18, 0);
         vm.stopPrank();
 
         assertEq(usds.balanceOf(address(almProxy)),          0);
@@ -210,7 +262,7 @@ contract MainnetControllerWithdrawERC4626Tests is SUSDSTestBase {
 
         // Max available with rounding
         vm.prank(relayer);
-        uint256 shares = mainnetController.withdrawERC4626(address(susds), 1e18 - 2);  // Rounding
+        uint256 shares = mainnetController.withdrawERC4626(address(susds), 1e18 - 2, type(uint256).max);  // Rounding
 
         assertEq(shares, SUSDS_CONVERTED_SHARES);
 
@@ -236,30 +288,22 @@ contract MainnetControllerRedeemERC4626FailureTests is SUSDSTestBase {
             address(this),
             RELAYER
         ));
-        mainnetController.redeemERC4626(address(susds), 1e18);
+        mainnetController.redeemERC4626(address(susds), 1e18, 0);
     }
 
     function test_redeemERC4626_zeroMaxAmount() external {
         // Longer setup because rate limit revert is at the end of the function
-        vm.startPrank(Ethereum.GROVE_PROXY);
-        rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                mainnetController.LIMIT_4626_WITHDRAW(),
-                Ethereum.SUSDS
-            ),
-            0,
-            0
-        );
-        vm.stopPrank();
+        vm.prank(Ethereum.GROVE_PROXY);
+        rateLimits.setRateLimitData(withdrawKey, 0, 0);
 
         vm.startPrank(relayer);
         mainnetController.mintUSDS(100e18);
-        mainnetController.depositERC4626(address(susds), 100e18);
+        mainnetController.depositERC4626(address(susds), 100e18, 0);
         vm.stopPrank();
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        mainnetController.redeemERC4626(address(susds), 1e18);
+        mainnetController.redeemERC4626(address(susds), 1e18, 0);
     }
 
     function test_redeemERC4626_rateLimitBoundary() external {
@@ -270,7 +314,7 @@ contract MainnetControllerRedeemERC4626FailureTests is SUSDSTestBase {
         vm.startPrank(relayer);
 
         mainnetController.mintUSDS(10_000_000e18);
-        mainnetController.depositERC4626(address(susds), 10_000_000e18);
+        mainnetController.depositERC4626(address(susds), 10_000_000e18, 0);
 
         uint256 overBoundaryShares = susds.convertToShares(5_000_000e18 + 2);
         uint256 atBoundaryShares   = susds.convertToShares(5_000_000e18 + 1);  // Still rounds down
@@ -279,9 +323,9 @@ contract MainnetControllerRedeemERC4626FailureTests is SUSDSTestBase {
         assertEq(susds.previewRedeem(atBoundaryShares),   5_000_000e18);
 
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.redeemERC4626(address(susds), overBoundaryShares);
+        mainnetController.redeemERC4626(address(susds), overBoundaryShares, 0);
 
-        mainnetController.redeemERC4626(address(susds), atBoundaryShares);
+        mainnetController.redeemERC4626(address(susds), atBoundaryShares, 0);
 
         vm.stopPrank();
     }
@@ -293,7 +337,7 @@ contract MainnetControllerRedeemERC4626Tests is SUSDSTestBase {
     function test_redeemERC4626() external {
         vm.startPrank(relayer);
         mainnetController.mintUSDS(1e18);
-        mainnetController.depositERC4626(address(susds), 1e18);
+        mainnetController.depositERC4626(address(susds), 1e18, 0);
         vm.stopPrank();
 
         assertEq(usds.balanceOf(address(almProxy)),          0);
@@ -308,7 +352,7 @@ contract MainnetControllerRedeemERC4626Tests is SUSDSTestBase {
         assertEq(susds.balanceOf(address(almProxy)), SUSDS_CONVERTED_SHARES);
 
         vm.prank(relayer);
-        uint256 assets = mainnetController.redeemERC4626(address(susds), SUSDS_CONVERTED_SHARES);
+        uint256 assets = mainnetController.redeemERC4626(address(susds), SUSDS_CONVERTED_SHARES, 0);
 
         assertEq(assets, 1e18 - 2);  // Rounding
 

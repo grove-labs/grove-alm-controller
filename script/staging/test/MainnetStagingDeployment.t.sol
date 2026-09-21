@@ -145,13 +145,15 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
     }
 
     function test_depositAndWithdrawUsdsFromSUsds() public {
+        vm.skip(true);  // Staging controller predates the ERC-4626 slippage params
+
         uint256 startingBalance = usds.balanceOf(address(almProxy));
 
         vm.startPrank(relayer);
         mainnetController.mintUSDS(10e18);
-        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18, 0);
         skip(1 days);
-        mainnetController.withdrawERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.withdrawERC4626(Ethereum.SUSDS, 10e18, type(uint256).max);
         vm.stopPrank();
 
         assertEq(usds.balanceOf(address(almProxy)), startingBalance + 10e18);
@@ -160,14 +162,16 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
     }
 
     function test_depositAndWithdrawUsdsFromMorphoSmokehouseVault() public {
+        vm.skip(true);  // Staging controller predates the ERC-4626 slippage params
+
         uint256 startingBalance = usdc.balanceOf(address(almProxy));
 
         vm.startPrank(relayer);
         mainnetController.mintUSDS(10e18);
         mainnetController.swapUSDSToUSDC(10e6);
-        mainnetController.depositERC4626(MORPHO_SMOKEHOUSE_VAULT_USDC, 10e6);
+        mainnetController.depositERC4626(MORPHO_SMOKEHOUSE_VAULT_USDC, 10e6, 0);
         skip(1 days);
-        mainnetController.withdrawERC4626(MORPHO_SMOKEHOUSE_VAULT_USDC, 10e6);
+        mainnetController.withdrawERC4626(MORPHO_SMOKEHOUSE_VAULT_USDC, 10e6, type(uint256).max);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(address(almProxy)), startingBalance + 10e6);
@@ -175,13 +179,15 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
     }
 
     function test_depositAndRedeemUsdsFromSUsds() public {
+        vm.skip(true);  // Staging controller predates the ERC-4626 slippage params
+
         uint256 startingBalance = usds.balanceOf(address(almProxy));
 
         vm.startPrank(relayer);
         mainnetController.mintUSDS(10e18);
-        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18, 0);
         skip(1 days);
-        mainnetController.redeemERC4626(Ethereum.SUSDS, IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)));
+        mainnetController.redeemERC4626(Ethereum.SUSDS, IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)), 0);
         vm.stopPrank();
 
         assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e18);  // Interest earned
@@ -190,6 +196,8 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
     }
 
     function test_mintDepositCooldownAssetsBurnUsde() public {
+        vm.skip(true);  // Staging controller predates the ERC-4626 slippage params
+
         uint256 startingBalance = usdc.balanceOf(address(almProxy));
 
         vm.startPrank(relayer);
@@ -201,7 +209,7 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
         _simulateUsdeMint(10e6);
 
         vm.startPrank(relayer);
-        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18, 0);
         skip(1 days);
         mainnetController.cooldownAssetsSUSDe(10e18 - 1);  // Rounding
         skip(7 days);
@@ -217,6 +225,8 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
     }
 
     function test_mintDepositCooldownSharesBurnUsde() public {
+        vm.skip(true);  // Staging controller predates the ERC-4626 slippage params
+
         vm.startPrank(relayer);
         mainnetController.mintUSDS(10e18);
         mainnetController.swapUSDSToUSDC(10e6);
@@ -228,7 +238,7 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
         _simulateUsdeMint(10e6);
 
         vm.startPrank(relayer);
-        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18, 0);
         skip(1 days);
         uint256 usdeAmount = mainnetController.cooldownSharesSUSDe(IERC4626(Ethereum.SUSDE).balanceOf(address(almProxy)));
         skip(7 days);
