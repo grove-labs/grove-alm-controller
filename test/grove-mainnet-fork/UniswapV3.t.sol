@@ -111,6 +111,37 @@ contract UniswapV3TestBase is ForkTestBase {
         return RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
     }
 
+    function _generateFees(uint256 amount) internal {
+        deal(address(token0), stranger, amount);
+
+        vm.startPrank(stranger);
+        SafeERC20.forceApprove(IERC20OZ(address(token0)), UNISWAP_V3_ROUTER, amount);
+        uint256 amountOut = ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn           : address(token0),
+                tokenOut          : address(token1),
+                fee               : poolFee,
+                recipient         : stranger,
+                amountIn          : amount,
+                amountOutMinimum  : 0,
+                sqrtPriceLimitX96 : 0
+            })
+        );
+        SafeERC20.forceApprove(IERC20OZ(address(token1)), UNISWAP_V3_ROUTER, amountOut);
+        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn           : address(token1),
+                tokenOut          : address(token0),
+                fee               : poolFee,
+                recipient         : stranger,
+                amountIn          : amountOut,
+                amountOutMinimum  : 0,
+                sqrtPriceLimitX96 : 0
+            })
+        );
+        vm.stopPrank();
+    }
+
     function _label() internal {
         vm.label(UNISWAP_V3_ROUTER,           'UniswapV3Router');
         vm.label(UNISWAP_V3_POSITION_MANAGER, 'UniswapV3PositionManager');
@@ -191,19 +222,19 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
 
     function test_setUniswapV3PoolMaxTickDelta_isZero() public {
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("MC/max-tick-delta-oob");
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_isTooLarge() public {
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("MC/max-tick-delta-oob");
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
     }
 
     function test_setUniswapV3AddLiquidityLowerTickBound_isTooSmall() public {
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        vm.expectRevert("MC/lower-tick-oob");
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
     }
 
@@ -213,7 +244,7 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
         int24 currentUpper = tickBounds.upper;
 
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/lower-tick-out-of-bounds");
+        vm.expectRevert("MC/lower-tick-oob");
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
     }
 
@@ -222,13 +253,13 @@ contract MainnetControllerConfigFailureTests is UniswapV3TestBase {
         int24 currentLower = tickBounds.lower;
 
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        vm.expectRevert("MC/upper-tick-oob");
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), currentLower);
     }
 
     function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {
         vm.prank(GROVE_PROXY);
-        vm.expectRevert("MainnetController/upper-tick-out-of-bounds");
+        vm.expectRevert("MC/upper-tick-oob");
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), MAX_UNISWAP_TICK + 1);
     }
 }
@@ -353,6 +384,32 @@ contract MainnetControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             0
         );
         vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_minAmountOutNotMet() public {
+        uint256 amountIn     = 1_000e6;
+        uint256 minAmountOut = 990e6;
+
+        _fundProxy(amountIn, 0);
+
+        vm.mockCall(
+            UNISWAP_V3_ROUTER,
+            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector),
+            abi.encode(minAmountOut)
+        );
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-out-not-met");
+        mainnetController.swapUniswapV3(
+            _getPool(),
+            address(token0),
+            amountIn,
+            minAmountOut,
+            200
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
     }
 }
 
@@ -1675,6 +1732,22 @@ contract MainnetControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
+    function test_removeLiquidityUniswapV3_maxSlippageNotSet() public {
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(_getPool(), 0);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
+        mainnetController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
     function test_removeLiquidityUniswapV3_minAmount0BelowBound() public {
         vm.startPrank(relayer);
         vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
@@ -1741,7 +1814,7 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
     }
 
-    function _removeLiquidityAndValidate(uint256 tokenId_, uint128 liquidity_, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
+    function _removeLiquidity(uint256 tokenId_, uint128 liquidity_, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
         uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(token1RateLimitKey);
 
@@ -1758,14 +1831,40 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         assertGe(amount0Used, minAmount0, "amount0Used should be greater than or equal to minAmount0");
         assertGe(amount1Used, minAmount1, "amount1Used should be greater than or equal to minAmount1");
 
-        assertApproxEqRel(amount0Used, amount0Added * liquidity_ / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
-        assertApproxEqRel(amount1Used, amount1Added * liquidity_ / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
-
         uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(token0RateLimitKey);
         uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(token1RateLimitKey);
 
         assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0Used, "token0 rate limit delta mismatch");
         assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1Used, "token1 rate limit delta mismatch");
+    }
+
+    function _removeLiquidityAndValidate(uint256 tokenId_, uint128 liquidity_, uint256 minAmount0, uint256 minAmount1, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
+        (amount0Used, amount1Used) = _removeLiquidity(tokenId_, liquidity_, minAmount0, minAmount1, token0RateLimitKey, token1RateLimitKey);
+
+        assertApproxEqRel(amount0Used, amount0Added * liquidity_ / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
+        assertApproxEqRel(amount1Used, amount1Added * liquidity_ / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
+    }
+
+    function _removeLiquidityWithFeesAndValidate(bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal {
+        _generateFees(1_000_000 * 10 ** IERC20Metadata(address(token0)).decimals());
+
+        uint256 proxyBalance0Before = token0.balanceOf(address(almProxy));
+        uint256 proxyBalance1Before = token1.balanceOf(address(almProxy));
+
+        (uint256 amount0Used, uint256 amount1Used) = _removeLiquidity(
+            tokenId,
+            totalLiquidity / 2,
+            amount0Added / 2 * 99 / 100,
+            amount1Added / 2 * 99 / 100,
+            token0RateLimitKey,
+            token1RateLimitKey
+        );
+
+        uint256 proxyBalance0Delta = token0.balanceOf(address(almProxy)) - proxyBalance0Before;
+        uint256 proxyBalance1Delta = token1.balanceOf(address(almProxy)) - proxyBalance1Before;
+
+        assertGt(proxyBalance0Delta, amount0Used, "token0 fees should be collected on top of the reported amount");
+        assertGt(proxyBalance1Delta, amount1Used, "token1 fees should be collected on top of the reported amount");
     }
 }
 
@@ -1792,6 +1891,13 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3UsdcUsdtTest is MainnetCont
             totalLiquidity,
             amount0Added * 9999/10000,
             amount1Added * 9999/10000,
+            uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey,
+            uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey
+        );
+    }
+
+    function test_e2e_removeLiquidityUniswapV3_usdcUsdt_feesNotCharged() public {
+        _removeLiquidityWithFeesAndValidate(
             uniswapV3_UsdcUsdtPool_UsdcRemoveLiquidityKey,
             uniswapV3_UsdcUsdtPool_UsdtRemoveLiquidityKey
         );
@@ -1841,6 +1947,13 @@ contract MainnetControllerRemoveLiquidityE2EUniswapV3DaiUsdcTest is MainnetContr
             totalLiquidity,
             amount0Added * 9999/10000,
             amount1Added * 9999/10000,
+            uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey,
+            uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey
+        );
+    }
+
+    function test_e2e_removeLiquidityUniswapV3_daiUsdc_feesNotCharged() public {
+        _removeLiquidityWithFeesAndValidate(
             uniswapV3_DaiUsdcPool_DaiRemoveLiquidityKey,
             uniswapV3_DaiUsdcPool_UsdcRemoveLiquidityKey
         );

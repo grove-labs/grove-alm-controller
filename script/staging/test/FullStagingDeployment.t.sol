@@ -245,9 +245,9 @@ contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
 
         vm.startPrank(relayerSafe);
         mainnetController.mintUSDS(10e18);
-        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18, 0);
         skip(1 days);
-        mainnetController.withdrawERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.withdrawERC4626(Ethereum.SUSDS, 10e18, type(uint256).max);
         vm.stopPrank();
 
         assertEq(usds.balanceOf(address(almProxy)), startingBalance + 10e18);
@@ -262,9 +262,9 @@ contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
 
         vm.startPrank(relayerSafe);
         mainnetController.mintUSDS(10e18);
-        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDS, 10e18, 0);
         skip(1 days);
-        mainnetController.redeemERC4626(Ethereum.SUSDS, IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)));
+        mainnetController.redeemERC4626(Ethereum.SUSDS, IERC4626(Ethereum.SUSDS).balanceOf(address(almProxy)), 0);
         vm.stopPrank();
 
         assertGe(usds.balanceOf(address(almProxy)), startingBalance + 10e18);  // Interest earned
@@ -317,7 +317,7 @@ contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
         _simulateUsdeMint(10e6);
 
         vm.startPrank(relayerSafe);
-        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18, 0);
         skip(1 days);
         mainnetController.cooldownAssetsSUSDe(10e18 - 1);  // Rounding
         skip(7 days);
@@ -346,7 +346,7 @@ contract FullMainnetStagingDeploymentTests is StagingDeploymentTestBase {
         _simulateUsdeMint(10e6);
 
         vm.startPrank(relayerSafe);
-        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18);
+        mainnetController.depositERC4626(Ethereum.SUSDE, 10e18, 0);
         skip(1 days);
         uint256 usdeAmount = mainnetController.cooldownSharesSUSDe(IERC4626(Ethereum.SUSDE).balanceOf(address(almProxy)));
         skip(7 days);
@@ -536,9 +536,9 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
         cctpBridgeBase.relayMessagesToDestination(true);
 
         vm.startPrank(relayerSafeBase);
-        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, 0);
         skip(1 days);
-        baseController.withdrawERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.withdrawERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, type(uint256).max);
 
         assertEq(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);
 
@@ -569,9 +569,9 @@ contract FullBaseStagingDeploymentTests is StagingDeploymentTestBase {
         cctpBridgeBase.relayMessagesToDestination(true);
 
         vm.startPrank(relayerSafeBase);
-        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6);
+        baseController.depositERC4626(Base.MORPHO_VAULT_SUSDC, 10e6, 0);
         skip(1 days);
-        baseController.redeemERC4626(Base.MORPHO_VAULT_SUSDC, IERC20(Base.MORPHO_VAULT_SUSDC).balanceOf(address(baseAlmProxy)));
+        baseController.redeemERC4626(Base.MORPHO_VAULT_SUSDC, IERC20(Base.MORPHO_VAULT_SUSDC).balanceOf(address(baseAlmProxy)), 0);
 
         assertGe(usdcBase.balanceOf(address(baseAlmProxy)), 10e6);  // Interest earned
 

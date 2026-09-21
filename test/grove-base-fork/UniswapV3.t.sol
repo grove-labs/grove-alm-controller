@@ -11,6 +11,8 @@ import { TickMath }   from "lib/dss-allocator/src/funnels/uniV3/TickMath.sol";
 
 import { INonfungiblePositionManager, IUniswapV3PoolLike, UniswapV3Lib } from "../../src/libraries/UniswapV3Lib.sol";
 
+import { ISwapRouter } from "../../src/interfaces/UniswapV3Interfaces.sol";
+
 import "./ForkTestBase.t.sol";
 
 /// @title An interface for a contract that is capable of deploying Uniswap V3 Pools
@@ -160,6 +162,37 @@ contract UniswapV3TestBase is ForkTestBase {
         return RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
     }
 
+    function _generateFees(uint256 amount) internal {
+        deal(address(token0), stranger, amount);
+
+        vm.startPrank(stranger);
+        token0.approve(UNISWAP_V3_ROUTER, amount);
+        uint256 amountOut = ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn           : address(token0),
+                tokenOut          : address(token1),
+                fee               : poolFee,
+                recipient         : stranger,
+                amountIn          : amount,
+                amountOutMinimum  : 0,
+                sqrtPriceLimitX96 : 0
+            })
+        );
+        token1.approve(UNISWAP_V3_ROUTER, amountOut);
+        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn           : address(token1),
+                tokenOut          : address(token0),
+                fee               : poolFee,
+                recipient         : stranger,
+                amountIn          : amountOut,
+                amountOutMinimum  : 0,
+                sqrtPriceLimitX96 : 0
+            })
+        );
+        vm.stopPrank();
+    }
+
     function _label() internal {
         vm.label(UNISWAP_V3_ROUTER,            'UniswapV3Router');
         vm.label(UNISWAP_V3_POSITION_MANAGER,  'UniswapV3PositionManager');
@@ -219,19 +252,19 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
 
     function test_setUniswapV3PoolMaxTickDelta_isZero() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_isTooLarge() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
     }
 
     function test_setUniswapV3AddLiquidityLowerTickBound_isTooSmall() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), MIN_UNISWAP_TICK - 1);
     }
 
@@ -240,13 +273,13 @@ contract ForeignControllerConfigFailureTests is UniswapV3TestBase {
         int24 currentUpper = tickBounds.upper;
 
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/lower-tick-out-of-bounds");
+        vm.expectRevert("FC/lower-tick-oob");
         foreignController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), currentUpper);
     }
 
     function test_setUniswapV3AddLiquidityUpperTickBound_isTooLarge() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/upper-tick-out-of-bounds");
+        vm.expectRevert("FC/upper-tick-oob");
         foreignController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), MAX_UNISWAP_TICK + 1);
     }
 }
@@ -264,13 +297,13 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
 
     function test_setUniswapV3PoolMaxTickDelta_zeroTickDelta() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 0);
     }
 
     function test_setUniswapV3PoolMaxTickDelta_outOfBounds() public {
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("ForeignController/max-tick-delta-out-of-bounds");
+        vm.expectRevert("FC/max-tick-delta-oob");
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), UniswapV3Lib.MAX_TICK_DELTA + 1);
     }
 
@@ -300,6 +333,32 @@ contract ForeignControllerSwapUniswapV3FailureTests is UniswapV3TestBase {
             100
         );
         vm.stopPrank();
+    }
+
+    function test_swapUniswapV3_minAmountOutNotMet() public {
+        uint256 amountIn     = 1_000e18;
+        uint256 minAmountOut = 990e6;
+
+        deal(address(usdsBase), address(almProxy), amountIn);
+
+        vm.mockCall(
+            UNISWAP_V3_ROUTER,
+            abi.encodeWithSelector(ISwapRouter.exactInputSingle.selector),
+            abi.encode(minAmountOut)
+        );
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/min-amount-out-not-met");
+        foreignController.swapUniswapV3(
+            _getPool(),
+            address(usdsBase),
+            amountIn,
+            minAmountOut,
+            100
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
     }
 }
 
@@ -1331,6 +1390,48 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         );
         vm.stopPrank();
     }
+
+    function test_removeLiquidityUniswapV3_maxSlippageNotSet() public {
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMaxSlippage(_getPool(), 0);
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/max-slippage-not-set");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_minAmount0BelowBound() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_minAmount1BelowBound() public {
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
 }
 
 contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
@@ -1368,7 +1469,7 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
     }
 
-    function _removeLiquidityAndValidate(uint256 _tokenId, uint128 _liquidity, uint256 _minAmount0, uint256 _minAmount1, bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
+    function _removeLiquidity(uint256 _tokenId, uint128 _liquidity, uint256 _minAmount0, uint256 _minAmount1, bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
         uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
         uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
 
@@ -1385,14 +1486,40 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         assertGe(amount0Used, _minAmount0, "amount0Used should be greater than or equal to minAmount0");
         assertGe(amount1Used, _minAmount1, "amount1Used should be greater than or equal to minAmount1");
 
-        assertApproxEqRel(amount0Used, amount0Added * _liquidity / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
-        assertApproxEqRel(amount1Used, amount1Added * _liquidity / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
-
         uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
         uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
 
         assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0Used, "token0 rate limit delta mismatch");
         assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1Used, "token1 rate limit delta mismatch");
+    }
+
+    function _removeLiquidityAndValidate(uint256 _tokenId, uint128 _liquidity, uint256 _minAmount0, uint256 _minAmount1, bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
+        (amount0Used, amount1Used) = _removeLiquidity(_tokenId, _liquidity, _minAmount0, _minAmount1, _token0RateLimitKey, _token1RateLimitKey);
+
+        assertApproxEqRel(amount0Used, amount0Added * _liquidity / totalLiquidity, .0001e18, "amount0Used should be within 0.01% of amount0Added * liquidity / totalLiquidity");
+        assertApproxEqRel(amount1Used, amount1Added * _liquidity / totalLiquidity, .0001e18, "amount1Used should be within 0.01% of amount1Added * liquidity / totalLiquidity");
+    }
+
+    function _removeLiquidityWithFeesAndValidate(bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal {
+        _generateFees(10_000 * 10 ** IERC20Metadata(address(token0)).decimals());
+
+        uint256 proxyBalance0Before = token0.balanceOf(address(almProxy));
+        uint256 proxyBalance1Before = token1.balanceOf(address(almProxy));
+
+        (uint256 amount0Used, uint256 amount1Used) = _removeLiquidity(
+            tokenId,
+            totalLiquidity / 2,
+            amount0Added / 2 * 99 / 100,
+            amount1Added / 2 * 99 / 100,
+            _token0RateLimitKey,
+            _token1RateLimitKey
+        );
+
+        uint256 proxyBalance0Delta = token0.balanceOf(address(almProxy)) - proxyBalance0Before;
+        uint256 proxyBalance1Delta = token1.balanceOf(address(almProxy)) - proxyBalance1Before;
+
+        assertGt(proxyBalance0Delta, amount0Used, "token0 fees should be collected on top of the reported amount");
+        assertGt(proxyBalance1Delta, amount1Used, "token1 fees should be collected on top of the reported amount");
     }
 }
 
@@ -1420,6 +1547,13 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3UsdsUsdcTest is ForeignCont
             totalLiquidity,
             amount0Added * 9999/10000,
             amount1Added * 9999/10000,
+            uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey,
+            uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
+        );
+    }
+
+    function test_e2e_removeLiquidityUniswapV3_usdsUsdc_feesNotCharged() public {
+        _removeLiquidityWithFeesAndValidate(
             uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey,
             uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey
         );
@@ -1453,6 +1587,13 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3AusdUsdsTest is ForeignCont
             totalLiquidity,
             amount0Added * 9999/10000,
             amount1Added * 9999/10000,
+            uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey,
+            uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
+        );
+    }
+
+    function test_e2e_removeLiquidityUniswapV3_ausdUsds_feesNotCharged() public {
+        _removeLiquidityWithFeesAndValidate(
             uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey,
             uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey
         );

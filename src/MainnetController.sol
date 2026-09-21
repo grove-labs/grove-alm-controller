@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
-import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
-
-import { IERC7540 } from "forge-std/interfaces/IERC7540.sol";
-
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
 import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
@@ -21,9 +16,12 @@ import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3
 
 import "./interfaces/ILayerZero.sol";
 
+import { AaveLib }                        from "./libraries/AaveLib.sol";
 import { CCTPLib }                        from "./libraries/CCTPLib.sol";
 import { CentrifugeLib }                  from "./libraries/CentrifugeLib.sol";
 import { CurveLib }                       from "./libraries/CurveLib.sol";
+import { ERC4626Lib }                     from "./libraries/ERC4626Lib.sol";
+import { ERC7540Lib }                     from "./libraries/ERC7540Lib.sol";
 import { MerklLib }                       from "./libraries/MerklLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
@@ -33,10 +31,6 @@ import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
 import { OptionsBuilder } from "layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
-
-interface IATokenWithPool is IAToken {
-    function POOL() external view returns(address);
-}
 
 interface IEthenaMinterLike {
     function setDelegatedSigner(address delegateSigner) external;
@@ -78,15 +72,11 @@ contract MainnetController is AccessControl {
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
 
-    uint256 public constant EXCHANGE_RATE_PRECISION = 1e36;
-
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
 
     bytes32 public LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
     bytes32 public LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT         = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM          = keccak256("LIMIT_7540_REDEEM");
     bytes32 public LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
@@ -205,7 +195,7 @@ contract MainnetController is AccessControl {
 
     function setMaxSlippage(address pool, uint256 maxSlippage) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(maxSlippage <= 1e18, "MainnetController/max-slippage-out-of-bounds");
+        require(maxSlippage <= 1e18, "MC/max-slippage-oob");
         maxSlippages[pool] = maxSlippage;
         emit MaxSlippageSet(pool, maxSlippage);
     }
@@ -216,7 +206,7 @@ contract MainnetController is AccessControl {
         require(
             maxTickDelta > 0 &&
             maxTickDelta <= UniswapV3Lib.MAX_TICK_DELTA,
-            "MainnetController/max-tick-delta-out-of-bounds"
+            "MC/max-tick-delta-oob"
         );
 
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
@@ -226,7 +216,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityLowerTickBound(address pool, int24 lowerTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MainnetController/lower-tick-out-of-bounds");
+        require(lowerTickBound >= MIN_TICK && lowerTickBound < params.addLiquidityTickBounds.upper, "MC/lower-tick-oob");
 
         params.addLiquidityTickBounds.lower = lowerTickBound;
         emit UniswapV3PoolLowerTickUpdated(pool, lowerTickBound);
@@ -234,7 +224,7 @@ contract MainnetController is AccessControl {
 
     function setUniswapV3AddLiquidityUpperTickBound(address pool, int24 upperTickBound) external onlyRole(DEFAULT_ADMIN_ROLE) {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
-        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MainnetController/upper-tick-out-of-bounds");
+        require(upperTickBound > params.addLiquidityTickBounds.lower && upperTickBound <= MAX_TICK, "MC/upper-tick-oob");
 
         params.addLiquidityTickBounds.upper = upperTickBound;
         emit UniswapV3PoolUpperTickUpdated(pool, upperTickBound);
@@ -244,13 +234,14 @@ contract MainnetController is AccessControl {
         UniswapV3Lib.UniswapV3PoolParams storage params = uniswapV3PoolParams[pool];
         // Required due to casting in UniswapV3OracleLibrary.consult
         // Limits twapSecondsAgo to approximately 68 years
-        require(twapSecondsAgo < uint32(type(int32).max), "MainnetController/twap-seconds-ago-out-of-bounds");
+        require(twapSecondsAgo < uint32(type(int32).max), "MC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
+        require(recipient != bytes32(0), "MC/zero-recipient");
         centrifugeRecipients[centrifugeId] = recipient;
         emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
@@ -258,11 +249,11 @@ contract MainnetController is AccessControl {
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        require(token != address(0), "MainnetController/token-zero-address");
+        require(token != address(0), "MC/token-zero-address");
 
         emit MaxExchangeRateSet(
             token,
-            maxExchangeRates[token] = _getExchangeRate(shares, maxExpectedAssets)
+            maxExchangeRates[token] = ERC4626Lib.getExchangeRate(shares, maxExpectedAssets)
         );
     }
 
@@ -329,64 +320,50 @@ contract MainnetController is AccessControl {
     /*** Relayer ERC4626 functions                                                              ***/
     /**********************************************************************************************/
 
-    function depositERC4626(address token, uint256 amount) external returns (uint256 shares) {
+    function depositERC4626(address token, uint256 amount, uint256 minSharesOut)
+        external
+        returns (uint256 shares)
+    {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_4626_DEPOSIT, token, amount);
-
-        // Note that whitelist is done by rate limits
-        IERC20 asset = IERC20(IERC4626(token).asset());
-
-        // Approve asset to token from the proxy (assumes the proxy has enough of the asset).
-        ERC20Lib.approve(proxy, address(asset), token, amount);
-
-        // Deposit asset into the token, proxy receives token shares, decode the resulting shares
-        shares = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).deposit, (amount, address(proxy)))
-            ),
-            (uint256)
-        );
-
-        require(
-            _getExchangeRate(shares, amount) <= maxExchangeRates[token],
-            "MainnetController/exchange-rate-too-high"
-        );
+        return ERC4626Lib.deposit(ERC4626Lib.DepositParams({
+            proxy           : proxy,
+            rateLimits      : rateLimits,
+            rateLimitId     : LIMIT_4626_DEPOSIT,
+            token           : token,
+            amount          : amount,
+            minSharesOut    : minSharesOut,
+            maxExchangeRate : maxExchangeRates[token]
+        }));
     }
 
-    function withdrawERC4626(address token, uint256 amount) external returns (uint256 shares) {
+    function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn)
+        external
+        returns (uint256 shares)
+    {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_4626_WITHDRAW, token, amount);
-
-        // Withdraw asset from a token, decode resulting shares.
-        // Assumes proxy has adequate token shares.
-        shares = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).withdraw, (amount, address(proxy), address(proxy)))
-            ),
-            (uint256)
-        );
+        return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_4626_WITHDRAW,
+            token       : token,
+            amount      : amount,
+            maxSharesIn : maxSharesIn
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
-    function redeemERC4626(address token, uint256 shares) external returns (uint256 assets) {
+    function redeemERC4626(address token, uint256 shares, uint256 minAssetsOut)
+        external
+        returns (uint256 assets)
+    {
         _checkRole(RELAYER);
-
-        // Redeem shares for assets from the token, decode the resulting assets.
-        // Assumes proxy has adequate token shares.
-        assets = abi.decode(
-            proxy.doCall(
-                token,
-                abi.encodeCall(IERC4626(token).redeem, (shares, address(proxy), address(proxy)))
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, token),
-            assets
-        );
+        return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_4626_WITHDRAW,
+            token        : token,
+            shares       : shares,
+            minAssetsOut : minAssetsOut
+        }));
     }
 
     /**********************************************************************************************/
@@ -395,60 +372,40 @@ contract MainnetController is AccessControl {
 
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_7540_DEPOSIT, token, amount);
-
-        // Note that whitelist is done by rate limits
-        IERC20 asset = IERC20(IERC7540(token).asset());
-
-        // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
-        ERC20Lib.approve(proxy, address(asset), token, amount);
-
-        // Submit deposit request by transferring assets
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestDeposit, (amount, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            amount     : amount
+        }));
     }
 
     function claimDepositERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_DEPOSIT, token));
-
-        uint256 shares = IERC7540(token).maxMint(address(proxy));
-
-        // Claim shares from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC4626(token).mint, (shares, address(proxy)))
-        );
+        ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
+        }));
     }
 
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(
-            LIMIT_7540_REDEEM,
-            token,
-            IERC7540(token).convertToAssets(shares)
-        );
-
-        // Submit redeem request by transferring shares
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).requestRedeem, (shares, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            shares     : shares
+        }));
     }
 
     function claimRedeemERC7540(address token) external {
         _checkRole(RELAYER);
-        _rateLimitExists(RateLimitHelpers.makeAssetKey(LIMIT_7540_REDEEM, token));
-
-        uint256 assets = IERC7540(token).maxWithdraw(address(proxy));
-
-        // Claim assets from the vault to the proxy
-        proxy.doCall(
-            token,
-            abi.encodeCall(IERC7540(token).withdraw, (assets, address(proxy), address(proxy)))
-        );
+        ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
+        }));
     }
 
     /**********************************************************************************************/
@@ -459,22 +416,22 @@ contract MainnetController is AccessControl {
 
     function cancelCentrifugeDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.cancelCentrifugeDepositRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(_centrifugeRequestParams(token));
     }
 
     function cancelCentrifugeRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.cancelCentrifugeRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function transferSharesCentrifuge(
@@ -504,58 +461,28 @@ contract MainnetController is AccessControl {
 
     function depositAave(address aToken, uint256 amount) external {
         _checkRole(RELAYER);
-        _rateLimitedAsset(LIMIT_AAVE_DEPOSIT, aToken, amount);
-
-        require(maxSlippages[aToken] != 0, "MainnetController/max-slippage-not-set");
-
-        IERC20    underlying = IERC20(IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS());
-        IAavePool pool       = IAavePool(IATokenWithPool(aToken).POOL());
-
-        uint256 aTokenBalance = IERC20(aToken).balanceOf(address(proxy));
-
-        // Approve underlying to Aave pool from the proxy (assumes the proxy has enough underlying).
-        ERC20Lib.approve(proxy, address(underlying), address(pool), amount);
-
-        // Deposit underlying into Aave pool, proxy receives aTokens
-        proxy.doCall(
-            address(pool),
-            abi.encodeCall(pool.supply, (address(underlying), amount, address(proxy), 0))
-        );
-
-        uint256 newATokens = IERC20(aToken).balanceOf(address(proxy)) - aTokenBalance;
-
-        require(
-            newATokens >= amount * maxSlippages[aToken] / 1e18,
-            "MainnetController/slippage-too-high"
-        );
+        AaveLib.deposit(AaveLib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_DEPOSIT,
+            aToken      : aToken,
+            amount      : amount,
+            maxSlippage : maxSlippages[aToken]
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
     function withdrawAave(address aToken, uint256 amount)
         external
         returns (uint256 amountWithdrawn)
     {
         _checkRole(RELAYER);
-
-        IAavePool pool = IAavePool(IATokenWithPool(aToken).POOL());
-
-        // Withdraw underlying from Aave pool, decode resulting amount withdrawn.
-        // Assumes proxy has adequate aTokens.
-        amountWithdrawn = abi.decode(
-            proxy.doCall(
-                address(pool),
-                abi.encodeCall(
-                    pool.withdraw,
-                    (IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS(), amount, address(proxy))
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_AAVE_WITHDRAW, aToken),
-            amountWithdrawn
-        );
+        return AaveLib.withdraw(AaveLib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_AAVE_WITHDRAW,
+            aToken      : aToken,
+            amount      : amount
+        }));
     }
 
     /**********************************************************************************************/
@@ -839,6 +766,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.usdsToDai, (address(proxy), usdsAmount))
         );
+
+        ERC20Lib.approve(proxy, address(usds), address(daiUsds), 0);
     }
 
     function swapDAIToUSDS(uint256 daiAmount)
@@ -853,6 +782,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.daiToUsds, (address(proxy), daiAmount))
         );
+
+        ERC20Lib.approve(proxy, address(dai), address(daiUsds), 0);
     }
 
     /**********************************************************************************************/
@@ -939,12 +870,12 @@ contract MainnetController is AccessControl {
     /*** Relayer Merkl functions                                                                ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external {
         _checkRole(RELAYER);
-
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
-            distributor : Ethereum.MERKL_DISTRIBUTOR,
+            rateLimits  : rateLimits,
+            distributor : distributor,
             operator    : operator
         }));
     }
@@ -985,53 +916,19 @@ contract MainnetController is AccessControl {
         rateLimits.triggerRateLimitIncrease(key, amount);
     }
 
-    function _rateLimitExists(bytes32 key) internal view {
-        require(
-            rateLimits.getRateLimitData(key).maxAmount > 0,
-            "MainnetController/invalid-action"
-        );
-    }
-
     /**********************************************************************************************/
     /*** Centrifuge Library helper functions                                                    ***/
     /**********************************************************************************************/
 
-    function centrifugeDepositRequestParams(
+    function _centrifugeRequestParams(
         address token
     ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
         return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            requestId   : CENTRIFUGE_REQUEST_ID
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            requestId  : CENTRIFUGE_REQUEST_ID
         });
-    }
-
-    function centrifugeRedeemRequestParams(
-        address token
-    ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
-        return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
-            requestId   : CENTRIFUGE_REQUEST_ID
-        });
-    }
-
-    /**********************************************************************************************/
-    /*** Exchange rate helper functions                                                         ***/
-    /**********************************************************************************************/
-
-    function _getExchangeRate(uint256 shares, uint256 assets) internal pure returns (uint256) {
-        // Return 0 for zero assets first, to handle the valid case of 0 shares and 0 assets.
-        if (assets == 0) return 0;
-
-        // Zero shares with non-zero assets is invalid (infinite exchange rate).
-        if (shares == 0) revert("MainnetController/zero-shares");
-
-        return (EXCHANGE_RATE_PRECISION * assets) / shares;
     }
 
 }
