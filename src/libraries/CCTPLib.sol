@@ -63,29 +63,22 @@ library CCTPLib {
         // This variable will get reduced in the loop below
         uint256 usdcAmountTemp = params.usdcAmount;
 
-        while (usdcAmountTemp > burnLimit) {
+        while (usdcAmountTemp > 0) {
+            uint256 transferAmount = usdcAmountTemp > burnLimit ? burnLimit : usdcAmountTemp;
+
             _initiateCCTPTransfer(
                 params.proxy,
                 params.cctp,
                 params.usdc,
-                burnLimit,
+                transferAmount,
                 params.mintRecipient,
                 params.destinationDomain
             );
-            usdcAmountTemp -= burnLimit;
+
+            usdcAmountTemp -= transferAmount;
         }
 
-        // Send remaining amount (if any)
-        if (usdcAmountTemp > 0) {
-            _initiateCCTPTransfer(
-                params.proxy,
-                params.cctp,
-                params.usdc,
-                usdcAmountTemp,
-                params.mintRecipient,
-                params.destinationDomain
-            );
-        }
+        ERC20Lib.approve(params.proxy, address(params.usdc), address(params.cctp), 0);
     }
 
     /**********************************************************************************************/
