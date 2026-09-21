@@ -148,7 +148,7 @@ contract MainnetControllerSetLayerZeroRecipientTests is MainnetControllerAdminTe
 
     function test_setLayerZeroRecipient_zeroRecipient() public {
         vm.prank(admin);
-        vm.expectRevert("MainnetController/zero-recipient");
+        vm.expectRevert("MC/zero-recipient");
         mainnetController.setLayerZeroRecipient(1, bytes32(0));
     }
 
@@ -617,7 +617,7 @@ contract ForeignControllerSetLayerZeroRecipientTests is ForeignControllerAdminTe
 
     function test_setLayerZeroRecipient_zeroRecipient() public {
         vm.prank(admin);
-        vm.expectRevert("ForeignController/zero-recipient");
+        vm.expectRevert("FC/zero-recipient");
         foreignController.setLayerZeroRecipient(1, bytes32(0));
     }
 

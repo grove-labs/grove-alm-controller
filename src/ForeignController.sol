@@ -173,7 +173,7 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(layerZeroRecipient != bytes32(0), "ForeignController/zero-recipient");
+        require(layerZeroRecipient != bytes32(0), "FC/zero-recipient");
 
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);

@@ -185,7 +185,7 @@ contract MainnetController is AccessControl {
         external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(layerZeroRecipient != bytes32(0), "MainnetController/zero-recipient");
+        require(layerZeroRecipient != bytes32(0), "MC/zero-recipient");
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
     }
