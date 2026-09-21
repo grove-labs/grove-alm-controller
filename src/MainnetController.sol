@@ -755,6 +755,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.usdsToDai, (address(proxy), usdsAmount))
         );
+
+        ERC20Lib.approve(proxy, address(usds), address(daiUsds), 0);
     }
 
     function swapDAIToUSDS(uint256 daiAmount)
@@ -769,6 +771,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.daiToUsds, (address(proxy), daiAmount))
         );
+
+        ERC20Lib.approve(proxy, address(dai), address(daiUsds), 0);
     }
 
     /**********************************************************************************************/
