@@ -77,8 +77,6 @@ contract MainnetController is AccessControl {
 
     bytes32 public LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
     bytes32 public LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT         = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM          = keccak256("LIMIT_7540_REDEEM");
     bytes32 public LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
@@ -243,6 +241,7 @@ contract MainnetController is AccessControl {
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
+        require(recipient != bytes32(0), "MC/zero-recipient");
         centrifugeRecipients[centrifugeId] = recipient;
         emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
@@ -405,22 +404,22 @@ contract MainnetController is AccessControl {
 
     function cancelCentrifugeDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.cancelCentrifugeDepositRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(_centrifugeRequestParams(token));
     }
 
     function cancelCentrifugeRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.cancelCentrifugeRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function transferSharesCentrifuge(
@@ -909,27 +908,14 @@ contract MainnetController is AccessControl {
     /*** Centrifuge Library helper functions                                                    ***/
     /**********************************************************************************************/
 
-    function centrifugeDepositRequestParams(
+    function _centrifugeRequestParams(
         address token
     ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
         return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            requestId   : CENTRIFUGE_REQUEST_ID
-        });
-    }
-
-    function centrifugeRedeemRequestParams(
-        address token
-    ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
-        return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
-            requestId   : CENTRIFUGE_REQUEST_ID
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            requestId  : CENTRIFUGE_REQUEST_ID
         });
     }
 

@@ -95,6 +95,38 @@ contract MainnetControllerSetMintRecipientTests is MainnetControllerAdminTestBas
 
 }
 
+contract MainnetControllerSetCentrifugeRecipientTests is MainnetControllerAdminTestBase {
+
+    event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
+
+    function test_setCentrifugeRecipient_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+    }
+
+    function test_setCentrifugeRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("MC/zero-recipient");
+        mainnetController.setCentrifugeRecipient(1, bytes32(0));
+    }
+
+    function test_setCentrifugeRecipient() public {
+        assertEq(mainnetController.centrifugeRecipients(1), bytes32(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit CentrifugeRecipientSet(1, bytes32(uint256(1)));
+        mainnetController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+
+        assertEq(mainnetController.centrifugeRecipients(1), bytes32(uint256(1)));
+    }
+
+}
+
 contract MainnetControllerSetLayerZeroRecipientTests is MainnetControllerAdminTestBase {
 
     function test_setLayerZeroRecipient_unauthorizedAccount() public {
@@ -524,6 +556,38 @@ contract ForeignControllerSetMintRecipientTests is ForeignControllerAdminTestBas
 
         assertEq(foreignController.mintRecipients(1), mintRecipient2);
     }
+}
+
+contract ForeignControllerSetCentrifugeRecipientTests is ForeignControllerAdminTestBase {
+
+    event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
+
+    function test_setCentrifugeRecipient_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+    }
+
+    function test_setCentrifugeRecipient_zeroRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/zero-recipient");
+        foreignController.setCentrifugeRecipient(1, bytes32(0));
+    }
+
+    function test_setCentrifugeRecipient() public {
+        assertEq(foreignController.centrifugeRecipients(1), bytes32(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit CentrifugeRecipientSet(1, bytes32(uint256(1)));
+        foreignController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+
+        assertEq(foreignController.centrifugeRecipients(1), bytes32(uint256(1)));
+    }
+
 }
 
 contract ForeignControllerSetLayerZeroRecipientTests is ForeignControllerAdminTestBase {
