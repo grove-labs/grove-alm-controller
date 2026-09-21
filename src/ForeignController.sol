@@ -22,6 +22,7 @@ import { ERC7540Lib }    from "./libraries/ERC7540Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
+import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
 import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
 import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
@@ -51,7 +52,6 @@ contract ForeignController is AccessControl {
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
-    event MerklDistributorSet(address indexed merklDistributor);
 
     event UniswapV3PoolLowerTickUpdated(address indexed pool, int24 lowerTick);
     event UniswapV3PoolUpperTickUpdated(address indexed pool, int24 upperTick);
@@ -100,7 +100,6 @@ contract ForeignController is AccessControl {
     IRateLimits public rateLimits;
     IERC20      public usdc;
     address     public pendleRouter;
-    address     public merklDistributor;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
@@ -252,14 +251,6 @@ contract ForeignController is AccessControl {
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
-    function setMerklDistributor(address merklDistributor_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        merklDistributor = merklDistributor_;
-        emit MerklDistributorSet(merklDistributor_);
-    }
-
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
@@ -284,51 +275,28 @@ contract ForeignController is AccessControl {
     /*** Relayer PSM functions                                                                  ***/
     /**********************************************************************************************/
 
-    function depositPSM(address asset, uint256 amount)
-        external
-        onlyRole(RELAYER)
-        rateLimitedAsset(LIMIT_PSM_DEPOSIT, asset, amount)
-        returns (uint256 shares)
-    {
-        // Approve `asset` to PSM from the proxy (assumes the proxy has enough `asset`).
-        ERC20Lib.approve(proxy, asset, address(psm), amount);
-
-        // Deposit `amount` of `asset` in the PSM, decode the result to get `shares`.
-        shares = abi.decode(
-            proxy.doCall(
-                address(psm),
-                abi.encodeCall(
-                    psm.deposit,
-                    (asset, address(proxy), amount)
-                )
-            ),
-            (uint256)
-        );
+    function depositPSM(address asset, uint256 amount) external returns (uint256 shares) {
+        _checkRole(RELAYER);
+        return PSM3Lib.deposit(PSM3Lib.DepositParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_PSM_DEPOSIT,
+            psm         : psm,
+            asset       : asset,
+            amount      : amount
+        }));
     }
 
-    // NOTE: !!! Rate limited at end of function !!!
-    function withdrawPSM(address asset, uint256 maxAmount)
-        external
-        onlyRole(RELAYER)
-        returns (uint256 assetsWithdrawn)
-    {
-        // Withdraw up to `maxAmount` of `asset` in the PSM, decode the result
-        // to get `assetsWithdrawn` (assumes the proxy has enough PSM shares).
-        assetsWithdrawn = abi.decode(
-            proxy.doCall(
-                address(psm),
-                abi.encodeCall(
-                    psm.withdraw,
-                    (asset, address(proxy), maxAmount)
-                )
-            ),
-            (uint256)
-        );
-
-        rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(LIMIT_PSM_WITHDRAW, asset),
-            assetsWithdrawn
-        );
+    function withdrawPSM(address asset, uint256 maxAmount) external returns (uint256 assetsWithdrawn) {
+        _checkRole(RELAYER);
+        return PSM3Lib.withdraw(PSM3Lib.WithdrawParams({
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            rateLimitId : LIMIT_PSM_WITHDRAW,
+            psm         : psm,
+            asset       : asset,
+            maxAmount   : maxAmount
+        }));
     }
 
     /**********************************************************************************************/
@@ -438,42 +406,38 @@ contract ForeignController is AccessControl {
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
         ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            token       : token,
-            amount      : amount
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            amount     : amount
         }));
     }
 
     function claimDepositERC7540(address token) external {
         _checkRole(RELAYER);
         ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            token       : token
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
         }));
     }
 
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
         ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_REDEEM,
-            token       : token,
-            shares      : shares
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            shares     : shares
         }));
     }
 
     function claimRedeemERC7540(address token) external {
         _checkRole(RELAYER);
         ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_REDEEM,
-            token       : token
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
         }));
     }
 
@@ -687,14 +651,13 @@ contract ForeignController is AccessControl {
     /*** Relayer Merkl functions                                                                 ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external {
         _checkRole(RELAYER);
-        require(address(merklDistributor) != address(0), "FC/merkl-distributor-not-set");
-
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
-            proxy        : proxy,
-            distributor  : merklDistributor,
-            operator     : operator
+            proxy       : proxy,
+            rateLimits  : rateLimits,
+            distributor : distributor,
+            operator    : operator
         }));
     }
 

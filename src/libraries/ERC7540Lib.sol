@@ -14,10 +14,14 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library ERC7540Lib {
 
+    bytes32 public constant LIMIT_7540_REQUEST_DEPOSIT = keccak256("LIMIT_7540_REQUEST_DEPOSIT");
+    bytes32 public constant LIMIT_7540_CLAIM_DEPOSIT   = keccak256("LIMIT_7540_CLAIM_DEPOSIT");
+    bytes32 public constant LIMIT_7540_REQUEST_REDEEM  = keccak256("LIMIT_7540_REQUEST_REDEEM");
+    bytes32 public constant LIMIT_7540_CLAIM_REDEEM    = keccak256("LIMIT_7540_CLAIM_REDEEM");
+
     struct RequestDepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
         uint256     amount;
     }
@@ -25,7 +29,6 @@ library ERC7540Lib {
     struct RequestRedeemParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
         uint256     shares;
     }
@@ -33,17 +36,16 @@ library ERC7540Lib {
     struct ClaimParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
     }
 
     function requestDeposit(RequestDepositParams memory params) external {
+        address asset = IERC7540(params.token).asset();
+
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            RateLimitHelpers.makeAddressAddressKey(LIMIT_7540_REQUEST_DEPOSIT, asset, params.token),
             params.amount
         );
-
-        address asset = IERC7540(params.token).asset();
 
         // Approve asset to vault from the proxy (assumes the proxy has enough of the asset).
         ERC20Lib.approve(params.proxy, asset, params.token, params.amount);
@@ -56,10 +58,12 @@ library ERC7540Lib {
                 (params.amount, address(params.proxy), address(params.proxy))
             )
         );
+
+        ERC20Lib.approve(params.proxy, asset, params.token, 0);
     }
 
     function claimDeposit(ClaimParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_7540_CLAIM_DEPOSIT, params.token));
 
         uint256 shares = IERC7540(params.token).maxMint(address(params.proxy));
 
@@ -72,7 +76,7 @@ library ERC7540Lib {
 
     function requestRedeem(RequestRedeemParams memory params) external {
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            RateLimitHelpers.makeAssetKey(LIMIT_7540_REQUEST_REDEEM, params.token),
             IERC7540(params.token).convertToAssets(params.shares)
         );
 
@@ -87,7 +91,7 @@ library ERC7540Lib {
     }
 
     function claimRedeem(ClaimParams memory params) external {
-        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token));
+        _rateLimitExists(params.rateLimits, RateLimitHelpers.makeAssetKey(LIMIT_7540_CLAIM_REDEEM, params.token));
 
         uint256 assets = IERC7540(params.token).maxWithdraw(address(params.proxy));
 
