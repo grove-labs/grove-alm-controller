@@ -428,42 +428,38 @@ contract ForeignController is AccessControl {
     function requestDepositERC7540(address token, uint256 amount) external {
         _checkRole(RELAYER);
         ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            token       : token,
-            amount      : amount
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            amount     : amount
         }));
     }
 
     function claimDepositERC7540(address token) external {
         _checkRole(RELAYER);
         ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            token       : token
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
         }));
     }
 
     function requestRedeemERC7540(address token, uint256 shares) external {
         _checkRole(RELAYER);
         ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_REDEEM,
-            token       : token,
-            shares      : shares
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            shares     : shares
         }));
     }
 
     function claimRedeemERC7540(address token) external {
         _checkRole(RELAYER);
         ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_7540_REDEEM,
-            token       : token
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token
         }));
     }
 
