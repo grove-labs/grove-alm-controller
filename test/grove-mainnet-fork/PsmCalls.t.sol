@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
+import { IDaiUsdsLike, IPSMLike as IPSMSwapLike } from "../../src/libraries/PSMLib.sol";
+
 import "./ForkTestBase.t.sol";
 
 interface IPSM is IPSMLike {
@@ -120,6 +122,21 @@ contract MainnetControllerSwapUSDSToUSDCTests is ForkTestBase {
         mainnetController.swapUSDSToUSDC(1);
 
         vm.stopPrank();
+    }
+
+    function test_swapUSDSToUSDC_approvalsCleared() external {
+        vm.prank(relayer);
+        mainnetController.mintUSDS(1e18);
+
+        vm.mockCall(DAI_USDS, abi.encodeWithSelector(IDaiUsdsLike.usdsToDai.selector),   "");
+        vm.mockCall(PSM,      abi.encodeWithSelector(IPSMSwapLike.buyGemNoFee.selector), abi.encode(uint256(1e18)));
+
+        vm.prank(relayer);
+        mainnetController.swapUSDSToUSDC(1e6);
+
+        assertEq(usds.balanceOf(address(almProxy)),           1e18);
+        assertEq(usds.allowance(address(almProxy), DAI_USDS), 0);
+        assertEq(dai.allowance(address(almProxy),  PSM),      0);
     }
 
 }
@@ -476,6 +493,20 @@ contract MainnetControllerSwapUSDCToUSDSTests is ForkTestBase {
         assertEq(usdc.balanceOf(address(almProxy)),   0);
 
         vm.stopPrank();
+    }
+
+    function test_swapUSDCToUSDS_approvalsCleared() external {
+        deal(address(usdc), address(almProxy), 1e6);
+
+        vm.mockCall(PSM,      abi.encodeWithSelector(IPSMSwapLike.sellGemNoFee.selector), abi.encode(uint256(1e18)));
+        vm.mockCall(DAI_USDS, abi.encodeWithSelector(IDaiUsdsLike.daiToUsds.selector),    "");
+
+        vm.prank(relayer);
+        mainnetController.swapUSDCToUSDS(1e6);
+
+        assertEq(usdc.balanceOf(address(almProxy)),           1e6);
+        assertEq(usdc.allowance(address(almProxy), PSM),      0);
+        assertEq(dai.allowance(address(almProxy),  DAI_USDS), 0);
     }
 
     function testFuzz_swapUSDCToUSDS(uint256 swapAmount) external {
