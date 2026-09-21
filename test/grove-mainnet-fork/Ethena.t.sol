@@ -581,7 +581,7 @@ contract MainnetControllerEthenaE2ETests is EthenaTestBase {
 
         burnKey     = mainnetController.LIMIT_USDE_BURN();
         cooldownKey = mainnetController.LIMIT_SUSDE_COOLDOWN();
-        depositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_DEPOSIT(), address(susde));
+        depositKey  = RateLimitHelpers.makeAddressAddressKey(mainnetController.LIMIT_4626_DEPOSIT(), address(usde), address(susde));
         mintKey     = mainnetController.LIMIT_USDE_MINT();
 
         rateLimits.setRateLimitData(burnKey,     5_000_000e18, uint256(1_000_000e18) / 4 hours);
@@ -656,7 +656,7 @@ contract MainnetControllerEthenaE2ETests is EthenaTestBase {
         assertEq(rateLimits.getCurrentRateLimit(depositKey), 5_000_000e18);
 
         vm.prank(relayer);
-        mainnetController.depositERC4626(address(susde), 500_000e18);
+        mainnetController.depositERC4626(address(susde), 500_000e18, 0);
 
         assertEq(rateLimits.getCurrentRateLimit(depositKey), 4_500_000e18);
 
@@ -773,7 +773,7 @@ contract MainnetControllerEthenaE2ETests is EthenaTestBase {
         assertEq(rateLimits.getCurrentRateLimit(depositKey), 5_000_000e18);
 
         vm.prank(relayer);
-        uint256 susdeShares = mainnetController.depositERC4626(address(susde), 500_000e18);
+        uint256 susdeShares = mainnetController.depositERC4626(address(susde), 500_000e18, 0);
 
         assertEq(rateLimits.getCurrentRateLimit(depositKey), 4_500_000e18);
 

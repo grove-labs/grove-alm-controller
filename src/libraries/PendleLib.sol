@@ -77,10 +77,11 @@ library PendleLib {
         require(totalTokenOutAmount >= params.minAmountOut, "PendleLib/min-amount-not-met");
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, address(params.pendleMarket)),
+            RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, pt, address(params.pendleMarket)),
             totalTokenOutAmount
         );
 
+        ERC20Lib.approve(params.proxy, pt, params.pendleRouter, 0);
     }
 
 }

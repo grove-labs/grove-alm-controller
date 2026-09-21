@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity >=0.8.0;
 
-import { IAToken } from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
+import { IAToken }            from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
+import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
@@ -16,28 +17,29 @@ contract AaveV3BaseMarketTestBase is ForkTestBase {
 
     uint256 startingAUSDCBalance;
 
+    bytes32 depositKey;
+    bytes32 withdrawKey;
+
     function setUp() public override {
         super.setUp();
+
+        depositKey = RateLimitHelpers.makeAddressAddressAddressKey(
+            foreignController.LIMIT_AAVE_DEPOSIT(),
+            Base.USDC,
+            POOL,
+            ATOKEN_USDC
+        );
+        withdrawKey = RateLimitHelpers.makeAddressAddressKey(
+            foreignController.LIMIT_AAVE_WITHDRAW(),
+            POOL,
+            ATOKEN_USDC
+        );
 
         vm.startPrank(Base.SPARK_EXECUTOR);
 
         // NOTE: Hit SUPPLY_CAP_EXCEEDED when using 25m
-        rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_DEPOSIT(),
-                ATOKEN_USDC
-            ),
-            1_000_000e6,
-            uint256(1_000_000e6) / 1 days
-        );
-        rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_WITHDRAW(),
-                ATOKEN_USDC
-            ),
-            1_000_000e6,
-            uint256(5_000_000e6) / 1 days
-        );
+        rateLimits.setRateLimitData(depositKey,  1_000_000e6, uint256(1_000_000e6) / 1 days);
+        rateLimits.setRateLimitData(withdrawKey, 1_000_000e6, uint256(5_000_000e6) / 1 days);
 
         foreignController.setMaxSlippage(ATOKEN_USDC, 1e18 - 1e4);  // Rounding slippage
 
@@ -64,9 +66,27 @@ contract AaveV3BaseMarketDepositFailureTests is AaveV3BaseMarketTestBase {
     }
 
     function test_depositAave_zeroMaxAmount() external {
+        vm.prank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(depositKey, 0, 0);
+
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.depositAave(makeAddr("fake-token"), 1e18);
+        foreignController.depositAave(ATOKEN_USDC, 1e18);
+    }
+
+    function test_depositAave_aTokenOnlyKeyNotHonoured() external {
+        vm.startPrank(Base.SPARK_EXECUTOR);
+        rateLimits.setRateLimitData(depositKey, 0, 0);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetKey(foreignController.LIMIT_AAVE_DEPOSIT(), ATOKEN_USDC),
+            1_000_000e6,
+            uint256(1_000_000e6) / 1 days
+        );
+        vm.stopPrank();
+
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.depositAave(ATOKEN_USDC, 1e18);
     }
 
     function test_depositAave_zeroMaxSlippage() external {
@@ -74,7 +94,7 @@ contract AaveV3BaseMarketDepositFailureTests is AaveV3BaseMarketTestBase {
         foreignController.setMaxSlippage(ATOKEN_USDC, 0);
 
         vm.prank(relayer);
-        vm.expectRevert("ForeignController/max-slippage-not-set");
+        vm.expectRevert("AaveLib/max-slippage-not-set");
         foreignController.depositAave(ATOKEN_USDC, 1_000_000e6);
     }
 
@@ -123,6 +143,25 @@ contract AaveV3BaseMarketDepositSuccessTests is AaveV3BaseMarketTestBase {
         assertEq(usdcBase.balanceOf(address(ausdc)),    startingAUSDCBalance + 1_000_000e6);
     }
 
+    function test_depositAave_usdc_clearsApprovalWhenPoolPullsLess() public {
+        deal(Base.USDC, address(almProxy), 1_000_000e6);
+
+        vm.prank(Base.SPARK_EXECUTOR);
+        foreignController.setMaxSlippage(ATOKEN_USDC, 1);
+
+        vm.mockCall(
+            POOL,
+            abi.encodeWithSelector(IAavePool.supply.selector, Base.USDC, 1_000_000e6, address(almProxy), uint16(0)),
+            ""
+        );
+
+        vm.prank(relayer);
+        foreignController.depositAave(ATOKEN_USDC, 1_000_000e6);
+
+        assertEq(usdcBase.balanceOf(address(almProxy)),       1_000_000e6);
+        assertEq(usdcBase.allowance(address(almProxy), POOL), 0);
+    }
+
 }
 
 contract AaveV3BaseMarketWithdrawFailureTests is AaveV3BaseMarketTestBase {
@@ -139,14 +178,7 @@ contract AaveV3BaseMarketWithdrawFailureTests is AaveV3BaseMarketTestBase {
     function test_withdrawAave_zeroMaxAmount() external {
         // Longer setup because rate limit revert is at the end of the function
         vm.startPrank(Base.SPARK_EXECUTOR);
-        rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_AAVE_WITHDRAW(),
-                ATOKEN_USDC
-            ),
-            0,
-            0
-        );
+        rateLimits.setRateLimitData(withdrawKey, 0, 0);
         vm.stopPrank();
 
         deal(Base.USDC, address(almProxy), 1_000_000e6);
@@ -179,10 +211,7 @@ contract AaveV3BaseMarketWithdrawFailureTests is AaveV3BaseMarketTestBase {
 contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
 
     function test_withdrawAave_usdc() public {
-        bytes32 key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_AAVE_WITHDRAW(),
-            ATOKEN_USDC
-        );
+        bytes32 key = withdrawKey;
 
         // NOTE: Using lower amount to not hit rate limit
         deal(Base.USDC, address(almProxy), 500_000e6);
@@ -225,11 +254,30 @@ contract AaveV3BaseMarketWithdrawSuccessTests is AaveV3BaseMarketTestBase {
         assertLe(usdcBase.balanceOf(address(ausdc)), startingAUSDCBalance);
     }
 
-    function test_withdrawAave_usdc_unlimitedRateLimit() public {
-        bytes32 key = RateLimitHelpers.makeAssetKey(
-            foreignController.LIMIT_AAVE_WITHDRAW(),
-            ATOKEN_USDC
+    function test_withdrawAave_usdc_measuresBalanceDeltaNotReturnValue() public {
+        bytes32 key = withdrawKey;
+
+        deal(Base.USDC, address(almProxy), 500_000e6);
+        vm.prank(relayer);
+        foreignController.depositAave(ATOKEN_USDC, 500_000e6);
+
+        assertEq(rateLimits.getCurrentRateLimit(key), 1_000_000e6);
+
+        vm.mockCall(
+            POOL,
+            abi.encodeWithSelector(IAavePool.withdraw.selector, Base.USDC, 400_000e6, address(almProxy)),
+            abi.encode(uint256(400_000e6))
         );
+
+        vm.prank(relayer);
+        assertEq(foreignController.withdrawAave(ATOKEN_USDC, 400_000e6), 0);
+
+        assertEq(usdcBase.balanceOf(address(almProxy)), 0);
+        assertEq(rateLimits.getCurrentRateLimit(key),   1_000_000e6);
+    }
+
+    function test_withdrawAave_usdc_unlimitedRateLimit() public {
+        bytes32 key = withdrawKey;
         vm.prank(Base.SPARK_EXECUTOR);
         rateLimits.setUnlimitedRateLimitData(key);
 
