@@ -6,7 +6,6 @@ import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IALMProxy }   from "../interfaces/IALMProxy.sol";
 import { IRateLimits } from "../interfaces/IRateLimits.sol";
 import { ERC20Lib }    from "../libraries/common/ERC20Lib.sol";
-import { MathLib }     from "../libraries/common/MathLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 interface ICurvePoolLike is IERC20 {
@@ -16,7 +15,7 @@ interface ICurvePoolLike is IERC20 {
         address   receiver
     ) external;
     function balances(uint256 index) external view returns (uint256);
-    function coins(uint256 index) external returns (address);
+    function coins(uint256 index) external view returns (address);
     function exchange(
         int128  inputIndex,
         int128  outputIndex,
@@ -91,9 +90,150 @@ library CurveLib {
             "CurveLib/index-too-high"
         );
 
+        _validateSwapMinAmountOut(params, curvePool.stored_rates());
+
+        address tokenIn  = curvePool.coins(params.inputIndex);
+        address tokenOut = curvePool.coins(params.outputIndex);
+
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, tokenIn, params.pool),
+            params.amountIn
+        );
+
+        ERC20Lib.approve(params.proxy, tokenIn, params.pool, params.amountIn);
+
+        uint256 startingBalance = IERC20(tokenOut).balanceOf(address(params.proxy));
+
+        _callExchange(params, curvePool);
+
+        amountOut = IERC20(tokenOut).balanceOf(address(params.proxy)) - startingBalance;
+
+        ERC20Lib.approve(params.proxy, tokenIn, params.pool, 0);
+
+        require(amountOut >= params.minAmountOut, "CurveLib/min-amount-out-not-met");
+    }
+
+    function addLiquidity(AddLiquidityParams calldata params) external returns (uint256 shares) {
+        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
+
+        ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
+
+        uint256 virtualPrice = curvePool.get_virtual_price();
+
+        require(virtualPrice != 0, "CurveLib/virtual-price-zero");
+
+        address[] memory tokens = _getTokens(curvePool);
+
+        require(params.depositAmounts.length == tokens.length, "CurveLib/invalid-deposit-amounts");
+
         // Normalized to provide 36 decimal precision when multiplied by asset amount
         uint256[] memory rates = curvePool.stored_rates();
 
+        // Aggregate the value of the deposited assets (e.g. USD)
+        uint256 valueDeposited;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            ERC20Lib.approve(params.proxy, tokens[i], params.pool, params.depositAmounts[i]);
+            valueDeposited += params.depositAmounts[i] * rates[i];
+        }
+        valueDeposited /= 1e18;
+
+        // Ensure minimum LP amount expected is greater than max slippage amount.
+        require(
+            params.minLpAmount >= valueDeposited * params.maxSlippage / virtualPrice,
+            "CurveLib/min-amount-not-met"
+        );
+
+        uint256 startingShares = curvePool.balanceOf(address(params.proxy));
+
+        params.proxy.doCall(
+            params.pool,
+            abi.encodeCall(
+                curvePool.add_liquidity,
+                (params.depositAmounts, params.minLpAmount, address(params.proxy))
+            )
+        );
+
+        shares = curvePool.balanceOf(address(params.proxy)) - startingShares;
+
+        require(shares >= params.minLpAmount, "CurveLib/min-shares-not-met");
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            ERC20Lib.approve(params.proxy, tokens[i], params.pool, 0);
+        }
+
+        _decreaseAddLiquidityRateLimits(params, curvePool, tokens, rates, shares);
+    }
+
+    function removeLiquidity(RemoveLiquidityParams calldata params)
+        external
+        returns (uint256[] memory withdrawnTokens)
+    {
+        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
+
+        ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
+
+        address[] memory tokens = _getTokens(curvePool);
+
+        require(params.minWithdrawAmounts.length == tokens.length, "CurveLib/invalid-min-withdraw-amounts");
+
+        // Normalized to provide 36 decimal precision when multiplied by asset amount
+        uint256[] memory rates = curvePool.stored_rates();
+
+        // Aggregate the minimum values of the withdrawn assets (e.g. USD)
+        uint256 valueMinWithdrawn;
+        uint256[] memory startingBalances = new uint256[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            valueMinWithdrawn   += params.minWithdrawAmounts[i] * rates[i];
+            startingBalances[i]  = IERC20(tokens[i]).balanceOf(address(params.proxy));
+        }
+        valueMinWithdrawn /= 1e18;
+
+        // Check that the aggregated minimums are greater than the max slippage amount
+        require(
+            valueMinWithdrawn >= params.lpBurnAmount
+                * curvePool.get_virtual_price()
+                * params.maxSlippage
+                / 1e36,
+            "CurveLib/min-amount-not-met"
+        );
+
+        params.proxy.doCall(
+            params.pool,
+            abi.encodeCall(
+                curvePool.remove_liquidity,
+                (params.lpBurnAmount, params.minWithdrawAmounts, address(params.proxy), false)
+            )
+        );
+
+        withdrawnTokens = new uint256[](tokens.length);
+
+        // Aggregate value withdrawn to reduce the pool-level rate limit
+        uint256 valueWithdrawn;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 withdrawn = IERC20(tokens[i]).balanceOf(address(params.proxy)) - startingBalances[i];
+
+            require(withdrawn >= params.minWithdrawAmounts[i], "CurveLib/min-amount-out-not-met");
+
+            withdrawnTokens[i]  = withdrawn;
+            valueWithdrawn     += withdrawn * rates[i];
+
+            params.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, tokens[i], params.pool),
+                withdrawn
+            );
+        }
+
+        params.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),
+            valueWithdrawn / 1e18
+        );
+    }
+
+    /**********************************************************************************************/
+    /*** Internal functions                                                                     ***/
+    /**********************************************************************************************/
+
+    function _validateSwapMinAmountOut(SwapCurveParams calldata params, uint256[] memory rates) internal pure {
         // Below code is simplified from the following logic.
         // `maxSlippage` was multiplied first to avoid precision loss.
         //   valueIn   = amountIn * rates[inputIndex] / 1e18  // 18 decimal precision, USD
@@ -109,150 +249,63 @@ library CurveLib {
             params.minAmountOut >= minimumMinAmountOut,
             "CurveLib/min-amount-not-met"
         );
+    }
 
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),
-            params.amountIn * rates[params.inputIndex] / 1e18
-        );
-
-        ERC20Lib.approve(params.proxy, curvePool.coins(params.inputIndex), params.pool, params.amountIn);
-
-        amountOut = abi.decode(
-            params.proxy.doCall(
-                params.pool,
-                abi.encodeCall(
-                    curvePool.exchange,
-                    (
-                        int128(int256(params.inputIndex)),   // safe cast because of 8 token max
-                        int128(int256(params.outputIndex)),  // safe cast because of 8 token max
-                        params.amountIn,
-                        params.minAmountOut,
-                        address(params.proxy)
-                    )
+    function _callExchange(SwapCurveParams calldata params, ICurvePoolLike curvePool) internal {
+        params.proxy.doCall(
+            params.pool,
+            abi.encodeCall(
+                curvePool.exchange,
+                (
+                    int128(int256(params.inputIndex)),   // safe cast because of 8 token max
+                    int128(int256(params.outputIndex)),  // safe cast because of 8 token max
+                    params.amountIn,
+                    params.minAmountOut,
+                    address(params.proxy)
                 )
-            ),
-            (uint256)
+            )
         );
     }
 
-    function addLiquidity(AddLiquidityParams calldata params) external returns (uint256 shares) {
-        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
+    function _getTokens(ICurvePoolLike curvePool) internal view returns (address[] memory tokens) {
+        tokens = new address[](curvePool.N_COINS());
 
-        ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
-
-        require(
-            params.depositAmounts.length == curvePool.N_COINS(),
-            "CurveLib/invalid-deposit-amounts"
-        );
-
-        // Normalized to provide 36 decimal precision when multiplied by asset amount
-        uint256[] memory rates = curvePool.stored_rates();
-
-        // Aggregate the value of the deposited assets (e.g. USD)
-        uint256 valueDeposited;
-        for (uint256 i = 0; i < params.depositAmounts.length; i++) {
-            ERC20Lib.approve(params.proxy, curvePool.coins(i), params.pool, params.depositAmounts[i]);
-            valueDeposited += params.depositAmounts[i] * rates[i];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokens[i] = curvePool.coins(i);
         }
-        valueDeposited /= 1e18;
+    }
 
-        // Ensure minimum LP amount expected is greater than max slippage amount.
-        require(
-            params.minLpAmount >= valueDeposited
-                * params.maxSlippage
-                / curvePool.get_virtual_price(),
-            "CurveLib/min-amount-not-met"
-        );
+    function _decreaseAddLiquidityRateLimits(
+        AddLiquidityParams calldata params,
+        ICurvePoolLike              curvePool,
+        address[] memory            tokens,
+        uint256[] memory            rates,
+        uint256                     shares
+    )
+        internal
+    {
+        uint256 totalSupply = curvePool.totalSupply();
 
-        // Reduce the rate limit by the aggregated underlying asset value of the deposit (e.g. USD)
+        uint256 valueDeposited;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 deposited = curvePool.balances(i) * shares / totalSupply;
+            uint256 input     = params.depositAmounts[i];
+
+            params.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(params.swapRateLimitId, tokens[i], params.pool),
+                input > deposited ? input - deposited : 0
+            );
+            params.rateLimits.triggerRateLimitDecrease(
+                RateLimitHelpers.makeAssetDestinationKey(params.addLiquidityRateLimitId, tokens[i], params.pool),
+                deposited
+            );
+
+            valueDeposited += deposited * rates[i];
+        }
+
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetKey(params.addLiquidityRateLimitId, params.pool),
-            valueDeposited
-        );
-
-        shares = abi.decode(
-            params.proxy.doCall(
-                params.pool,
-                abi.encodeCall(
-                    curvePool.add_liquidity,
-                    (params.depositAmounts, params.minLpAmount, address(params.proxy))
-                )
-            ),
-            (uint256)
-        );
-
-        // Compute the swap value by taking the difference of the current underlying
-        // asset values from minted shares vs the deposited funds, converting this into an
-        // aggregated swap "amount in" by dividing the total value moved by two and decrease the
-        // swap rate limit by this amount.
-        uint256 totalSwapped;
-        for (uint256 i; i < params.depositAmounts.length; i++) {
-            totalSwapped += MathLib._absSubtraction(
-                curvePool.balances(i) * rates[i] * shares / curvePool.totalSupply(),
-                params.depositAmounts[i] * rates[i]
-            );
-        }
-        uint256 averageSwap = totalSwapped / 2 / 1e18;
-
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.swapRateLimitId, params.pool),
-            averageSwap
-        );
-    }
-
-    function removeLiquidity(RemoveLiquidityParams calldata params)
-        external
-        returns (uint256[] memory withdrawnTokens)
-    {
-        require(params.maxSlippage != 0, "CurveLib/max-slippage-not-set");
-
-        ICurvePoolLike curvePool = ICurvePoolLike(params.pool);
-
-        require(
-            params.minWithdrawAmounts.length == curvePool.N_COINS(),
-            "CurveLib/invalid-min-withdraw-amounts"
-        );
-
-        // Normalized to provide 36 decimal precision when multiplied by asset amount
-        uint256[] memory rates = curvePool.stored_rates();
-
-        // Aggregate the minimum values of the withdrawn assets (e.g. USD)
-        uint256 valueMinWithdrawn;
-        for (uint256 i = 0; i < params.minWithdrawAmounts.length; i++) {
-            valueMinWithdrawn += params.minWithdrawAmounts[i] * rates[i];
-        }
-        valueMinWithdrawn /= 1e18;
-
-        // Check that the aggregated minimums are greater than the max slippage amount
-        require(
-            valueMinWithdrawn >= params.lpBurnAmount
-                * curvePool.get_virtual_price()
-                * params.maxSlippage
-                / 1e36,
-            "CurveLib/min-amount-not-met"
-        );
-
-        withdrawnTokens = abi.decode(
-            params.proxy.doCall(
-                params.pool,
-                abi.encodeCall(
-                    curvePool.remove_liquidity,
-                    (params.lpBurnAmount, params.minWithdrawAmounts, address(params.proxy), false)
-                )
-            ),
-            (uint256[])
-        );
-
-        // Aggregate value withdrawn to reduce the rate limit
-        uint256 valueWithdrawn;
-        for (uint256 i = 0; i < withdrawnTokens.length; i++) {
-            valueWithdrawn += withdrawnTokens[i] * rates[i];
-        }
-        valueWithdrawn /= 1e18;
-
-        params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),
-            valueWithdrawn
+            valueDeposited / 1e18
         );
     }
 

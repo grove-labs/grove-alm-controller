@@ -34,7 +34,7 @@ contract ForeignControllerPSMSuccessTestBase is ForkTestBase {
         assertEq(rateLimits.getCurrentRateLimit(assetKey), currentRateLimit);
 
         // Should always be 0 before and after calls
-        assertEq(usdsBase.allowance(address(almProxy), address(psmBase)), 0);
+        assertEq(token.allowance(address(almProxy), address(psmBase)), 0);
     }
 
 }
@@ -90,6 +90,22 @@ contract ForeignControllerDepositPSMFailureTests is ForkTestBase {
 }
 
 contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase {
+
+    function test_depositPSM_clearsApprovalWhenPsmPullsLess() external {
+        deal(address(usdsBase), address(almProxy), 100e18);
+
+        vm.mockCall(
+            address(psmBase),
+            abi.encodeCall(IPSM3.deposit, (address(usdsBase), address(almProxy), 100e18)),
+            abi.encode(uint256(100e18))
+        );
+
+        vm.prank(relayer);
+        foreignController.depositPSM(address(usdsBase), 100e18);
+
+        assertEq(usdsBase.balanceOf(address(almProxy)),                    100e18);
+        assertEq(usdsBase.allowance(address(almProxy), address(psmBase)), 0);
+    }
 
     function test_depositPSM_depositUsds() external {
         bytes32 key = foreignController.LIMIT_PSM_DEPOSIT();
@@ -299,6 +315,24 @@ contract ForeignControllerWithdrawPSMFailureTests is ForkTestBase {
 }
 
 contract ForeignControllerWithdrawPSMTests is ForeignControllerPSMSuccessTestBase {
+
+    function test_withdrawPSM_chargesReceivedNotReported() external {
+        bytes32 key = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_PSM_WITHDRAW(), address(usdsBase));
+
+        uint256 limitBefore = rateLimits.getCurrentRateLimit(key);
+
+        vm.mockCall(
+            address(psmBase),
+            abi.encodeCall(IPSM3.withdraw, (address(usdsBase), address(almProxy), 100e18)),
+            abi.encode(uint256(100e18))
+        );
+
+        vm.prank(relayer);
+        uint256 assetsWithdrawn = foreignController.withdrawPSM(address(usdsBase), 100e18);
+
+        assertEq(assetsWithdrawn,                      0);
+        assertEq(rateLimits.getCurrentRateLimit(key),  limitBefore);
+    }
 
     function test_withdrawPSM_withdrawUsds() external {
         bytes32 key = foreignController.LIMIT_PSM_WITHDRAW();

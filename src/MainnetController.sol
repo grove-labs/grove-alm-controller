@@ -73,8 +73,6 @@ contract MainnetController is AccessControl {
 
     bytes32 public LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
     bytes32 public LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_7540_DEPOSIT         = keccak256("LIMIT_7540_DEPOSIT");
-    bytes32 public LIMIT_7540_REDEEM          = keccak256("LIMIT_7540_REDEEM");
     bytes32 public LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
     bytes32 public LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
     bytes32 public LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
@@ -240,6 +238,7 @@ contract MainnetController is AccessControl {
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
+        require(recipient != bytes32(0), "MC/zero-recipient");
         centrifugeRecipients[centrifugeId] = recipient;
         emit CentrifugeRecipientSet(centrifugeId, recipient);
     }
@@ -318,7 +317,10 @@ contract MainnetController is AccessControl {
     /*** Relayer ERC4626 functions                                                              ***/
     /**********************************************************************************************/
 
-    function depositERC4626(address token, uint256 amount) external returns (uint256 shares) {
+    function depositERC4626(address token, uint256 amount, uint256 minSharesOut)
+        external
+        returns (uint256 shares)
+    {
         _checkRole(RELAYER);
         return ERC4626Lib.deposit(ERC4626Lib.DepositParams({
             proxy           : proxy,
@@ -326,29 +328,38 @@ contract MainnetController is AccessControl {
             rateLimitId     : LIMIT_4626_DEPOSIT,
             token           : token,
             amount          : amount,
+            minSharesOut    : minSharesOut,
             maxExchangeRate : maxExchangeRates[token]
         }));
     }
 
-    function withdrawERC4626(address token, uint256 amount) external returns (uint256 shares) {
+    function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn)
+        external
+        returns (uint256 shares)
+    {
         _checkRole(RELAYER);
         return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
             rateLimitId : LIMIT_4626_WITHDRAW,
             token       : token,
-            amount      : amount
+            amount      : amount,
+            maxSharesIn : maxSharesIn
         }));
     }
 
-    function redeemERC4626(address token, uint256 shares) external returns (uint256 assets) {
+    function redeemERC4626(address token, uint256 shares, uint256 minAssetsOut)
+        external
+        returns (uint256 assets)
+    {
         _checkRole(RELAYER);
         return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            rateLimitId : LIMIT_4626_WITHDRAW,
-            token       : token,
-            shares      : shares
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            rateLimitId  : LIMIT_4626_WITHDRAW,
+            token        : token,
+            shares       : shares,
+            minAssetsOut : minAssetsOut
         }));
     }
 
@@ -402,22 +413,22 @@ contract MainnetController is AccessControl {
 
     function cancelCentrifugeDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.cancelCentrifugeDepositRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelDepositRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelDepositRequest(centrifugeDepositRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelDepositRequest(_centrifugeRequestParams(token));
     }
 
     function cancelCentrifugeRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.cancelCentrifugeRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.cancelCentrifugeRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function claimCentrifugeCancelRedeemRequest(address token) external {
         _checkRole(RELAYER);
-        CentrifugeLib.claimCentrifugeCancelRedeemRequest(centrifugeRedeemRequestParams(token));
+        CentrifugeLib.claimCentrifugeCancelRedeemRequest(_centrifugeRequestParams(token));
     }
 
     function transferSharesCentrifuge(
@@ -752,6 +763,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.usdsToDai, (address(proxy), usdsAmount))
         );
+
+        ERC20Lib.approve(proxy, address(usds), address(daiUsds), 0);
     }
 
     function swapDAIToUSDS(uint256 daiAmount)
@@ -766,6 +779,8 @@ contract MainnetController is AccessControl {
             address(daiUsds),
             abi.encodeCall(daiUsds.daiToUsds, (address(proxy), daiAmount))
         );
+
+        ERC20Lib.approve(proxy, address(dai), address(daiUsds), 0);
     }
 
     /**********************************************************************************************/
@@ -845,12 +860,12 @@ contract MainnetController is AccessControl {
     /*** Relayer Merkl functions                                                                ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external {
         _checkRole(RELAYER);
-
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
-            distributor : Ethereum.MERKL_DISTRIBUTOR,
+            rateLimits  : rateLimits,
+            distributor : distributor,
             operator    : operator
         }));
     }
@@ -895,27 +910,14 @@ contract MainnetController is AccessControl {
     /*** Centrifuge Library helper functions                                                    ***/
     /**********************************************************************************************/
 
-    function centrifugeDepositRequestParams(
+    function _centrifugeRequestParams(
         address token
     ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
         return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_DEPOSIT,
-            requestId   : CENTRIFUGE_REQUEST_ID
-        });
-    }
-
-    function centrifugeRedeemRequestParams(
-        address token
-    ) internal view returns(CentrifugeLib.CentrifugeRequestParams memory) {
-        return CentrifugeLib.CentrifugeRequestParams({
-            proxy       : proxy,
-            rateLimits  : rateLimits,
-            token       : token,
-            rateLimitId : LIMIT_7540_REDEEM,
-            requestId   : CENTRIFUGE_REQUEST_ID
+            proxy      : proxy,
+            rateLimits : rateLimits,
+            token      : token,
+            requestId  : CENTRIFUGE_REQUEST_ID
         });
     }
 

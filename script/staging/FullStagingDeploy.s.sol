@@ -19,7 +19,8 @@ import { AllocatorVault }  from "dss-allocator/src/AllocatorVault.sol";
 
 import { ScriptTools } from "dss-test/ScriptTools.sol";
 
-import { IERC20 }  from "forge-std/interfaces/IERC20.sol";
+import { IERC20 }   from "forge-std/interfaces/IERC20.sol";
+import { IERC4626 } from "forge-std/interfaces/IERC4626.sol";
 import { Script }  from "forge-std/Script.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 
@@ -40,6 +41,8 @@ import { ForeignControllerInit } from "../../deploy/ForeignControllerInit.sol";
 import { MainnetControllerInit } from "../../deploy/MainnetControllerInit.sol";
 
 import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
+
+import { IATokenWithPool } from "../../src/libraries/AaveLib.sol";
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
@@ -414,7 +417,7 @@ contract FullStagingDeploy is Script {
 
         vm.startBroadcast();
 
-        bytes32 susdeDepositKey = RateLimitHelpers.makeAssetKey(controller.LIMIT_4626_DEPOSIT(), address(controller.susde()));
+        bytes32 susdeDepositKey = RateLimitHelpers.makeAddressAddressKey(controller.LIMIT_4626_DEPOSIT(), address(controller.usde()), address(controller.susde()));
 
         bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
         bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
@@ -507,8 +510,19 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  aToken), maxAmount,         slope);
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, aToken), type(uint256).max, 0);
+        address underlying = IATokenWithPool(aToken).UNDERLYING_ASSET_ADDRESS();
+        address pool       = IATokenWithPool(aToken).POOL();
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressAddressKey(depositKey, underlying, pool, aToken),
+            maxAmount,
+            slope
+        );
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressKey(withdrawKey, pool, aToken),
+            type(uint256).max,
+            0
+        );
 
         vm.stopBroadcast();
     }
@@ -531,8 +545,8 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(depositKey,  token), maxAmount,         slope);
-        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token), type(uint256).max, 0);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token), maxAmount,         slope);
+        rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token),                                  type(uint256).max, 0);
 
         vm.stopBroadcast();
     }
