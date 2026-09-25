@@ -7,8 +7,8 @@ import { IALMProxy }                from "../interfaces/IALMProxy.sol";
 import { IRateLimits }              from "../interfaces/IRateLimits.sol";
 import { IMidnight, Market, Offer } from "../interfaces/MidnightInterfaces.sol";
 
-import { ERC20Lib }        from "./common/ERC20Lib.sol";
-import { MidnightIdLib }   from "./midnight/MidnightIdLib.sol";
+import { ERC20Lib }                  from "./common/ERC20Lib.sol";
+import { MidnightIdLib }             from "./midnight/MidnightIdLib.sol";
 import { MidnightTickLib, MAX_TICK } from "./midnight/MidnightTickLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
@@ -58,7 +58,7 @@ library MidnightLib {
         uint256      assetsBound;  // maxAssetsIn when buying, minAssetsOut when selling
     }
 
-    struct TakeBounds {
+    struct TakeContext {
         bool    selling;
         uint256 tickPriceBound;
         uint256 yieldPriceBound;
@@ -151,7 +151,7 @@ library MidnightLib {
 
         uint256 timeToMaturity = _timeToMaturity(market.maturity);
 
-        TakeBounds memory bounds = TakeBounds({
+        TakeContext memory ctx = TakeContext({
             selling         : false,
             tickPriceBound  : MidnightTickLib.tickToPrice(params.config.maxBuyTick),
             yieldPriceBound : maxBuyPrice(params.config.minBuyYield, timeToMaturity, continuousFee),
@@ -164,7 +164,7 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, params.assetsBound);
 
-        uint256 totalUnits = _takeBatch(params, bounds);
+        uint256 totalUnits = _takeBatch(params, ctx);
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
@@ -194,24 +194,24 @@ library MidnightLib {
 
         _requireMarketId(market, params.marketId);
 
+        // No ceiling on the continuous fee or the loss factor here: a market that has turned
+        // against the position is exactly the one that has to stay exitable.
+        uint256 continuousFee = IMidnight(market.midnight).continuousFee(params.marketId);
+
         uint256 timeToMaturity = _timeToMaturity(market.maturity);
 
         uint256 creditBefore  = _credit(market, params.marketId, address(params.proxy));
         uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
 
-        TakeBounds memory bounds = TakeBounds({
+        TakeContext memory ctx = TakeContext({
             selling         : true,
             tickPriceBound  : MidnightTickLib.tickToPrice(params.config.minSellTick),
-            yieldPriceBound : minSellPrice(
-                params.config.maxSellYield,
-                timeToMaturity,
-                IMidnight(market.midnight).continuousFee(params.marketId)
-            ),
+            yieldPriceBound : minSellPrice(params.config.maxSellYield, timeToMaturity, continuousFee),
             settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity),
             creditCap       : creditBefore
         });
 
-        uint256 totalUnits = _takeBatch(params, bounds);
+        uint256 totalUnits = _takeBatch(params, ctx);
 
         assetsReceived = IERC20(market.loanToken).balanceOf(address(params.proxy)) - balanceBefore;
 
@@ -276,44 +276,47 @@ library MidnightLib {
     /*** Internal functions                                                                     ***/
     /**********************************************************************************************/
 
-    function _takeBatch(TakeParams memory params, TakeBounds memory bounds)
+    function _takeBatch(TakeParams memory params, TakeContext memory ctx)
         internal returns (uint256 totalUnits)
     {
+        address receiverIfTakerIsSeller = ctx.selling ? address(params.proxy) : address(0);
+
         for (uint256 i = 0; i < params.fills.length; i++) {
-            Offer memory offer = params.fills[i].offer;
+            Fill  memory fill  = params.fills[i];
+            Offer memory offer = fill.offer;
 
             _requireMarketId(offer.market, params.marketId);
 
-            require(offer.buy == bounds.selling, "MidnightLib/invalid-offer-direction");
-            require(params.fills[i].units != 0,  "MidnightLib/zero-units");
+            require(offer.buy == ctx.selling, "MidnightLib/invalid-offer-direction");
+            require(fill.units != 0,          "MidnightLib/zero-units");
 
             uint256 price = MidnightTickLib.tickToPrice(offer.tick);
-            uint256 units = params.fills[i].units;
+            uint256 units = fill.units;
 
-            if (bounds.selling) {
+            if (ctx.selling) {
                 // The fee is taken out of the proceeds, so both floors bind on the gross price.
                 require(
-                    price >= bounds.tickPriceBound + bounds.settlementFee,
+                    price >= ctx.tickPriceBound + ctx.settlementFee,
                     "MidnightLib/sell-price-too-low"
                 );
                 require(
-                    price >= bounds.yieldPriceBound + bounds.settlementFee,
+                    price >= ctx.yieldPriceBound + ctx.settlementFee,
                     "MidnightLib/sell-yield-too-high"
                 );
 
                 // Credit can shrink from fee accrual and slashing between quote and take.
-                if (units > bounds.creditCap) units = bounds.creditCap;
-                if (units == 0)               break;
+                if (units > ctx.creditCap) units = ctx.creditCap;
+                if (units == 0)            break;
 
-                bounds.creditCap -= units;
+                ctx.creditCap -= units;
             } else {
                 // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
                 require(
-                    price + bounds.settlementFee <= bounds.tickPriceBound,
+                    price + ctx.settlementFee <= ctx.tickPriceBound,
                     "MidnightLib/buy-price-too-high"
                 );
                 require(
-                    price + bounds.settlementFee <= bounds.yieldPriceBound,
+                    price + ctx.settlementFee <= ctx.yieldPriceBound,
                     "MidnightLib/buy-yield-too-low"
                 );
 
@@ -332,10 +335,10 @@ library MidnightLib {
                     IMidnight.take,
                     (
                         offer,
-                        params.fills[i].ratifierData,
+                        fill.ratifierData,
                         units,
                         address(params.proxy),
-                        bounds.selling ? address(params.proxy) : address(0),
+                        receiverIfTakerIsSeller,
                         address(0),
                         new bytes(0)
                     )

@@ -3,8 +3,7 @@ pragma solidity ^0.8.21;
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
-import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
