@@ -749,6 +749,25 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         foreignController.sellMidnight(MidnightIdLib.toId(otherMarket), _batch(offer, 1e18), 1);
     }
 
+    function test_sellMidnight_invalidMidnight() public {
+        Market memory otherMarket = market;
+        otherMarket.midnight = makeAddr("otherMidnight");
+
+        bytes32 otherId = MidnightIdLib.toId(otherMarket);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMidnightMarketConfig(
+            otherId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+        );
+
+        Offer memory offer = _offer(true, TICK_99, 1e18);
+        offer.market = otherMarket;
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        foreignController.sellMidnight(otherId, _batch(offer, 1e18), 1);
+    }
+
     function test_sellMidnight_invalidOfferDirection() public {
         vm.expectRevert("MidnightLib/invalid-offer-direction");
         _sell(_offer(false, TICK_99, 1e18), 1e18, 1);
