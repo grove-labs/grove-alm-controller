@@ -3,8 +3,7 @@ pragma solidity ^0.8.21;
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
-import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
@@ -22,6 +21,7 @@ import { ERC4626Lib }    from "./libraries/ERC4626Lib.sol";
 import { ERC7540Lib }    from "./libraries/ERC7540Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
+import { MidnightLib }   from "./libraries/MidnightLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
 import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
@@ -51,6 +51,16 @@ contract ForeignController is AccessControl {
     event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
     event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+    event MidnightMarketConfigSet(
+        bytes32 indexed marketId,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    );
+    event MidnightSet(address indexed midnight);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -78,6 +88,9 @@ contract ForeignController is AccessControl {
     bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
+    bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
+    bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
+    bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -99,12 +112,15 @@ contract ForeignController is AccessControl {
     IRateLimits public rateLimits;
     IERC20      public usdc;
     address     public pendleRouter;
+    address     public midnight;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
 
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
+
+    mapping(bytes32 marketId => MidnightLib.MarketConfig config) public midnightMarketConfigs;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -251,6 +267,51 @@ contract ForeignController is AccessControl {
         require(twapSecondsAgo < uint32(type(int32).max), "FC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
+    }
+
+    function setMidnight(address midnight_)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        midnight = midnight_;
+        emit MidnightSet(midnight_);
+    }
+
+    function setMidnightMarketConfig(
+        bytes32 marketId,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
+        external
+    {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        MidnightLib.MarketConfig memory config = MidnightLib.MarketConfig({
+            maxBuyTick       : maxBuyTick,
+            minSellTick      : minSellTick,
+            minBuyYield      : minBuyYield,
+            maxSellYield     : maxSellYield,
+            maxContinuousFee : maxContinuousFee,
+            maxLossFactor    : maxLossFactor
+        });
+
+        MidnightLib.validateMarketConfig(config);
+
+        midnightMarketConfigs[marketId] = config;
+
+        emit MidnightMarketConfigSet(
+            marketId,
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor
+        );
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -679,6 +740,54 @@ contract ForeignController is AccessControl {
     }
 
     /**********************************************************************************************/
+    /*** Relayer Midnight functions                                                             ***/
+    /**********************************************************************************************/
+
+    // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
+
+    function buyMidnight(
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   maxAssetsIn
+    )
+        external returns (uint256 assetsSpent)
+    {
+        _checkRole(RELAYER);
+
+        assetsSpent = MidnightLib.buy(_midnightTakeParams(marketId, fills, maxAssetsIn));
+    }
+
+    function sellMidnight(
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   minAssetsOut
+    )
+        external returns (uint256 assetsReceived)
+    {
+        _checkRole(RELAYER);
+
+        assetsReceived = MidnightLib.sell(_midnightTakeParams(marketId, fills, minAssetsOut));
+    }
+
+    function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
+        external returns (uint256 assetsWithdrawn)
+    {
+        _checkRole(RELAYER);
+
+        assetsWithdrawn = MidnightLib.redeem(MidnightLib.RedeemParams({
+            proxy             : proxy,
+            rateLimits        : rateLimits,
+            midnight          : midnight,
+            buyRateLimitId    : LIMIT_MIDNIGHT_BUY,
+            redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
+            marketId          : marketId,
+            config            : midnightMarketConfigs[marketId],
+            units             : units,
+            minAssetsOut      : minAssetsOut
+        }));
+    }
+
+    /**********************************************************************************************/
     /*** Relayer Pendle functions                                                               ***/
     /**********************************************************************************************/
 
@@ -806,6 +915,26 @@ contract ForeignController is AccessControl {
 
     function _rateLimited(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitDecrease(key, amount);
+    }
+
+    function _midnightTakeParams(
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   assetsBound
+    )
+        internal view returns (MidnightLib.TakeParams memory)
+    {
+        return MidnightLib.TakeParams({
+            proxy           : proxy,
+            rateLimits      : rateLimits,
+            midnight        : midnight,
+            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
+            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
+            marketId        : marketId,
+            config          : midnightMarketConfigs[marketId],
+            fills           : fills,
+            assetsBound     : assetsBound
+        });
     }
 
 }
