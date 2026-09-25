@@ -747,6 +747,25 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         foreignController.sellMidnight(MidnightIdLib.toId(otherMarket), _batch(offer, 1e18), 1);
     }
 
+    function test_sellMidnight_invalidMidnight() public {
+        Market memory otherMarket = market;
+        otherMarket.midnight = makeAddr("otherMidnight");
+
+        bytes32 otherId = MidnightIdLib.toId(otherMarket);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMidnightMarketConfig(
+            otherId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+        );
+
+        Offer memory offer = _offer(true, TICK_99, 1e18);
+        offer.market = otherMarket;
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        foreignController.sellMidnight(otherId, _batch(offer, 1e18), 1);
+    }
+
     function test_sellMidnight_invalidOfferDirection() public {
         vm.expectRevert("MidnightLib/invalid-offer-direction");
         _sell(_offer(false, TICK_99, 1e18), 1e18, 1);
@@ -1606,22 +1625,20 @@ contract ForeignControllerMidnightRepointTests is MidnightTestBase {
         foreignController.setMidnight(makeAddr("midnight2"));
     }
 
-    function test_midnightRepoint_entriesClosedSellsOpen() public {
+    function test_midnightRepoint_allLegsClosed() public {
         vm.expectRevert("MidnightLib/invalid-midnight");
         _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
 
-        uint256 sold     = SEEDED_UNITS / 2;
-        uint256 expected = _sellerAssets(sold, TICK_99);
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        _sell(_offer(true, TICK_99, uint128(SEEDED_UNITS / 2)), SEEDED_UNITS / 2, 1);
 
-        assertEq(_sell(_offer(true, TICK_99, uint128(sold)), sold, expected), expected);
-
-        _repay(SEEDED_UNITS - sold);
+        _repay(SEEDED_UNITS);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert();
-        foreignController.redeemMidnight(marketId, SEEDED_UNITS - sold, 1);
+        foreignController.redeemMidnight(marketId, SEEDED_UNITS, 1);
 
-        assertEq(_credit(), SEEDED_UNITS - sold);
+        assertEq(_credit(), SEEDED_UNITS);
     }
 
     function test_midnightRepoint_oldConfigStaysEditable() public {

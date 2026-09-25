@@ -192,6 +192,8 @@ library MidnightLib {
 
         Market memory market = params.fills[0].offer.market;
 
+        require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
+
         _requireMarketId(market, params.marketId);
 
         // No ceiling on the continuous fee or the loss factor here: a market that has turned
