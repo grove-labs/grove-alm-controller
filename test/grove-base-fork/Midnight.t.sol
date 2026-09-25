@@ -178,15 +178,7 @@ contract MidnightTestBase is ForkTestBase {
         foreignController.setMidnight(MIDNIGHT);
 
         foreignController.setMidnightMarketConfig(
-            marketId,
-            MidnightLib.MarketConfig({
-                maxBuyTick       : TICK_99,
-                minSellTick      : TICK_98,
-                minBuyYield      : MIN_BUY_YIELD,
-                maxSellYield     : MAX_SELL_YIELD,
-                maxContinuousFee : MAX_CONTINUOUS_FEE_CBP,
-                maxLossFactor    : 0
-            })
+            marketId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );
 
         vm.stopPrank();
@@ -320,14 +312,12 @@ contract MidnightTestBase is ForkTestBase {
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
             marketId,
-            MidnightLib.MarketConfig({
-                maxBuyTick       : maxBuyTick,
-                minSellTick      : minSellTick,
-                minBuyYield      : minBuyYield,
-                maxSellYield     : maxSellYield,
-                maxContinuousFee : maxContinuousFee,
-                maxLossFactor    : maxLossFactor
-            })
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor
         );
     }
 
@@ -430,8 +420,7 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
 
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
-            otherId,
-            MidnightLib.MarketConfig(TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0)
+            otherId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );
 
         Offer memory offer = _offer(false, TICK_98, 1e18);
@@ -572,8 +561,7 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
 
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
-            untouchedId,
-            MidnightLib.MarketConfig(TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0)
+            untouchedId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );
 
         Offer memory offer = _offer(false, TICK_98, 1e18);
@@ -891,6 +879,61 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(midnight.debt(marketId, address(almProxy)), 0);
     }
 
+    // The rails guard what is taken, so an offer credit can no longer reach must not gate the
+    // batch even when it is priced outside them.
+    function test_sellMidnight_unreachableOfferOutsideRails() public {
+        uint256 expected = _sellerAssets(SEEDED_UNITS, TICK_99);
+
+        MidnightLib.Fill[] memory fills = _batch(
+            _offer(true, TICK_99, uint128(SEEDED_UNITS), "group-0", address(ratifier)), SEEDED_UNITS,
+            _offer(true, TICK_98 - TICK_SPACING, uint128(SEEDED_UNITS), "group-1", address(ratifier)), SEEDED_UNITS
+        );
+
+        vm.prank(ALM_RELAYER);
+        uint256 assetsReceived = foreignController.sellMidnight(marketId, fills, expected);
+
+        assertEq(assetsReceived,                     expected);
+        assertEq(_credit(),                          0);
+        assertEq(harness.consumed(maker, "group-0"), SEEDED_UNITS);
+        assertEq(harness.consumed(maker, "group-1"), 0);
+    }
+
+    function test_sellMidnight_creditDecaysWithContinuousFee() public {
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
+        // Bought with the fee live, so this tranche carries a pending fee the seeded one does not.
+        _seedCredit(SEEDED_UNITS);
+
+        uint256 held = 2 * SEEDED_UNITS;
+
+        assertEq(_credit(), held);
+
+        vm.warp(block.timestamp + _timeToMaturity() / 2);
+
+        assertLt(_credit(), held);
+
+        assertLt(_sell(_offer(true, MAX_TICK, uint128(held)), held, 1), held);
+
+        assertEq(_credit(),                                  0);
+        assertEq(midnight.debt(marketId, address(almProxy)), 0);
+    }
+
+    // The clamp bounds our credit, not the maker's asset budget, so an ask that overruns an
+    // assets-capped offer is rejected by Midnight rather than trimmed to fit.
+    function test_sellMidnight_assetsBasedOfferNotTrimmed() public {
+        uint256 fullAssets = _sellerAssets(SEEDED_UNITS, TICK_99);
+
+        Offer memory offer = _offer(true, TICK_99, uint128(SEEDED_UNITS));
+
+        offer.maxUnits  = 0;
+        offer.maxAssets = uint128(fullAssets / 2);
+
+        vm.expectRevert(abi.encodeWithSignature("ConsumedAssets()"));
+        _sell(offer, SEEDED_UNITS, 1);
+
+        assertEq(_sell(offer, SEEDED_UNITS / 2, 1), fullAssets / 2);
+    }
+
     function test_sellMidnight_batch() public {
         uint256 units0 = 600_000e18;
         uint256 units1 = 400_000e18;
@@ -1110,8 +1153,7 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
 
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
-            unknownId,
-            MidnightLib.MarketConfig(TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0)
+            unknownId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );
 
         vm.prank(ALM_RELAYER);
@@ -1234,6 +1276,24 @@ contract ForeignControllerMidnightMaturityTests is MidnightTestBase {
     function test_buyMidnight_postMaturity() public {
         vm.expectRevert(abi.encodeWithSignature("CannotIncreaseDebtPostMaturity()"));
         _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
+    }
+
+    // Upstream blocks the seller's debt increasing rather than maturity itself, so a maker holding
+    // credit can still be bought from. Twin of the test above.
+    function test_buyMidnight_postMaturityMakerHoldsCredit() public {
+        // Back to the start of the term, where a near-par sale still clears the yield rail.
+        vm.warp(market.maturity - MATURITY_PERIOD);
+
+        _repay(SEEDED_UNITS);
+        _sell(_offer(true, TICK_99, uint128(SEEDED_UNITS)), SEEDED_UNITS, 1);
+
+        vm.warp(market.maturity + 1);
+
+        uint256 creditBefore = _credit();
+
+        _buy(_offer(false, TICK_98, uint128(SEEDED_UNITS)), SEEDED_UNITS, type(uint256).max);
+
+        assertEq(_credit(), creditBefore + SEEDED_UNITS);
     }
 
     // With no term left, any discount is unbounded yield against a redemption that pays par, so
@@ -1567,8 +1627,7 @@ contract ForeignControllerMidnightRepointTests is MidnightTestBase {
     function test_midnightRepoint_oldConfigStaysEditable() public {
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
-            marketId,
-            MidnightLib.MarketConfig(0, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0)
+            marketId, 0, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );
 
         ( uint16 maxBuyTick, uint16 minSellTick, , , , ) = foreignController.midnightMarketConfigs(marketId);

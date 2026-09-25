@@ -278,22 +278,40 @@ contract ForeignController is AccessControl {
         emit MidnightSet(midnight_);
     }
 
-    function setMidnightMarketConfig(bytes32 marketId, MidnightLib.MarketConfig memory config)
+    function setMidnightMarketConfig(
+        bytes32 marketId,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
         external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
+
+        MidnightLib.MarketConfig memory config = MidnightLib.MarketConfig({
+            maxBuyTick       : maxBuyTick,
+            minSellTick      : minSellTick,
+            minBuyYield      : minBuyYield,
+            maxSellYield     : maxSellYield,
+            maxContinuousFee : maxContinuousFee,
+            maxLossFactor    : maxLossFactor
+        });
+
         MidnightLib.validateMarketConfig(config);
 
         midnightMarketConfigs[marketId] = config;
 
         emit MidnightMarketConfigSet(
             marketId,
-            config.maxBuyTick,
-            config.minSellTick,
-            config.minBuyYield,
-            config.maxSellYield,
-            config.maxContinuousFee,
-            config.maxLossFactor
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor
         );
     }
 

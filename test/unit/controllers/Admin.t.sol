@@ -1132,6 +1132,18 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
 
     bytes32 marketId = keccak256("market");
 
+    function _setConfig(bytes32 marketId_, MidnightLib.MarketConfig memory config) internal {
+        foreignController.setMidnightMarketConfig(
+            marketId_,
+            config.maxBuyTick,
+            config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
+            config.maxContinuousFee,
+            config.maxLossFactor
+        );
+    }
+
     function _config(uint16 maxBuyTick, uint16 minSellTick, uint16 maxContinuousFee)
         internal pure returns (MidnightLib.MarketConfig memory)
     {
@@ -1177,7 +1189,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             address(this),
             DEFAULT_ADMIN_ROLE
         ));
-        foreignController.setMidnightMarketConfig(marketId, _config(4000, 3000, 0));
+        _setConfig(marketId, _config(4000, 3000, 0));
 
         vm.prank(freezer);
         vm.expectRevert(abi.encodeWithSignature(
@@ -1185,13 +1197,13 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             freezer,
             DEFAULT_ADMIN_ROLE
         ));
-        foreignController.setMidnightMarketConfig(marketId, _config(4000, 3000, 0));
+        _setConfig(marketId, _config(4000, 3000, 0));
     }
 
     function test_setMidnightMarketConfig_maxBuyTickOutOfBounds() public {
         vm.prank(admin);
         vm.expectRevert("MidnightLib/max-buy-tick-oob");
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(uint16(MIDNIGHT_MAX_TICK + 1), 3000, 0)
         );
@@ -1201,10 +1213,10 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         vm.startPrank(admin);
 
         vm.expectRevert("MidnightLib/min-sell-tick-oob");
-        foreignController.setMidnightMarketConfig(marketId, _config(4000, 0, 0));
+        _setConfig(marketId, _config(4000, 0, 0));
 
         vm.expectRevert("MidnightLib/min-sell-tick-oob");
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(4000, uint16(MIDNIGHT_MAX_TICK + 1), 0)
         );
@@ -1215,7 +1227,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     function test_setMidnightMarketConfig_maxContinuousFeeOutOfBounds() public {
         vm.prank(admin);
         vm.expectRevert("MidnightLib/max-continuous-fee-oob");
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP + 1)
         );
@@ -1226,7 +1238,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         );
 
         vm.prank(admin);
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP)
         );
@@ -1235,7 +1247,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     function test_setMidnightMarketConfig_maxSellYieldNotSet() public {
         vm.prank(admin);
         vm.expectRevert("MidnightLib/max-sell-yield-not-set");
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(4000, 3000, MIN_BUY_YIELD, 0, MAX_CONTINUOUS_FEE_CBP, 0)
         );
@@ -1261,7 +1273,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
         emit MidnightMarketConfigSet(marketId, 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18);
-        foreignController.setMidnightMarketConfig(marketId, _config(4000, 3000, 100, 1e18));
+        _setConfig(marketId, _config(4000, 3000, 100, 1e18));
 
         ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
             = foreignController.midnightMarketConfigs(marketId);
@@ -1294,7 +1306,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             MAX_CONTINUOUS_FEE_CBP,
             type(uint128).max
         );
-        foreignController.setMidnightMarketConfig(
+        _setConfig(
             marketId,
             _config(
                 0,
