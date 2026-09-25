@@ -294,6 +294,13 @@ library MidnightLib {
             uint256 units = fill.units;
 
             if (ctx.selling) {
+                // Credit can shrink from fee accrual and slashing between quote and take.
+                // Bounded before the rails so an offer credit cannot reach never gates the batch.
+                if (units > ctx.creditCap) units = ctx.creditCap;
+                if (units == 0)            break;
+
+                ctx.creditCap -= units;
+
                 // The fee is taken out of the proceeds, so both floors bind on the gross price.
                 require(
                     price >= ctx.tickPriceBound + ctx.settlementFee,
@@ -303,12 +310,6 @@ library MidnightLib {
                     price >= ctx.yieldPriceBound + ctx.settlementFee,
                     "MidnightLib/sell-yield-too-high"
                 );
-
-                // Credit can shrink from fee accrual and slashing between quote and take.
-                if (units > ctx.creditCap) units = ctx.creditCap;
-                if (units == 0)            break;
-
-                ctx.creditCap -= units;
             } else {
                 // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
                 require(
