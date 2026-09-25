@@ -273,7 +273,6 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        // Old-venue markets stay sellable (venue comes from the offer) but redeem only after a repoint back.
         midnight = midnight_;
         emit MidnightSet(midnight_);
     }
