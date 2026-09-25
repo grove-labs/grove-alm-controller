@@ -1066,13 +1066,21 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         bytes32 indexed marketId,
         uint16  maxBuyTick,
         uint16  minSellTick,
-        uint32  maxContinuousFee,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
 
+    // Midnight's own ceiling, as the annual rate the config now speaks in: percent_bp_cbp.
+    uint16 constant MAX_CONTINUOUS_FEE_CBP = 1_00_00;
+
+    uint16 constant MIN_BUY_YIELD  = 1_00;
+    uint16 constant MAX_SELL_YIELD = 10_00;
+
     bytes32 marketId = keccak256("market");
 
-    function _config(uint16 maxBuyTick, uint16 minSellTick, uint32 maxContinuousFee)
+    function _config(uint16 maxBuyTick, uint16 minSellTick, uint16 maxContinuousFee)
         internal pure returns (MidnightLib.MarketConfig memory)
     {
         return _config(maxBuyTick, minSellTick, maxContinuousFee, 0);
@@ -1081,7 +1089,22 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     function _config(
         uint16  maxBuyTick,
         uint16  minSellTick,
-        uint32  maxContinuousFee,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
+        internal pure returns (MidnightLib.MarketConfig memory)
+    {
+        return _config(
+            maxBuyTick, minSellTick, MIN_BUY_YIELD, MAX_SELL_YIELD, maxContinuousFee, maxLossFactor
+        );
+    }
+
+    function _config(
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
         uint128 maxLossFactor
     )
         internal pure returns (MidnightLib.MarketConfig memory)
@@ -1089,6 +1112,8 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         return MidnightLib.MarketConfig({
             maxBuyTick       : maxBuyTick,
             minSellTick      : minSellTick,
+            minBuyYield      : minBuyYield,
+            maxSellYield     : maxSellYield,
             maxContinuousFee : maxContinuousFee,
             maxLossFactor    : maxLossFactor
         });
@@ -1140,7 +1165,27 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         vm.expectRevert("MidnightLib/max-continuous-fee-oob");
         foreignController.setMidnightMarketConfig(
             marketId,
-            _config(4000, 3000, MidnightLib.MAX_CONTINUOUS_FEE + 1)
+            _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP + 1)
+        );
+
+        assertEq(
+            MidnightLib.continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP),
+            MidnightLib.MAX_CONTINUOUS_FEE
+        );
+
+        vm.prank(admin);
+        foreignController.setMidnightMarketConfig(
+            marketId,
+            _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP)
+        );
+    }
+
+    function test_setMidnightMarketConfig_maxSellYieldNotSet() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-sell-yield-not-set");
+        foreignController.setMidnightMarketConfig(
+            marketId,
+            _config(4000, 3000, MIN_BUY_YIELD, 0, MAX_CONTINUOUS_FEE_CBP, 0)
         );
     }
 
@@ -1148,33 +1193,41 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         (
             uint16  maxBuyTick,
             uint16  minSellTick,
-            uint32  maxContinuousFee,
+            uint16  minBuyYield,
+            uint16  maxSellYield,
+            uint16  maxContinuousFee,
             uint128 maxLossFactor
         ) = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       0);
         assertEq(minSellTick,      0);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     0);
         assertEq(maxContinuousFee, 0);
         assertEq(maxLossFactor,    0);
 
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
-        emit MidnightMarketConfigSet(marketId, 4000, 3000, 100, 1e18);
+        emit MidnightMarketConfigSet(marketId, 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18);
         foreignController.setMidnightMarketConfig(marketId, _config(4000, 3000, 100, 1e18));
 
-        ( maxBuyTick, minSellTick, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
             = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       4000);
         assertEq(minSellTick,      3000);
+        assertEq(minBuyYield,      MIN_BUY_YIELD);
+        assertEq(maxSellYield,     MAX_SELL_YIELD);
         assertEq(maxContinuousFee, 100);
         assertEq(maxLossFactor,    1e18);
 
-        ( maxBuyTick, minSellTick, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
             = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
 
         assertEq(maxBuyTick,       0);
         assertEq(minSellTick,      0);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     0);
         assertEq(maxContinuousFee, 0);
         assertEq(maxLossFactor,    0);
 
@@ -1184,20 +1237,31 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             marketId,
             0,
             uint16(MIDNIGHT_MAX_TICK),
-            MidnightLib.MAX_CONTINUOUS_FEE,
+            0,
+            type(uint16).max,
+            MAX_CONTINUOUS_FEE_CBP,
             type(uint128).max
         );
         foreignController.setMidnightMarketConfig(
             marketId,
-            _config(0, uint16(MIDNIGHT_MAX_TICK), MidnightLib.MAX_CONTINUOUS_FEE, type(uint128).max)
+            _config(
+                0,
+                uint16(MIDNIGHT_MAX_TICK),
+                0,
+                type(uint16).max,
+                MAX_CONTINUOUS_FEE_CBP,
+                type(uint128).max
+            )
         );
 
-        ( maxBuyTick, minSellTick, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
             = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       0);
         assertEq(minSellTick,      MIDNIGHT_MAX_TICK);
-        assertEq(maxContinuousFee, MidnightLib.MAX_CONTINUOUS_FEE);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     type(uint16).max);
+        assertEq(maxContinuousFee, MAX_CONTINUOUS_FEE_CBP);
         assertEq(maxLossFactor,    type(uint128).max);
     }
 

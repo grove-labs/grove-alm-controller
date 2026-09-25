@@ -3,15 +3,13 @@ pragma solidity ^0.8.21;
 
 import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 
-import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
 import { IALMProxy }     from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
-import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
@@ -56,7 +54,9 @@ contract ForeignController is AccessControl {
         bytes32 indexed marketId,
         uint16  maxBuyTick,
         uint16  minSellTick,
-        uint32  maxContinuousFee,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -279,6 +279,8 @@ contract ForeignController is AccessControl {
             marketId,
             config.maxBuyTick,
             config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
             config.maxContinuousFee,
             config.maxLossFactor
         );
@@ -700,35 +702,27 @@ contract ForeignController is AccessControl {
     // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
 
     function buyMidnight(
-        bytes32   marketId,
-        Offer[]   memory offers,
-        bytes[]   memory ratifierData,
-        uint256[] memory units,
-        uint256   maxAssetsIn
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   maxAssetsIn
     )
         external returns (uint256 assetsSpent)
     {
         _checkRole(RELAYER);
 
-        assetsSpent = MidnightLib.buy(
-            _midnightTakeParams(marketId, offers, ratifierData, units, maxAssetsIn)
-        );
+        assetsSpent = MidnightLib.buy(_midnightTakeParams(marketId, fills, maxAssetsIn));
     }
 
     function sellMidnight(
-        bytes32   marketId,
-        Offer[]   memory offers,
-        bytes[]   memory ratifierData,
-        uint256[] memory units,
-        uint256   minAssetsOut
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   minAssetsOut
     )
         external returns (uint256 assetsReceived)
     {
         _checkRole(RELAYER);
 
-        assetsReceived = MidnightLib.sell(
-            _midnightTakeParams(marketId, offers, ratifierData, units, minAssetsOut)
-        );
+        assetsReceived = MidnightLib.sell(_midnightTakeParams(marketId, fills, minAssetsOut));
     }
 
     function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
@@ -880,11 +874,9 @@ contract ForeignController is AccessControl {
     }
 
     function _midnightTakeParams(
-        bytes32   marketId,
-        Offer[]   memory offers,
-        bytes[]   memory ratifierData,
-        uint256[] memory units,
-        uint256   assetsBound
+        bytes32                   marketId,
+        MidnightLib.Fill[] memory fills,
+        uint256                   assetsBound
     )
         internal view returns (MidnightLib.TakeParams memory)
     {
@@ -896,9 +888,7 @@ contract ForeignController is AccessControl {
             sellRateLimitId : LIMIT_MIDNIGHT_SELL,
             marketId        : marketId,
             config          : midnightMarketConfigs[marketId],
-            offers          : offers,
-            ratifierData    : ratifierData,
-            units           : units,
+            fills           : fills,
             assetsBound     : assetsBound
         });
     }
