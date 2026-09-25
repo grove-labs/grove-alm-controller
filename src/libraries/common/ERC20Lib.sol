@@ -29,7 +29,10 @@ library ERC20Lib {
             // decode it first
             approveCallReturnData = abi.decode(data, (bytes));
             // Approve was successful if 1) no return value or 2) true return value
-            if (approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool))) {
+            if (
+                approveCallReturnData.length == 0 ||
+                (approveCallReturnData.length == 32 && abi.decode(approveCallReturnData, (bool)))
+            ) {
                 return;
             }
         }
@@ -41,7 +44,8 @@ library ERC20Lib {
 
         // Revert if approve returns false
         require(
-            approveCallReturnData.length == 0 || abi.decode(approveCallReturnData, (bool)),
+            approveCallReturnData.length == 0 ||
+            (approveCallReturnData.length == 32 && abi.decode(approveCallReturnData, (bool))),
             "ERC20Lib/approve-failed"
         );
     }
@@ -58,7 +62,8 @@ library ERC20Lib {
         );
 
         require(
-            returnData.length == 0 || abi.decode(returnData, (bool)),
+            returnData.length == 0 ||
+            (returnData.length == 32 && abi.decode(returnData, (bool))),
             "ERC20Lib/transfer-failed"
         );
     }

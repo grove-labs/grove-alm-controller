@@ -13,7 +13,7 @@ import { IALMProxy } from "../../src/interfaces/IALMProxy.sol";
 
 import { ERC20 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 
-import { ERC20ApproveFalseExistingAllowance, ERC20ApproveFalseNonZeroAmount } from "../unit/mocks/MockTokens.sol";
+import { ERC20ApproveFalseExistingAllowance, ERC20ApproveFalseNonZeroAmount, ERC20ApproveOversizedReturnData } from "../unit/mocks/MockTokens.sol";
 
 interface IHarness {
     function approve(address token, address spender, uint256 amount) external;
@@ -253,6 +253,22 @@ contract ERC20ApproveReturningFalseNonZeroAmountMainnetTest is MainnetController
 
         vm.expectRevert("ERC20Lib/approve-failed");
         IHarness(harness).approveCurve(address(almProxy), address(mock), makeAddr("spender"), 100);
+    }
+
+}
+
+contract ERC20ApproveOversizedReturnDataMainnetTest is MainnetControllerApproveSuccessTests {
+
+    function test_approveOversizedReturnData() public {
+        ERC20ApproveOversizedReturnData mock = new ERC20ApproveOversizedReturnData("Mock", "MOCK");
+
+        vm.expectRevert("ERC20Lib/approve-failed");
+        IHarness(harness).approve(address(mock), makeAddr("spender"), 100);
+
+        vm.expectRevert("ERC20Lib/approve-failed");
+        IHarness(harness).approveCurve(address(almProxy), address(mock), makeAddr("spender"), 100);
+
+        assertEq(mock.allowance(address(almProxy), makeAddr("spender")), 0);
     }
 
 }

@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
-import { MockTokenReturnFalse } from "../unit/mocks/MockTokens.sol";
+import { ERC20TransferOversizedReturnData, MockTokenReturnFalse } from "../unit/mocks/MockTokens.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -81,6 +81,34 @@ contract MainnetControllerTransferAssetFailureTests is TransferAssetBaseTest {
         vm.prank(relayer);
         vm.expectRevert("ERC20Lib/transfer-failed");
         mainnetController.transferAsset(address(token), receiver, 1_000_000e18);
+    }
+
+    function test_transferAsset_transferFailedOnOversizedReturnData() external {
+        ERC20TransferOversizedReturnData token
+            = new ERC20TransferOversizedReturnData("Mock", "MOCK");
+
+        vm.startPrank(Ethereum.GROVE_PROXY);
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(
+                mainnetController.LIMIT_ASSET_TRANSFER(),
+                address(token),
+                receiver
+            ),
+            1_000_000e18,
+            uint256(1_000_000e18) / 1 days
+        );
+
+        vm.stopPrank();
+
+        deal(address(token), address(almProxy), 1_000_000e18);
+
+        vm.prank(relayer);
+        vm.expectRevert("ERC20Lib/transfer-failed");
+        mainnetController.transferAsset(address(token), receiver, 1_000_000e18);
+
+        assertEq(token.balanceOf(address(almProxy)), 1_000_000e18);
+        assertEq(token.balanceOf(receiver),          0);
     }
 
 }

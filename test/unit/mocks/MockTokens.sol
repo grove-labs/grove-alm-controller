@@ -161,6 +161,36 @@ contract ERC20ApproveFalseNonZeroAmount is ERC20 {
 
 }
 
+contract ERC20ApproveOversizedReturnData is ERC20 {
+
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
+    // Reports success in 64 bytes without granting the allowance.
+    function approve(address, uint256) public pure override returns (bool) {
+        assembly {
+            mstore(0,  1)
+            mstore(32, 1)
+            return(0, 64)
+        }
+    }
+
+}
+
+contract ERC20TransferOversizedReturnData is ERC20 {
+
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
+    // Reports success in 64 bytes without moving the tokens.
+    function transfer(address, uint256) public pure override returns (bool) {
+        assembly {
+            mstore(0,  1)
+            mstore(32, 1)
+            return(0, 64)
+        }
+    }
+
+}
+
 contract MockERC20Decimals is ERC20 {
 
     uint8 public immutable _decimals;
