@@ -71,7 +71,7 @@ contract MockOracle {
 
 contract MidnightTestBase is ForkTestBase {
 
-    address constant MIDNIGHT = 0xAdedD8ab6dE832766Fedf0FaC4992E5C4D3EA18A;
+    address constant MIDNIGHT = MIDNIGHT_BASE;
 
     uint256 constant LLTV               = 0.86e18;
     uint256 constant LIQUIDATION_CURSOR = 0.3e18;
@@ -115,6 +115,10 @@ contract MidnightTestBase is ForkTestBase {
 
     function _getBlock() internal override pure returns (uint256) {
         return 51_000_000;  // Midnight was deployed on Base at block 48,286,884
+    }
+
+    function _midnight() internal override pure returns (address) {
+        return MIDNIGHT_BASE;
     }
 
     function _loanTokenDecimals()       internal virtual pure returns (uint8) { return 18; }
@@ -174,8 +178,6 @@ contract MidnightTestBase is ForkTestBase {
         rateLimits.setRateLimitData(buyKey,    5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
         rateLimits.setRateLimitData(sellKey,   5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
         rateLimits.setRateLimitData(redeemKey, 5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
-
-        foreignController.setMidnight(MIDNIGHT);
 
         foreignController.setMidnightMarketConfig(
             marketId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
@@ -1608,49 +1610,6 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
         assertEq(_credit(),                       creditBefore);
         assertEq(midnight.lossFactor(marketId),   0);
         assertEq(midnight.debt(marketId, victim), VICTIM_UNITS);
-    }
-
-}
-
-contract ForeignControllerMidnightRepointTests is MidnightTestBase {
-
-    uint256 constant SEEDED_UNITS = 1_000_000e18;
-
-    function setUp() public override {
-        super.setUp();
-
-        _seedCredit(SEEDED_UNITS);
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnight(makeAddr("midnight2"));
-    }
-
-    function test_midnightRepoint_allLegsClosed() public {
-        vm.expectRevert("MidnightLib/invalid-midnight");
-        _buy(_offer(false, TICK_98, 1e18), 1e18, 1e18);
-
-        vm.expectRevert("MidnightLib/invalid-midnight");
-        _sell(_offer(true, TICK_99, uint128(SEEDED_UNITS / 2)), SEEDED_UNITS / 2, 1);
-
-        _repay(SEEDED_UNITS);
-
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert();
-        foreignController.redeemMidnight(marketId, SEEDED_UNITS, 1);
-
-        assertEq(_credit(), SEEDED_UNITS);
-    }
-
-    function test_midnightRepoint_oldConfigStaysEditable() public {
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            marketId, 0, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
-        );
-
-        ( uint16 maxBuyTick, uint16 minSellTick, , , , ) = foreignController.midnightMarketConfigs(marketId);
-
-        assertEq(maxBuyTick,  0);
-        assertEq(minSellTick, TICK_98);
     }
 
 }
