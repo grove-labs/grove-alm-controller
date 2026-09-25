@@ -11,6 +11,7 @@ import { IALMProxy }     from "./interfaces/IALMProxy.sol";
 import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
+import { MessagingFee }  from "./interfaces/ILayerZero.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -189,6 +190,8 @@ contract ForeignController is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
+        require(layerZeroRecipient != bytes32(0), "FC/zero-recipient");
+
         layerZeroRecipients[destinationEndpointId] = layerZeroRecipient;
         emit LayerZeroRecipientSet(destinationEndpointId, layerZeroRecipient);
     }
@@ -366,6 +369,22 @@ contract ForeignController is AccessControl {
             proxy                 : proxy,
             rateLimits            : rateLimits,
             rateLimitId           : LIMIT_LAYERZERO_TRANSFER,
+            oftAddress            : oftAddress,
+            amount                : amount,
+            destinationEndpointId : destinationEndpointId,
+            layerZeroRecipient    : layerZeroRecipients[destinationEndpointId]
+        }));
+    }
+
+    function quoteTransferLayerZero(
+        address oftAddress,
+        uint256 amount,
+        uint32  destinationEndpointId
+    )
+        external view returns (MessagingFee memory fee)
+    {
+        return LayerZeroLib.quoteTransferFee(LayerZeroLib.QuoteParams({
+            proxy                 : proxy,
             oftAddress            : oftAddress,
             amount                : amount,
             destinationEndpointId : destinationEndpointId,

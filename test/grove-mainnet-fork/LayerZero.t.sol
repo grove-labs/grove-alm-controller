@@ -23,6 +23,8 @@ import {ForeignController} from "../../src/ForeignController.sol";
 import {RateLimits} from "../../src/RateLimits.sol";
 import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 
+import {ILayerZero} from "../../src/interfaces/ILayerZero.sol";
+
 import "./ForkTestBase.t.sol";
 
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
@@ -145,7 +147,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         foreignRateLimits = RateLimits(controllerInst.rateLimits);
         foreignController = ForeignController(controllerInst.controller);
 
-        deal(address(foreignController), 100 ether); // LZ gas costs
+        deal(relayer, 100 ether); // LZ gas costs, paid per call via quoteTransferLayerZero
 
         address[] memory relayers = new address[](1);
         relayers[0] = relayer;
@@ -187,8 +189,13 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
             controllerInst, configAddresses, checkAddresses, mintRecipients, layerZeroRecipients, centrifugeRecipients
         );
 
-        destinationRateLimitKey =
-            keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), usdt0OftPlasma, sourceEndpointId));
+        destinationRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(address(usdt0OftPlasma)).token(),
+            address(usdt0OftPlasma),
+            ILayerZero(address(usdt0OftPlasma)).peers(sourceEndpointId),
+            sourceEndpointId
+        );
 
         uint256 usdt0PlasmaMaxAmount = 5_000_000e6;
         uint256 usdt0PlasmaSlope     = uint256(1_000_000e6) / 4 hours;
@@ -203,14 +210,18 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         usdtOft = IERC20(0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee);
 
-        // Gas cost for LZ
-        deal(address(mainnetController), 1 ether);
+        deal(relayer, 100 ether); // LZ gas costs, paid per call via quoteTransferLayerZero
 
         bridge = LZBridgeTesting.createLZBridge(source, destination);
 
         vm.startPrank(Ethereum.GROVE_PROXY);
-        sourceRateLimitKey =
-            keccak256(abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), usdtOft, destinationEndpointId));
+        sourceRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
+            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            ILayerZero(address(usdtOft)).token(),
+            address(usdtOft),
+            ILayerZero(address(usdtOft)).peers(destinationEndpointId),
+            destinationEndpointId
+        );
         uint256 usdtMaxAmount = 5_000_000e6;
         uint256 usdtSlope     = uint256(1_000_000e6) / 4 hours;
 
@@ -276,8 +287,10 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
 
         _expectEthereumOftEmit(1e6);
 
+        uint256 fee = _ethereumFee(1e6);
+
         vm.prank(relayer);
-        mainnetController.transferTokenLayerZero(address(usdtOft), 1e6, destinationEndpointId);
+        mainnetController.transferTokenLayerZero{value: fee}(address(usdtOft), 1e6, destinationEndpointId);
 
         assertEq(usdt.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 after transfer");
         assertEq(usdt.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 after transfer");
@@ -340,8 +353,10 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         // Will split into 3 separate transactions at max 1m each
         _expectEthereumOftEmit(2_900_000e6);
 
+        uint256 fee = _ethereumFee(2_900_000e6);
+
         vm.prank(relayer);
-        mainnetController.transferTokenLayerZero(address(usdtOft), 2_900_000e6, destinationEndpointId);
+        mainnetController.transferTokenLayerZero{value: fee}(address(usdtOft), 2_900_000e6, destinationEndpointId);
 
         assertEq(usdt.balanceOf(address(almProxy)), 0, "ALM Proxy balance should be 0 after transfer");
         assertEq(usdt.balanceOf(address(mainnetController)), 0, "Mainnet Controller balance should be 0 after transfer");
@@ -399,17 +414,19 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         );
         assertEq(rateLimits.getCurrentRateLimit(key), 5_000_000e6, "Rate limit should be 5_000_000e6 before transfer");
 
-        mainnetController.transferTokenLayerZero(address(usdtOft), 2_000_000e6, destinationEndpointId);
+        mainnetController.transferTokenLayerZero{value: _ethereumFee(2_000_000e6)}(address(usdtOft), 2_000_000e6, destinationEndpointId);
 
         assertEq(
             usdt.balanceOf(address(almProxy)), 7_000_000e6, "ALM Proxy balance should be 7_000_000e6 after transfer"
         );
         assertEq(rateLimits.getCurrentRateLimit(key), 3_000_000e6, "Rate limit should be 3_000_000e6 after transfer");
 
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        mainnetController.transferTokenLayerZero(address(usdtOft), 3_000_001e6, destinationEndpointId);
+        uint256 fee = _ethereumFee(3_000_001e6);
 
-        mainnetController.transferTokenLayerZero(address(usdtOft), 3_000_000e6, destinationEndpointId);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        mainnetController.transferTokenLayerZero{value: fee}(address(usdtOft), 3_000_001e6, destinationEndpointId);
+
+        mainnetController.transferTokenLayerZero{value: _ethereumFee(3_000_000e6)}(address(usdtOft), 3_000_000e6, destinationEndpointId);
 
         assertEq(
             usdt.balanceOf(address(almProxy)), 4_000_000e6, "ALM Proxy balance should be 4_000_000e6 after transfer"
@@ -425,7 +442,7 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
             rateLimits.getCurrentRateLimit(key), 999_999.9936e6, "Rate limit should be 999_999.9936e6 after skipping"
         );
 
-        mainnetController.transferTokenLayerZero(address(usdtOft), 999_999.9936e6, destinationEndpointId);
+        mainnetController.transferTokenLayerZero{value: _ethereumFee(999_999.9936e6)}(address(usdtOft), 999_999.9936e6, destinationEndpointId);
 
         assertEq(
             usdt.balanceOf(address(almProxy)),
@@ -458,8 +475,10 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
 
         _expectPlasmaOftEmit(1e6);
 
+        uint256 fee = _plasmaFee(1e6);
+
         vm.prank(relayer);
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 1e6, sourceEndpointId);
+        foreignController.transferTokenLayerZero{value: fee}(address(usdt0OftPlasma), 1e6, sourceEndpointId);
 
         assertEq(
             usdt0Plasma.balanceOf(address(foreignAlmProxy)), 0, "Foreign ALM Proxy balance should be 0 after transfer"
@@ -518,8 +537,10 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         // Will split into three separate transactions at max 1m each
         _expectPlasmaOftEmit(2_600_000e6);
 
+        uint256 fee = _plasmaFee(2_600_000e6);
+
         vm.prank(relayer);
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 2_600_000e6, sourceEndpointId);
+        foreignController.transferTokenLayerZero{value: fee}(address(usdt0OftPlasma), 2_600_000e6, sourceEndpointId);
 
         assertEq(
             usdt0Plasma.balanceOf(address(foreignAlmProxy)), 0, "Foreign ALM Proxy balance should be 0 after transfer"
@@ -567,15 +588,17 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 9_000_000e6, "Foreign ALM Proxy balance should be 9_000_000e6 before transfer");
         assertEq(foreignRateLimits.getCurrentRateLimit(key), 5_000_000e6, "Rate limit should be 5_000_000e6 before transfer");
 
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 2_000_000e6, sourceEndpointId);
+        foreignController.transferTokenLayerZero{value: _plasmaFee(2_000_000e6)}(address(usdt0OftPlasma), 2_000_000e6, sourceEndpointId);
 
         assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 7_000_000e6, "Foreign ALM Proxy balance should be 7_000_000e6 after transfer");
         assertEq(foreignRateLimits.getCurrentRateLimit(key), 3_000_000e6, "Rate limit should be 3_000_000e6 after transfer");
 
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 3_000_001e6, sourceEndpointId);
+        uint256 fee = _plasmaFee(3_000_001e6);
 
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 3_000_000e6, sourceEndpointId);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.transferTokenLayerZero{value: fee}(address(usdt0OftPlasma), 3_000_001e6, sourceEndpointId);
+
+        foreignController.transferTokenLayerZero{value: _plasmaFee(3_000_000e6)}(address(usdt0OftPlasma), 3_000_000e6, sourceEndpointId);
 
         assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6, "Foreign ALM Proxy balance should be 4_000_000e6 after transfer");
         assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
@@ -585,12 +608,20 @@ contract USDTToLayerZeroIntegrationTests is PlasmaChainUSDTToLayerZeroTestBase {
         assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 4_000_000e6, "Foreign ALM Proxy balance should be 4_000_000e6 after skipping");
         assertEq(foreignRateLimits.getCurrentRateLimit(key), 999_999.9936e6, "Rate limit should be 999_999.9936e6 after skipping");
 
-        foreignController.transferTokenLayerZero(address(usdt0OftPlasma), 999_999.9936e6, sourceEndpointId);
+        foreignController.transferTokenLayerZero{value: _plasmaFee(999_999.9936e6)}(address(usdt0OftPlasma), 999_999.9936e6, sourceEndpointId);
 
         assertEq(usdt0Plasma.balanceOf(address(foreignAlmProxy)), 3_000_000.0064e6, "Foreign ALM Proxy balance should be 3_000_000.0064e6 after transfer");
         assertEq(foreignRateLimits.getCurrentRateLimit(key), 0, "Rate limit should be 0 after transfer");
 
         vm.stopPrank();
+    }
+
+    function _ethereumFee(uint256 amount) internal view returns (uint256) {
+        return mainnetController.quoteTransferLayerZero(address(usdtOft), amount, destinationEndpointId).nativeFee;
+    }
+
+    function _plasmaFee(uint256 amount) internal view returns (uint256) {
+        return foreignController.quoteTransferLayerZero(address(usdt0OftPlasma), amount, sourceEndpointId).nativeFee;
     }
 
     function _expectEthereumOftEmit(uint256 amount) internal {

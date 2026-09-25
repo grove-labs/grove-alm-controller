@@ -68,6 +68,10 @@ interface ILayerZero {
 
     function token() external view returns (address);
 
+    function peers(uint32 eid) external view returns (bytes32);
+
     function approvalRequired() external pure returns (bool);
+
+    function decimalConversionRate() external view returns (uint256);
 
 }

@@ -70,6 +70,8 @@ library PSMLib {
             abi.encodeCall(params.daiUsds.usdsToDai, (address(params.proxy), usdsAmount))
         );
 
+        ERC20Lib.approve(params.proxy, address(params.usds), address(params.daiUsds), 0);
+
         // Approve DAI to PSM from the proxy because conversion from USDS to DAI was 1:1
         ERC20Lib.approve(params.proxy, address(params.dai), address(params.psm), usdsAmount);
 
@@ -78,6 +80,8 @@ library PSMLib {
             address(params.psm),
             abi.encodeCall(params.psm.buyGemNoFee, (address(params.proxy), params.usdcAmount))
         );
+
+        ERC20Lib.approve(params.proxy, address(params.dai), address(params.psm), 0);
     }
 
     function swapUSDCToUSDS(SwapUSDCToUSDSParams calldata params) external {
@@ -112,6 +116,8 @@ library PSMLib {
             }
         }
 
+        ERC20Lib.approve(params.proxy, address(params.usdc), address(params.psm), 0);
+
         uint256 daiAmount = params.usdcAmount * params.psmTo18ConversionFactor;
 
         // Approve DAI to DaiUsds migrator from the proxy (assumes the proxy has enough DAI)
@@ -122,6 +128,8 @@ library PSMLib {
             address(params.daiUsds),
             abi.encodeCall(params.daiUsds.daiToUsds, (address(params.proxy), daiAmount))
         );
+
+        ERC20Lib.approve(params.proxy, address(params.dai), address(params.daiUsds), 0);
     }
 
     /**********************************************************************************************/
