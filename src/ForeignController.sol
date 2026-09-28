@@ -61,7 +61,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
-    event MidnightSet(address indexed midnight);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -146,7 +145,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         address cctp_,
         address pendleRouter_,
         address uniswapV3Router_,
-        address uniswapV3PositionManager_
+        address uniswapV3PositionManager_,
+        address midnight_
     ) {
         _grantRole(DEFAULT_ADMIN_ROLE, admin_);
 
@@ -158,6 +158,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         pendleRouter             = pendleRouter_;
         uniswapV3Router          = ISwapRouter(uniswapV3Router_);
         uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
+        midnight                 = midnight_;
     }
 
     /**********************************************************************************************/
@@ -268,14 +269,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         require(twapSecondsAgo < uint32(type(int32).max), "FC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
-    }
-
-    function setMidnight(address midnight_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        midnight = midnight_;
-        emit MidnightSet(midnight_);
     }
 
     function setMidnightMarketConfig(

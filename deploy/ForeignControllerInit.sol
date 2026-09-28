@@ -16,6 +16,10 @@ interface IPSM3Like {
     function usds() external view returns (address);
 }
 
+interface IMidnightLike {
+    function configurator() external view returns (address);
+}
+
 library ForeignControllerInit {
 
     /**********************************************************************************************/
@@ -30,6 +34,7 @@ library ForeignControllerInit {
         address pendleRouter;
         address uniswapV3Router;
         address uniswapV3PositionManager;
+        address midnight;  // zero on chains where Midnight is not wired
         // address susds;
         // address usds;
     }
@@ -134,8 +139,19 @@ library ForeignControllerInit {
         require(address(newController.pendleRouter())             == checkAddresses.pendleRouter,             "ForeignControllerInit/incorrect-pendleRouter");
         require(address(newController.uniswapV3Router())          == checkAddresses.uniswapV3Router,          "ForeignControllerInit/incorrect-uniswapV3Router");
         require(address(newController.uniswapV3PositionManager()) == checkAddresses.uniswapV3PositionManager, "ForeignControllerInit/incorrect-uniswapV3PositionManager");
+        require(newController.midnight()                          == checkAddresses.midnight,                 "ForeignControllerInit/incorrect-midnight");
 
         require(configAddresses.oldController != address(newController), "ForeignControllerInit/old-controller-is-new-controller");
+
+        // Step 1b: Perform Midnight sanity checks when it is wired
+
+        if (checkAddresses.midnight != address(0)) {
+            require(checkAddresses.midnight.code.length != 0, "ForeignControllerInit/midnight-not-a-contract");
+            require(
+                IMidnightLike(checkAddresses.midnight).configurator() != address(0),
+                "ForeignControllerInit/midnight-not-configured"
+            );
+        }
 
         // Step 2: Perform PSM sanity checks
 
