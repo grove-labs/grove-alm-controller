@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import { AccessControl }   from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import { ReentrancyGuard } from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
@@ -32,7 +33,7 @@ import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
 
-contract ForeignController is AccessControl {
+contract ForeignController is AccessControl, ReentrancyGuard {
 
     /**********************************************************************************************/
     /*** Events                                                                                 ***/
@@ -331,7 +332,7 @@ contract ForeignController is AccessControl {
     /*** Relayer PSM functions                                                                  ***/
     /**********************************************************************************************/
 
-    function depositPSM(address asset, uint256 amount) external returns (uint256 shares) {
+    function depositPSM(address asset, uint256 amount) external nonReentrant returns (uint256 shares) {
         _checkRole(RELAYER);
         return PSM3Lib.deposit(PSM3Lib.DepositParams({
             proxy       : proxy,
@@ -343,7 +344,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function withdrawPSM(address asset, uint256 maxAmount) external returns (uint256 assetsWithdrawn) {
+    function withdrawPSM(address asset, uint256 maxAmount) external nonReentrant returns (uint256 assetsWithdrawn) {
         _checkRole(RELAYER);
         return PSM3Lib.withdraw(PSM3Lib.WithdrawParams({
             proxy       : proxy,
@@ -359,7 +360,7 @@ contract ForeignController is AccessControl {
     /*** Relayer bridging functions                                                             ***/
     /**********************************************************************************************/
 
-    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain) external {
+    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain) external nonReentrant {
         _checkRole(RELAYER);
 
         CCTPLib.transferUSDCToCCTP(CCTPLib.TransferUSDCToCCTPParams({
@@ -381,6 +382,7 @@ contract ForeignController is AccessControl {
         uint32  destinationEndpointId
     )
         external payable
+        nonReentrant
     {
         _checkRole(RELAYER);
         LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
@@ -414,7 +416,7 @@ contract ForeignController is AccessControl {
     /*** Relayer ERC20 functions                                                                ***/
     /**********************************************************************************************/
 
-    function transferAsset(address asset, address destination, uint256 amount) external {
+    function transferAsset(address asset, address destination, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(
             RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
@@ -430,6 +432,7 @@ contract ForeignController is AccessControl {
 
     function depositERC4626(address token, uint256 amount, uint256 minSharesOut)
         external
+        nonReentrant
         returns (uint256 shares)
     {
         _checkRole(RELAYER);
@@ -446,6 +449,7 @@ contract ForeignController is AccessControl {
 
     function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn)
         external
+        nonReentrant
         returns (uint256 shares)
     {
         _checkRole(RELAYER);
@@ -461,6 +465,7 @@ contract ForeignController is AccessControl {
 
     function redeemERC4626(address token, uint256 shares, uint256 minAssetsOut)
         external
+        nonReentrant
         returns (uint256 assets)
     {
         _checkRole(RELAYER);
@@ -478,7 +483,7 @@ contract ForeignController is AccessControl {
     /*** Relayer ERC7540 functions                                                              ***/
     /**********************************************************************************************/
 
-    function requestDepositERC7540(address token, uint256 amount) external {
+    function requestDepositERC7540(address token, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
             proxy      : proxy,
@@ -488,7 +493,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function claimDepositERC7540(address token) external {
+    function claimDepositERC7540(address token) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
             proxy      : proxy,
@@ -497,7 +502,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function requestRedeemERC7540(address token, uint256 shares) external {
+    function requestRedeemERC7540(address token, uint256 shares) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
             proxy      : proxy,
@@ -507,7 +512,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function claimRedeemERC7540(address token) external {
+    function claimRedeemERC7540(address token) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
             proxy      : proxy,
@@ -522,7 +527,7 @@ contract ForeignController is AccessControl {
 
     // NOTE: These cancelation methods are compatible with ERC-7887
 
-    function cancelCentrifugeDepositRequest(address token) external {
+    function cancelCentrifugeDepositRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.cancelCentrifugeDepositRequest(CentrifugeLib.CentrifugeRequestParams({
             proxy       : proxy,
@@ -532,7 +537,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function claimCentrifugeCancelDepositRequest(address token) external {
+    function claimCentrifugeCancelDepositRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.claimCentrifugeCancelDepositRequest(CentrifugeLib.CentrifugeRequestParams({
             proxy       : proxy,
@@ -542,7 +547,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function cancelCentrifugeRedeemRequest(address token) external {
+    function cancelCentrifugeRedeemRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.cancelCentrifugeRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
             proxy       : proxy,
@@ -552,7 +557,7 @@ contract ForeignController is AccessControl {
         }));
     }
 
-    function claimCentrifugeCancelRedeemRequest(address token) external {
+    function claimCentrifugeCancelRedeemRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.claimCentrifugeCancelRedeemRequest(CentrifugeLib.CentrifugeRequestParams({
             proxy       : proxy,
@@ -568,6 +573,7 @@ contract ForeignController is AccessControl {
         uint16  destinationCentrifugeId
     )
         external payable
+        nonReentrant
     {
         _checkRole(RELAYER);
         CentrifugeLib.transferSharesCentrifuge(CentrifugeLib.CentrifugeTransferParams({
@@ -585,7 +591,7 @@ contract ForeignController is AccessControl {
     /*** Relayer Aave functions                                                                 ***/
     /**********************************************************************************************/
 
-    function depositAave(address aToken, uint256 amount) external {
+    function depositAave(address aToken, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         AaveLib.deposit(AaveLib.DepositParams({
             proxy       : proxy,
@@ -599,6 +605,7 @@ contract ForeignController is AccessControl {
 
     function withdrawAave(address aToken, uint256 amount)
         external
+        nonReentrant
         returns (uint256 amountWithdrawn)
     {
         _checkRole(RELAYER);
@@ -618,6 +625,7 @@ contract ForeignController is AccessControl {
     function depositAaveV4(address spoke, uint256 reserveId, address hub, uint16 assetId, uint256 amount)
         external
         onlyRole(RELAYER)
+        nonReentrant
     {
         AaveV4Lib.deposit(AaveV4Lib.DepositParams({
             proxy              : proxy,
@@ -636,6 +644,7 @@ contract ForeignController is AccessControl {
     function withdrawAaveV4(address spoke, uint256 reserveId, uint256 amount)
         external
         onlyRole(RELAYER)
+        nonReentrant
         returns (uint256 amountWithdrawn)
     {
         amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
@@ -660,7 +669,7 @@ contract ForeignController is AccessControl {
         uint256 amountIn,
         uint256 minAmountOut
     )
-        external returns (uint256 amountOut)
+        external nonReentrant returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
 
@@ -682,7 +691,7 @@ contract ForeignController is AccessControl {
         uint256[] memory depositAmounts,
         uint256   minLpAmount
     )
-        external returns (uint256 shares)
+        external nonReentrant returns (uint256 shares)
     {
         _checkRole(RELAYER);
 
@@ -703,7 +712,7 @@ contract ForeignController is AccessControl {
         uint256   lpBurnAmount,
         uint256[] memory minWithdrawAmounts
     )
-        external returns (uint256[] memory withdrawnTokens)
+        external nonReentrant returns (uint256[] memory withdrawnTokens)
     {
         _checkRole(RELAYER);
 
@@ -722,7 +731,7 @@ contract ForeignController is AccessControl {
     /*** Relayer Merkl functions                                                                 ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address distributor, address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external nonReentrant {
         _checkRole(RELAYER);
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
@@ -743,7 +752,7 @@ contract ForeignController is AccessControl {
         MidnightLib.Fill[] memory fills,
         uint256                   maxAssetsIn
     )
-        external returns (uint256 assetsSpent)
+        external nonReentrant returns (uint256 assetsSpent)
     {
         _checkRole(RELAYER);
 
@@ -755,7 +764,7 @@ contract ForeignController is AccessControl {
         MidnightLib.Fill[] memory fills,
         uint256                   minAssetsOut
     )
-        external returns (uint256 assetsReceived)
+        external nonReentrant returns (uint256 assetsReceived)
     {
         _checkRole(RELAYER);
 
@@ -763,7 +772,7 @@ contract ForeignController is AccessControl {
     }
 
     function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
-        external returns (uint256 assetsWithdrawn)
+        external nonReentrant returns (uint256 assetsWithdrawn)
     {
         _checkRole(RELAYER);
 
@@ -788,7 +797,7 @@ contract ForeignController is AccessControl {
         address pendleMarket,
         uint256 pyAmountIn,
         uint256 minAmountOut
-    ) external {
+    ) external nonReentrant {
         _checkRole(RELAYER);
 
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
@@ -812,7 +821,7 @@ contract ForeignController is AccessControl {
         uint256 minAmountOut,
         uint24  swapMaxTickDelta
     )
-        external returns (uint256 amountOut)
+        external nonReentrant returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
 
@@ -844,6 +853,7 @@ contract ForeignController is AccessControl {
         uint256                   deadline
     )
         external
+        nonReentrant
         returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_)
     {
         _checkRole(RELAYER);
@@ -881,6 +891,7 @@ contract ForeignController is AccessControl {
     )
         external
         onlyRole(RELAYER)
+        nonReentrant
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
         return UniswapV3Lib.removeLiquidity(

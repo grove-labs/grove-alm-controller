@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { AccessControl } from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import { AccessControl }   from "openzeppelin-contracts/contracts/access/AccessControl.sol";
+import { ReentrancyGuard } from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
@@ -47,7 +48,7 @@ interface IVaultLike {
     function wipe(uint256 usdsAmount) external;
 }
 
-contract MainnetController is AccessControl {
+contract MainnetController is AccessControl, ReentrancyGuard {
 
     /**********************************************************************************************/
     /*** Events                                                                                 ***/
@@ -268,7 +269,7 @@ contract MainnetController is AccessControl {
     /*** Relayer vault functions                                                                ***/
     /**********************************************************************************************/
 
-    function mintUSDS(uint256 usdsAmount) external {
+    function mintUSDS(uint256 usdsAmount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(LIMIT_USDS_MINT, usdsAmount);
 
@@ -285,7 +286,7 @@ contract MainnetController is AccessControl {
         );
     }
 
-    function burnUSDS(uint256 usdsAmount) external {
+    function burnUSDS(uint256 usdsAmount) external nonReentrant {
         _checkRole(RELAYER);
         _cancelRateLimit(LIMIT_USDS_MINT, usdsAmount);
 
@@ -303,7 +304,7 @@ contract MainnetController is AccessControl {
     /*** Relayer ERC20 functions                                                                ***/
     /**********************************************************************************************/
 
-    function transferAsset(address asset, address destination, uint256 amount) external {
+    function transferAsset(address asset, address destination, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(
             RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
@@ -319,6 +320,7 @@ contract MainnetController is AccessControl {
 
     function depositERC4626(address token, uint256 amount, uint256 minSharesOut)
         external
+        nonReentrant
         returns (uint256 shares)
     {
         _checkRole(RELAYER);
@@ -335,6 +337,7 @@ contract MainnetController is AccessControl {
 
     function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn)
         external
+        nonReentrant
         returns (uint256 shares)
     {
         _checkRole(RELAYER);
@@ -350,6 +353,7 @@ contract MainnetController is AccessControl {
 
     function redeemERC4626(address token, uint256 shares, uint256 minAssetsOut)
         external
+        nonReentrant
         returns (uint256 assets)
     {
         _checkRole(RELAYER);
@@ -367,7 +371,7 @@ contract MainnetController is AccessControl {
     /*** Relayer ERC7540 functions                                                              ***/
     /**********************************************************************************************/
 
-    function requestDepositERC7540(address token, uint256 amount) external {
+    function requestDepositERC7540(address token, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.requestDeposit(ERC7540Lib.RequestDepositParams({
             proxy      : proxy,
@@ -377,7 +381,7 @@ contract MainnetController is AccessControl {
         }));
     }
 
-    function claimDepositERC7540(address token) external {
+    function claimDepositERC7540(address token) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.claimDeposit(ERC7540Lib.ClaimParams({
             proxy      : proxy,
@@ -386,7 +390,7 @@ contract MainnetController is AccessControl {
         }));
     }
 
-    function requestRedeemERC7540(address token, uint256 shares) external {
+    function requestRedeemERC7540(address token, uint256 shares) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.requestRedeem(ERC7540Lib.RequestRedeemParams({
             proxy      : proxy,
@@ -396,7 +400,7 @@ contract MainnetController is AccessControl {
         }));
     }
 
-    function claimRedeemERC7540(address token) external {
+    function claimRedeemERC7540(address token) external nonReentrant {
         _checkRole(RELAYER);
         ERC7540Lib.claimRedeem(ERC7540Lib.ClaimParams({
             proxy      : proxy,
@@ -411,22 +415,22 @@ contract MainnetController is AccessControl {
 
     // NOTE: These cancelation methods are compatible with ERC-7887
 
-    function cancelCentrifugeDepositRequest(address token) external {
+    function cancelCentrifugeDepositRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.cancelCentrifugeDepositRequest(_centrifugeRequestParams(token));
     }
 
-    function claimCentrifugeCancelDepositRequest(address token) external {
+    function claimCentrifugeCancelDepositRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.claimCentrifugeCancelDepositRequest(_centrifugeRequestParams(token));
     }
 
-    function cancelCentrifugeRedeemRequest(address token) external {
+    function cancelCentrifugeRedeemRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.cancelCentrifugeRedeemRequest(_centrifugeRequestParams(token));
     }
 
-    function claimCentrifugeCancelRedeemRequest(address token) external {
+    function claimCentrifugeCancelRedeemRequest(address token) external nonReentrant {
         _checkRole(RELAYER);
         CentrifugeLib.claimCentrifugeCancelRedeemRequest(_centrifugeRequestParams(token));
     }
@@ -437,6 +441,7 @@ contract MainnetController is AccessControl {
         uint16  destinationCentrifugeId
     )
         external payable
+        nonReentrant
     {
         _checkRole(RELAYER);
         CentrifugeLib.transferSharesCentrifuge(
@@ -456,7 +461,7 @@ contract MainnetController is AccessControl {
     /*** Relayer Aave functions                                                                 ***/
     /**********************************************************************************************/
 
-    function depositAave(address aToken, uint256 amount) external {
+    function depositAave(address aToken, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         AaveLib.deposit(AaveLib.DepositParams({
             proxy       : proxy,
@@ -470,6 +475,7 @@ contract MainnetController is AccessControl {
 
     function withdrawAave(address aToken, uint256 amount)
         external
+        nonReentrant
         returns (uint256 amountWithdrawn)
     {
         _checkRole(RELAYER);
@@ -493,7 +499,7 @@ contract MainnetController is AccessControl {
         uint256 amountIn,
         uint256 minAmountOut
     )
-        external returns (uint256 amountOut)
+        external nonReentrant returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
 
@@ -515,7 +521,7 @@ contract MainnetController is AccessControl {
         uint256[] memory depositAmounts,
         uint256 minLpAmount
     )
-        external returns (uint256 shares)
+        external nonReentrant returns (uint256 shares)
     {
         _checkRole(RELAYER);
 
@@ -536,7 +542,7 @@ contract MainnetController is AccessControl {
         uint256   lpBurnAmount,
         uint256[] memory minWithdrawAmounts
     )
-        external returns (uint256[] memory withdrawnTokens)
+        external nonReentrant returns (uint256[] memory withdrawnTokens)
     {
         _checkRole(RELAYER);
 
@@ -561,7 +567,7 @@ contract MainnetController is AccessControl {
         uint256 minAmountOut,
         uint24  swapMaxTickDelta
     )
-        external returns (uint256 amountOut)
+        external nonReentrant returns (uint256 amountOut)
     {
         _checkRole(RELAYER);
 
@@ -592,6 +598,7 @@ contract MainnetController is AccessControl {
         uint256                   deadline
     )
         external
+        nonReentrant
         returns (uint256 tokenId_, uint128 liquidity_, uint256 amount0_, uint256 amount1_)
     {
         _checkRole(RELAYER);
@@ -629,6 +636,7 @@ contract MainnetController is AccessControl {
     )
         external
         onlyRole(RELAYER)
+        nonReentrant
         returns (uint256 amount0Collected, uint256 amount1Collected)
     {
         return UniswapV3Lib.removeLiquidity(
@@ -654,7 +662,7 @@ contract MainnetController is AccessControl {
     /*** Relayer Ethena functions                                                               ***/
     /**********************************************************************************************/
 
-    function setDelegatedSigner(address delegatedSigner) external {
+    function setDelegatedSigner(address delegatedSigner) external nonReentrant {
         _checkRole(RELAYER);
 
         proxy.doCall(
@@ -663,7 +671,7 @@ contract MainnetController is AccessControl {
         );
     }
 
-    function removeDelegatedSigner(address delegatedSigner) external {
+    function removeDelegatedSigner(address delegatedSigner) external nonReentrant {
         _checkRole(RELAYER);
 
         proxy.doCall(
@@ -673,19 +681,19 @@ contract MainnetController is AccessControl {
     }
 
     // Note that Ethena's mint/redeem per-block limits include other users
-    function prepareUSDeMint(uint256 usdcAmount) external {
+    function prepareUSDeMint(uint256 usdcAmount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(LIMIT_USDE_MINT, usdcAmount);
         ERC20Lib.approve(proxy, address(usdc), address(ethenaMinter), usdcAmount);
     }
 
-    function prepareUSDeBurn(uint256 usdeAmount) external {
+    function prepareUSDeBurn(uint256 usdeAmount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(LIMIT_USDE_BURN, usdeAmount);
         ERC20Lib.approve(proxy, address(usde), address(ethenaMinter), usdeAmount);
     }
 
-    function cooldownAssetsSUSDe(uint256 usdeAmount) external {
+    function cooldownAssetsSUSDe(uint256 usdeAmount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(LIMIT_SUSDE_COOLDOWN, usdeAmount);
 
@@ -698,6 +706,7 @@ contract MainnetController is AccessControl {
     // NOTE: !!! Rate limited at end of function !!!
     function cooldownSharesSUSDe(uint256 susdeAmount)
         external
+        nonReentrant
         returns (uint256 cooldownAmount)
     {
         _checkRole(RELAYER);
@@ -713,7 +722,7 @@ contract MainnetController is AccessControl {
         rateLimits.triggerRateLimitDecrease(LIMIT_SUSDE_COOLDOWN, cooldownAmount);
     }
 
-    function unstakeSUSDe() external {
+    function unstakeSUSDe() external nonReentrant {
         _checkRole(RELAYER);
 
         proxy.doCall(
@@ -733,7 +742,7 @@ contract MainnetController is AccessControl {
         address pendleMarket,
         uint256 pyAmountIn,
         uint256 minAmountOut
-    ) external {
+    ) external nonReentrant {
         _checkRole(RELAYER);
 
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
@@ -754,6 +763,7 @@ contract MainnetController is AccessControl {
     function swapUSDSToDAI(uint256 usdsAmount)
         external
         onlyRole(RELAYER)
+        nonReentrant
     {
         // Approve USDS to DaiUsds migrator from the proxy (assumes the proxy has enough USDS)
         ERC20Lib.approve(proxy, address(usds), address(daiUsds), usdsAmount);
@@ -770,6 +780,7 @@ contract MainnetController is AccessControl {
     function swapDAIToUSDS(uint256 daiAmount)
         external
         onlyRole(RELAYER)
+        nonReentrant
     {
         // Approve DAI to DaiUsds migrator from the proxy (assumes the proxy has enough DAI)
         ERC20Lib.approve(proxy, address(dai), address(daiUsds), daiAmount);
@@ -789,7 +800,7 @@ contract MainnetController is AccessControl {
 
     // NOTE: The param `usdcAmount` is denominated in 1e6 precision to match how PSM uses
     //       USDC precision for both `buyGemNoFee` and `sellGemNoFee`
-    function swapUSDSToUSDC(uint256 usdcAmount) external {
+    function swapUSDSToUSDC(uint256 usdcAmount) external nonReentrant {
         _checkRole(RELAYER);
 
         PSMLib.swapUSDSToUSDC(PSMLib.SwapUSDSToUSDCParams({
@@ -805,7 +816,7 @@ contract MainnetController is AccessControl {
         }));
     }
 
-    function swapUSDCToUSDS(uint256 usdcAmount) external {
+    function swapUSDCToUSDS(uint256 usdcAmount) external nonReentrant {
         _checkRole(RELAYER);
 
         PSMLib.swapUSDCToUSDS(PSMLib.SwapUSDCToUSDSParams({
@@ -827,6 +838,7 @@ contract MainnetController is AccessControl {
         uint32  destinationEndpointId
     )
         external payable
+        nonReentrant
     {
         _checkRole(RELAYER);
         LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
@@ -860,7 +872,7 @@ contract MainnetController is AccessControl {
     /*** Relayer Merkl functions                                                                ***/
     /**********************************************************************************************/
 
-    function toggleOperatorMerkl(address distributor, address operator) external {
+    function toggleOperatorMerkl(address distributor, address operator) external nonReentrant {
         _checkRole(RELAYER);
         MerklLib.toggleOperator(MerklLib.MerklToggleOperatorParams({
             proxy       : proxy,
@@ -874,7 +886,7 @@ contract MainnetController is AccessControl {
     /*** Relayer bridging functions                                                             ***/
     /**********************************************************************************************/
 
-    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain) external {
+    function transferUSDCToCCTP(uint256 usdcAmount, uint32 destinationDomain) external nonReentrant {
         _checkRole(RELAYER);
 
         CCTPLib.transferUSDCToCCTP(CCTPLib.TransferUSDCToCCTPParams({

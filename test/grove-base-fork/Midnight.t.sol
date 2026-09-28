@@ -1380,12 +1380,23 @@ contract HostileCallback {
 
     uint256 public allowanceSeen;  // the proxy's live approval at the time of the callback
 
+    address public controller;
+    address public reentryDestination;
+
+    bool  public reenteredController;
+    bytes public reentryRevertData;
+
     constructor(address midnight_) {
         midnight = midnight_;
     }
 
     function approveMidnight(address token) external {
         IERC20(token).approve(midnight, type(uint256).max);
+    }
+
+    function setControllerReentry(address controller_, address destination_) external {
+        controller         = controller_;
+        reentryDestination = destination_;
     }
 
     function onSell(
@@ -1420,6 +1431,20 @@ contract HostileCallback {
         try IMidnightTestHarness(midnight).repay(market, 0, address(this), proxy, "") {
             repaid = true;
         } catch {}
+
+        if (controller != address(0)) {
+            (bool ok, bytes memory ret) = controller.call(
+                abi.encodeWithSignature(
+                    "transferAsset(address,address,uint256)",
+                    market.loanToken,
+                    reentryDestination,
+                    units
+                )
+            );
+
+            reenteredController = ok;
+            reentryRevertData   = ret;
+        }
 
         return CALLBACK_SUCCESS;
     }
@@ -1485,6 +1510,45 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         assertEq(_credit(),                                        units);
         assertEq(midnight.debt(marketId, address(almProxy)),        0);
         assertFalse(harness.isAuthorized(address(almProxy), address(hostile)));
+    }
+
+    function test_buyMidnight_hostileMakerCallbackCannotReenterController() public {
+        address destination = makeAddr("reentry-destination");
+
+        vm.startPrank(GROVE_EXECUTOR);
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(
+                foreignController.LIMIT_ASSET_TRANSFER(),
+                address(loanToken),
+                destination
+            ),
+            5_000_000 * loanUnit,
+            (1_000_000 * loanUnit) / 1 days
+        );
+
+        foreignController.grantRole(RELAYER, address(hostile));
+
+        vm.stopPrank();
+
+        hostile.setControllerReentry(address(foreignController), destination);
+
+        uint256 units = 1_000e18;
+
+        Offer memory offer = _offer(false, TICK_98, uint128(units));
+        offer.callback     = address(hostile);
+        offer.callbackData = abi.encode(address(almProxy), _attackOffer(units), units);
+
+        _buy(offer, units, type(uint256).max);
+
+        assertFalse(hostile.reenteredController());
+
+        assertEq(
+            hostile.reentryRevertData(),
+            abi.encodeWithSignature("ReentrancyGuardReentrantCall()")
+        );
+
+        assertEq(loanToken.balanceOf(destination), 0);
     }
 
     function test_buyMidnight_hostileMakerCallbackCannotPartiallyFill() public {
