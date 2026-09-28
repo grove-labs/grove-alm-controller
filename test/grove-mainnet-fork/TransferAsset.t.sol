@@ -3,7 +3,7 @@ pragma solidity >=0.8.0;
 
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
-import { MockTokenReturnFalse } from "../unit/mocks/MockTokens.sol";
+import { MockTokenReentrant, MockTokenReturnFalse } from "../unit/mocks/MockTokens.sol";
 
 import "./ForkTestBase.t.sol";
 
@@ -80,6 +80,32 @@ contract MainnetControllerTransferAssetFailureTests is TransferAssetBaseTest {
 
         vm.prank(relayer);
         vm.expectRevert("ERC20Lib/transfer-failed");
+        mainnetController.transferAsset(address(token), receiver, 1_000_000e18);
+    }
+
+    function test_transferAsset_reentrancy() external {
+        MockTokenReentrant token = new MockTokenReentrant(address(mainnetController), receiver);
+
+        vm.startPrank(Ethereum.GROVE_PROXY);
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(
+                mainnetController.LIMIT_ASSET_TRANSFER(),
+                address(token),
+                receiver
+            ),
+            2_000_000e18,
+            uint256(2_000_000e18) / 1 days
+        );
+
+        mainnetController.grantRole(RELAYER, address(token));
+
+        vm.stopPrank();
+
+        deal(address(token), address(almProxy), 2_000_000e18);
+
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("ReentrancyGuardReentrantCall()"));
         mainnetController.transferAsset(address(token), receiver, 1_000_000e18);
     }
 
