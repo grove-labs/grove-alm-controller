@@ -759,7 +759,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         MidnightLib.Fill[] memory fills,
         uint256                   maxAssetsIn
     )
-        external returns (uint256 assetsSpent)
+        external nonReentrant returns (uint256 assetsSpent)
     {
         _checkRole(RELAYER);
 
@@ -771,7 +771,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         MidnightLib.Fill[] memory fills,
         uint256                   minAssetsOut
     )
-        external returns (uint256 assetsReceived)
+        external nonReentrant returns (uint256 assetsReceived)
     {
         _checkRole(RELAYER);
 
@@ -779,7 +779,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
-        external returns (uint256 assetsWithdrawn)
+        external nonReentrant returns (uint256 assetsWithdrawn)
     {
         _checkRole(RELAYER);
 
