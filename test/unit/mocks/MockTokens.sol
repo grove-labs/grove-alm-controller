@@ -170,3 +170,32 @@ contract MockERC20Decimals is ERC20 {
     }
 
 }
+
+interface IReentrantCallTargetLike {
+    function transferAsset(address asset, address destination, uint256 amount) external;
+}
+
+contract MockTokenReentrant is ERC20 {
+
+    address public immutable controller;
+    address public immutable destination;
+
+    bool internal entered;
+
+    constructor(address controller_, address destination_)
+        ERC20("MockReentrant", "MockReentrant")
+    {
+        controller  = controller_;
+        destination = destination_;
+    }
+
+    function transfer(address to, uint256 value) public override returns (bool) {
+        if (!entered) {
+            entered = true;
+            IReentrantCallTargetLike(controller).transferAsset(address(this), destination, value);
+        }
+
+        return super.transfer(to, value);
+    }
+
+}
