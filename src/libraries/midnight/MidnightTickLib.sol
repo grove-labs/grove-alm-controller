@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/libraries/TickLib.sol.
-// `priceToTick` omitted; `require(cond, CustomError())` rewritten as if/revert for solc 0.8.25.
+// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/libraries/TickLib.sol.
+// `priceToTick` omitted; the tick bound uses a repo-style require message.
 
 int256  constant LN_ONE_PLUS_DELTA = 0.004987541511039073e18;  // floor(ln(1.005) * 1e18)
 uint256 constant MAX_TICK          = 6744;
@@ -13,8 +13,6 @@ uint256 constant PRICE_ROUNDING_STEP = 1e11;
 library MidnightTickLib {
 
     using MidnightTickLib for uint256;
-
-    error TickOutOfRange();
 
     /// @dev Returns x / d rounded to the nearest integer with ties rounded down, without checking for overflow.
     function divHalfDownUnchecked(uint256 x, uint256 d) internal pure returns (uint256) {
@@ -44,7 +42,7 @@ library MidnightTickLib {
     }
 
     function tickToPrice(uint256 tick) internal pure returns (uint256) {
-        if (tick > MAX_TICK) revert TickOutOfRange();
+        require(tick <= MAX_TICK, "MidnightTickLib/tick-out-of-range");
         unchecked {
             return uint256(1e36)
                     .divHalfDownUnchecked(1e18 + wExp(LN_ONE_PLUS_DELTA * (int256(MAX_TICK / 2) - int256(tick))))

@@ -194,7 +194,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, params.marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeMarketKey(params.buyRateLimitId, params.marketId),
+            RateLimitHelpers.makeBytes32Key(params.buyRateLimitId, params.marketId),
             assetsSpent
         );
     }
@@ -210,8 +210,6 @@ library MidnightLib {
 
         _requireMarketId(market, params.marketId);
 
-        // No ceiling on the loss factor here: a market that has turned against the position is
-        // exactly the one that has to stay exitable.
         uint256 timeToMaturity = _timeToMaturity(market.maturity);
 
         ( uint256 creditBefore, uint256 pendingFee ) =
@@ -243,7 +241,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, params.marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeMarketKey(params.sellRateLimitId, params.marketId),
+            RateLimitHelpers.makeBytes32Key(params.sellRateLimitId, params.marketId),
             assetsReceived
         );
 
@@ -283,7 +281,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeMarketKey(params.redeemRateLimitId, marketId),
+            RateLimitHelpers.makeBytes32Key(params.redeemRateLimitId, marketId),
             assetsWithdrawn
         );
 
@@ -313,7 +311,6 @@ library MidnightLib {
 
             if (ctx.selling) {
                 // Credit can shrink from fee accrual and slashing between quote and take.
-                // Bounded before the rails so an offer credit cannot reach never gates the batch.
                 if (units > ctx.creditCap) units = ctx.creditCap;
                 if (units == 0)            break;
 
@@ -408,7 +405,6 @@ library MidnightLib {
     function _position(Market memory market, bytes32 marketId, address user)
         internal view returns (uint256 credit, uint256 pendingFee)
     {
-        // Stored credit is stale; the view applies pending fee accrual and slashing.
         ( credit, pendingFee, ) =
             IMidnight(market.midnight).updatePositionView(market, marketId, user);
     }
@@ -425,7 +421,7 @@ library MidnightLib {
     )
         internal
     {
-        bytes32 key = RateLimitHelpers.makeMarketKey(buyRateLimitId, marketId);
+        bytes32 key = RateLimitHelpers.makeBytes32Key(buyRateLimitId, marketId);
 
         if (rateLimits.getRateLimitData(key).maxAmount != 0) {
             rateLimits.triggerRateLimitIncrease(key, amount);

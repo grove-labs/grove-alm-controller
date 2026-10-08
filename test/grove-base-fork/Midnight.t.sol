@@ -20,6 +20,8 @@ interface IMidnightTestHarness {
     function setMarketContinuousFee(bytes32 id, uint256 newContinuousFee) external;
     function setMarketSettlementFee(bytes32 id, uint256 index, uint256 newSettlementFee) external;
     function setIsAuthorized(address authorized, bool newIsAuthorized, address onBehalf) external;
+    function tickSpacing(bytes32 id) external view returns (uint8);
+    function touchMarket(Market memory market) external returns (bytes32);
     function supplyCollateral(Market memory market, uint256 collateralIndex, uint256 assets, address onBehalf)
         external;
     function repay(Market memory market, uint256 units, address onBehalf, address callback, bytes calldata data)
@@ -69,6 +71,31 @@ contract MockOracle {
 
 }
 
+// Burns an extra amount from the payer on every pull, so the proxy loses more than it approved.
+contract DrainingLoanToken is MockERC20 {
+
+    address public payer;
+    uint256 public drain;
+
+    constructor(uint8 decimals_) MockERC20("Loan", "LOAN", decimals_) {}
+
+    function setDrain(address payer_, uint256 drain_) external {
+        payer = payer_;
+        drain = drain_;
+    }
+
+    function transferFrom(address owner_, address recipient_, uint256 amount_)
+        public override returns (bool)
+    {
+        super.transferFrom(owner_, recipient_, amount_);
+
+        if (drain != 0 && owner_ == payer) _burn(payer, drain);
+
+        return true;
+    }
+
+}
+
 contract MidnightTestBase is ForkTestBase {
 
     address constant MIDNIGHT = 0xAdedD8ab6dE832766Fedf0FaC4992E5C4D3EA18A;
@@ -84,7 +111,7 @@ contract MidnightTestBase is ForkTestBase {
 
     uint256 constant MATURITY_PERIOD = 180 days;
 
-    // Midnight's own ceiling, as the annual rate the config now speaks in: percent_bp_cbp.
+    // Midnight's own ceiling: 1% a year, in centi-basis points.
     uint16 constant MAX_CONTINUOUS_FEE_CBP = 1_00_00;
 
     // Basis points a year, set wide enough that the tick bounds are what bind on the happy paths.
@@ -120,13 +147,17 @@ contract MidnightTestBase is ForkTestBase {
     function _loanTokenDecimals()       internal virtual pure returns (uint8) { return 18; }
     function _collateralTokenDecimals() internal virtual pure returns (uint8) { return 18; }
 
+    function _newLoanToken() internal virtual returns (MockERC20) {
+        return new MockERC20("Loan", "LOAN", _loanTokenDecimals());
+    }
+
     function setUp() public virtual override {
         super.setUp();
 
         loanUnit       = 10 ** _loanTokenDecimals();
         collateralUnit = 10 ** _collateralTokenDecimals();
 
-        loanToken       = new MockERC20("Loan",       "LOAN", _loanTokenDecimals());
+        loanToken       = _newLoanToken();
         collateralToken = new MockERC20("Collateral", "COLL", _collateralTokenDecimals());
 
         oracle   = new MockOracle(1e36 * loanUnit / collateralUnit);
@@ -145,7 +176,7 @@ contract MidnightTestBase is ForkTestBase {
             oracle            : address(oracle)
         }));
 
-        marketId = midnight.touchMarket(market);
+        marketId = harness.touchMarket(market);
 
         assertEq(marketId, MidnightIdLib.toId(market));
 
@@ -165,9 +196,9 @@ contract MidnightTestBase is ForkTestBase {
     }
 
     function _wireRateLimitsAndConfig() internal {
-        buyKey    = RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_BUY(),    marketId);
-        sellKey   = RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_SELL(),   marketId);
-        redeemKey = RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_REDEEM(), marketId);
+        buyKey    = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_BUY(),    marketId);
+        sellKey   = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_SELL(),   marketId);
+        redeemKey = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_REDEEM(), marketId);
 
         vm.startPrank(GROVE_EXECUTOR);
 
@@ -341,7 +372,7 @@ contract MidnightTestBase is ForkTestBase {
 
 }
 
-contract ForeignControllerMidnightBuyTests is MidnightTestBase {
+contract ForeignControllerMidnightBuyFailureTests is MidnightTestBase {
 
     function test_buyMidnight_notRelayer() public {
         MidnightLib.Fill[] memory fills = _batch(_offer(false, TICK_98, 1e18), 1e18);
@@ -358,6 +389,11 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/empty-batch");
         foreignController.buyMidnight(marketId, new MidnightLib.Fill[](0), 1e18);
+    }
+
+    function test_buyMidnight_tickOutOfRange() public {
+        vm.expectRevert("MidnightTickLib/tick-out-of-range");
+        _buy(_offer(false, MAX_TICK + 1, 1e18), 1e18, type(uint256).max);
     }
 
     function test_buyMidnight_maxAssetsInNotSet() public {
@@ -571,13 +607,13 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
         foreignController.buyMidnight(untouchedId, _batch(offer, 1e18), 1e18);
 
-        assertEq(midnight.touchMarket(untouched), untouchedId);
+        assertEq(harness.touchMarket(untouched), untouchedId);
 
         vm.prank(maker);
         harness.supplyCollateral(untouched, 0, 1_000_000e18, maker);
 
         bytes32 untouchedBuyKey =
-            RateLimitHelpers.makeMarketKey(foreignController.LIMIT_MIDNIGHT_BUY(), untouchedId);
+            RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_BUY(), untouchedId);
 
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(untouchedBuyKey, 5_000_000e18, 0);
@@ -648,6 +684,24 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey), 0);
     }
 
+    function test_buyMidnight_batchIsAtomic() public {
+        MidnightLib.Fill[] memory fills = _batch(
+            _offer(false, TICK_98, 1_000e18, "group-0", address(ratifier)), 1_000e18,
+            _offer(false, TICK_99 + TICK_SPACING, 1_000e18, "group-1", address(ratifier)), 1_000e18
+        );
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/buy-price-too-high");
+        foreignController.buyMidnight(marketId, fills, type(uint256).max);
+
+        assertEq(_credit(),                              0);
+        assertEq(loanToken.balanceOf(address(almProxy)), 10_000_000e18);
+    }
+
+}
+
+contract ForeignControllerMidnightBuySuccessTests is MidnightTestBase {
+
     function test_buyMidnight() public {
         uint256 units          = 1_000_000e18;
         uint256 expectedAssets = _buyerAssets(units, TICK_98);
@@ -691,23 +745,9 @@ contract ForeignControllerMidnightBuyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey),           5_000_000e18 - expectedAssets);
     }
 
-    function test_buyMidnight_batchIsAtomic() public {
-        MidnightLib.Fill[] memory fills = _batch(
-            _offer(false, TICK_98, 1_000e18, "group-0", address(ratifier)), 1_000e18,
-            _offer(false, TICK_99 + TICK_SPACING, 1_000e18, "group-1", address(ratifier)), 1_000e18
-        );
-
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert("MidnightLib/buy-price-too-high");
-        foreignController.buyMidnight(marketId, fills, type(uint256).max);
-
-        assertEq(_credit(),                              0);
-        assertEq(loanToken.balanceOf(address(almProxy)), 10_000_000e18);
-    }
-
 }
 
-contract ForeignControllerMidnightSellTests is MidnightTestBase {
+contract MidnightSellTestBase is MidnightTestBase {
 
     uint256 constant SEEDED_UNITS = 1_000_000e18;
 
@@ -718,6 +758,10 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
 
         buySpend = _seedCredit(SEEDED_UNITS);
     }
+
+}
+
+contract ForeignControllerMidnightSellFailureTests is MidnightSellTestBase {
 
     function test_sellMidnight_notRelayer() public {
         MidnightLib.Fill[] memory fills = _batch(_offer(true, TICK_99, 1e18), 1e18);
@@ -733,6 +777,12 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
     function test_sellMidnight_minAssetsOutNotSet() public {
         vm.expectRevert("MidnightLib/min-assets-out-not-set");
         _sell(_offer(true, TICK_99, 1e18), 1e18, 0);
+    }
+
+    function test_sellMidnight_emptyBatch() public {
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/empty-batch");
+        foreignController.sellMidnight(marketId, new MidnightLib.Fill[](0), 1e18);
     }
 
     function test_sellMidnight_sellNotEnabled() public {
@@ -864,6 +914,24 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 0);
     }
 
+    function test_sellMidnight_assetsBasedOfferNotTrimmed() public {
+        uint256 fullAssets = _sellerAssets(SEEDED_UNITS, TICK_99);
+
+        Offer memory offer = _offer(true, TICK_99, uint128(SEEDED_UNITS));
+
+        offer.maxUnits  = 0;
+        offer.maxAssets = uint128(fullAssets / 2);
+
+        vm.expectRevert(abi.encodeWithSignature("ConsumedAssets()"));
+        _sell(offer, SEEDED_UNITS, 1);
+
+        assertEq(_sell(offer, SEEDED_UNITS / 2, 1), fullAssets / 2);
+    }
+
+}
+
+contract ForeignControllerMidnightSellSuccessTests is MidnightSellTestBase {
+
     function test_sellMidnight() public {
         uint256 units    = 400_000e18;
         uint256 expected = _sellerAssets(units, TICK_99);
@@ -939,20 +1007,6 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
 
     // The clamp bounds our credit, not the maker's asset budget, so an ask that overruns an
     // assets-capped offer is rejected by Midnight rather than trimmed to fit.
-    function test_sellMidnight_assetsBasedOfferNotTrimmed() public {
-        uint256 fullAssets = _sellerAssets(SEEDED_UNITS, TICK_99);
-
-        Offer memory offer = _offer(true, TICK_99, uint128(SEEDED_UNITS));
-
-        offer.maxUnits  = 0;
-        offer.maxAssets = uint128(fullAssets / 2);
-
-        vm.expectRevert(abi.encodeWithSignature("ConsumedAssets()"));
-        _sell(offer, SEEDED_UNITS, 1);
-
-        assertEq(_sell(offer, SEEDED_UNITS / 2, 1), fullAssets / 2);
-    }
-
     function test_sellMidnight_batch() public {
         uint256 units0 = 600_000e18;
         uint256 units1 = 400_000e18;
@@ -1166,7 +1220,7 @@ contract ForeignControllerMidnightSellFloorFeeTests is MidnightTestBase {
 
 }
 
-contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
+contract MidnightRedeemTestBase is MidnightTestBase {
 
     uint256 constant SEEDED_UNITS = 1_000_000e18;
 
@@ -1176,6 +1230,10 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         _seedCredit(SEEDED_UNITS);
     }
 
+}
+
+contract ForeignControllerMidnightRedeemFailureTests is MidnightRedeemTestBase {
+
     function test_redeemMidnight_notRelayer() public {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
@@ -1183,15 +1241,6 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
             RELAYER
         ));
         foreignController.redeemMidnight(marketId, 1e18, 0);
-    }
-
-    function test_redeemMidnight_invalidMidnight() public {
-        Market memory otherMarket = market;
-        otherMarket.midnight = makeAddr("otherMidnight");
-
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert("MidnightLib/market-not-onboarded");
-        foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
     }
 
     function test_redeemMidnight_zeroMinAssetsOut() public {
@@ -1243,6 +1292,32 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         assertEq(_redeem(1_000e18, 1_000e18), 1_000e18);
     }
 
+    function test_redeemMidnight_marketNotOnboarded() public {
+        Market memory otherMarket = market;
+        otherMarket.maturity = market.maturity + 1 days;
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/market-not-onboarded");
+        foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
+    }
+
+    function test_redeemMidnight_marketNotCreated() public {
+        bytes32 unknownId = keccak256("unknown");
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMidnightMarketConfig(
+            unknownId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+        );
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
+        foreignController.redeemMidnight(unknownId, 1e18, 1);
+    }
+
+}
+
+contract ForeignControllerMidnightRedeemSuccessTests is MidnightRedeemTestBase {
+
     function test_redeemMidnight() public {
         _repay(SEEDED_UNITS);
 
@@ -1281,26 +1356,24 @@ contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
         assertEq(_credit(),       0);
     }
 
-    function test_redeemMidnight_marketNotOnboarded() public {
-        Market memory otherMarket = market;
-        otherMarket.maturity = market.maturity + 1 days;
+}
 
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert("MidnightLib/market-not-onboarded");
-        foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
+contract ForeignControllerMidnightDrainingTokenTests is MidnightTestBase {
+
+    function _newLoanToken() internal override returns (MockERC20) {
+        return new DrainingLoanToken(_loanTokenDecimals());
     }
 
-    function test_redeemMidnight_marketNotCreated() public {
-        bytes32 unknownId = keccak256("unknown");
+    function test_buyMidnight_maxAssetsInExceeded() public {
+        uint256 units = 1_000e18;
+        uint256 cost  = _buyerAssets(units, TICK_98);
 
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            unknownId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
-        );
+        assertEq(_buy(_offer(false, TICK_98, uint128(units)), units, cost), cost);
 
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
-        foreignController.redeemMidnight(unknownId, 1e18, 1);
+        DrainingLoanToken(address(loanToken)).setDrain(address(almProxy), 1);
+
+        vm.expectRevert("MidnightLib/max-assets-in-exceeded");
+        _buy(_offer(false, TICK_98, uint128(units)), units, cost);
     }
 
 }
@@ -1520,6 +1593,29 @@ contract HostileCallback {
         reentryDestination = destination_;
     }
 
+    function onBuy(bytes32, Market memory market, uint256, uint256, uint256, address, bytes memory data)
+        external returns (bytes32)
+    {
+        ( , , uint256 units) = abi.decode(data, (address, Offer, uint256));
+
+        _reenterController(market.loanToken, units);
+
+        return CALLBACK_SUCCESS;
+    }
+
+    function _reenterController(address loanToken, uint256 units) internal {
+        if (controller == address(0)) return;
+
+        (bool ok, bytes memory ret) = controller.call(
+            abi.encodeWithSignature(
+                "transferAsset(address,address,uint256)", loanToken, reentryDestination, units
+            )
+        );
+
+        reenteredController = ok;
+        reentryRevertData   = ret;
+    }
+
     function onSell(
         bytes32,
         Market  memory market,
@@ -1553,19 +1649,7 @@ contract HostileCallback {
             repaid = true;
         } catch {}
 
-        if (controller != address(0)) {
-            (bool ok, bytes memory ret) = controller.call(
-                abi.encodeWithSignature(
-                    "transferAsset(address,address,uint256)",
-                    market.loanToken,
-                    reentryDestination,
-                    units
-                )
-            );
-
-            reenteredController = ok;
-            reentryRevertData   = ret;
-        }
+        _reenterController(market.loanToken, units);
 
         return CALLBACK_SUCCESS;
     }
@@ -1661,6 +1745,51 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         offer.callbackData = abi.encode(address(almProxy), _attackOffer(units), units);
 
         _buy(offer, units, type(uint256).max);
+
+        assertFalse(hostile.reenteredController());
+
+        assertEq(
+            hostile.reentryRevertData(),
+            abi.encodeWithSignature("ReentrancyGuardReentrantCall()")
+        );
+
+        assertEq(loanToken.balanceOf(destination), 0);
+    }
+
+    function _allowReentryTransfer(address destination) internal {
+        vm.startPrank(GROVE_EXECUTOR);
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(
+                foreignController.LIMIT_ASSET_TRANSFER(),
+                address(loanToken),
+                destination
+            ),
+            5_000_000 * loanUnit,
+            (1_000_000 * loanUnit) / 1 days
+        );
+
+        foreignController.grantRole(RELAYER, address(hostile));
+
+        vm.stopPrank();
+
+        hostile.setControllerReentry(address(foreignController), destination);
+    }
+
+    function test_sellMidnight_hostileMakerCallbackCannotReenterController() public {
+        address destination = makeAddr("reentry-destination");
+
+        _allowReentryTransfer(destination);
+
+        uint256 units = 1_000e18;
+
+        _seedCredit(units);
+
+        Offer memory offer = _offer(true, TICK_99, uint128(units));
+        offer.callback     = address(hostile);
+        offer.callbackData = abi.encode(address(almProxy), _attackOffer(units), units);
+
+        _sell(offer, units, 1);
 
         assertFalse(hostile.reenteredController());
 
@@ -2014,7 +2143,7 @@ contract ForeignControllerMidnightLiveMarketTests is MidnightTestBase {
 
         assertEq(loanToken.decimals(),           6);
         assertEq(collateralToken.decimals(),     8);
-        assertEq(midnight.tickSpacing(marketId), TICK_SPACING);
+        assertEq(harness.tickSpacing(marketId), TICK_SPACING);
         assertGt(market.maturity,                block.timestamp);
 
         deal(address(loanToken),       maker,             100_000_000 * loanUnit);

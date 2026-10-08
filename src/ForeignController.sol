@@ -752,12 +752,10 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /*** Relayer Midnight functions                                                             ***/
     /**********************************************************************************************/
 
-    // NOTE: A new market has to be touched once on Midnight, by anyone, before it trades here.
-
     function buyMidnight(
-        bytes32                   marketId,
+        bytes32            marketId,
         MidnightLib.Fill[] memory fills,
-        uint256                   maxAssetsIn
+        uint256            maxAssetsIn
     )
         external nonReentrant returns (uint256 assetsSpent)
     {
@@ -767,9 +765,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function sellMidnight(
-        bytes32                   marketId,
+        bytes32            marketId,
         MidnightLib.Fill[] memory fills,
-        uint256                   minAssetsOut
+        uint256            minAssetsOut
     )
         external nonReentrant returns (uint256 assetsReceived)
     {
@@ -929,9 +927,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function _midnightTakeParams(
-        bytes32                   marketId,
+        bytes32            marketId,
         MidnightLib.Fill[] memory fills,
-        uint256                   assetsBound
+        uint256            assetsBound
     )
         internal view returns (MidnightLib.TakeParams memory)
     {
