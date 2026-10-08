@@ -19,6 +19,10 @@ library RateLimitHelpers {
         return keccak256(abi.encode(key, a, b, c));
     }
 
+    function makeBytes32Key(bytes32 key, bytes32 value) internal pure returns (bytes32) {
+        return keccak256(abi.encode(key, value));
+    }
+
     function makeDomainKey(bytes32 key, uint32 domain) internal pure returns (bytes32) {
         return keccak256(abi.encode(key, domain));
     }
