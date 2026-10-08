@@ -131,9 +131,10 @@ library MidnightLib {
     )
         internal pure returns (uint256)
     {
-        return _yieldPrice(
-            maxYield, timeToMaturity, credit == 0 ? 0 : pendingFee * WAD / credit, true
-        );
+        // Nothing held is nothing to price, and par is the strictest floor.
+        if (credit == 0) return WAD;
+
+        return _yieldPrice(maxYield, timeToMaturity, pendingFee * WAD / credit, true);
     }
 
     /**********************************************************************************************/

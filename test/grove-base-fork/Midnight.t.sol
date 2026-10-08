@@ -1218,6 +1218,35 @@ contract ForeignControllerMidnightSellFloorFeeTests is MidnightTestBase {
         );
     }
 
+    // Upstream accrues the whole lien by maturity, which is what collapses the floor onto par.
+    function test_sellMidnight_postMaturityLienIsFullyAccrued() public {
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+
+        ( , uint128 pendingFeeBefore, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        assertGt(pendingFeeBefore, 0);
+
+        vm.warp(market.maturity + 1);
+
+        ( uint128 credit, uint128 pendingFee, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        assertEq(pendingFee, 0);
+        assertEq(_settlementFee(), 0);
+        assertEq(
+            MidnightLib.minSellPriceForPosition(SELL_YIELD, _timeToMaturity(), credit, pendingFee),
+            1e18
+        );
+
+        assertGe(MidnightTickLib.tickToPrice(TICK_99), MidnightTickLib.tickToPrice(TICK_98));
+
+        vm.expectRevert("MidnightLib/sell-yield-too-high");
+        _sell(_offer(true, TICK_99, uint128(credit)), credit, 1);
+    }
+
 }
 
 contract MidnightRedeemTestBase is MidnightTestBase {

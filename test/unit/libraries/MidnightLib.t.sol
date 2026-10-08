@@ -23,6 +23,17 @@ contract MidnightLibWrapper {
         return MidnightLib.minSellPrice(maxYield, timeToMaturity, continuousFee);
     }
 
+    function minSellPriceForPosition(
+        uint256 maxYield,
+        uint256 timeToMaturity,
+        uint256 credit,
+        uint256 pendingFee
+    )
+        public pure returns (uint256)
+    {
+        return MidnightLib.minSellPriceForPosition(maxYield, timeToMaturity, credit, pendingFee);
+    }
+
 }
 
 contract MidnightLibTestBase is UnitTestBase {
@@ -199,6 +210,55 @@ contract MidnightLibYieldPriceTests is MidnightLibTestBase {
         assertGe(sellFloor, buyCap);
         assertLe(sellFloor - buyCap, 1);
         assertLe(sellFloor, 1e18);
+    }
+
+}
+
+contract MidnightLibPositionFloorTests is MidnightLibTestBase {
+
+    // Only the fee per unit matters, so the same lien on a hundred times the credit prices alike.
+    function test_minSellPriceForPosition_pricesTheLienPerUnit() public view {
+        assertEq(wrapper.minSellPriceForPosition(4_00, 180 days, 1e18, 5e15), 975752283718430952);
+        assertEq(wrapper.minSellPriceForPosition(4_00, 180 days, 1e20, 5e17), 975752283718430952);
+
+        assertEq(
+            wrapper.minSellPriceForPosition(4_00, 180 days, 1e18, 0),
+            wrapper.minSellPrice(4_00, 180 days, 0)
+        );
+    }
+
+    // Nothing held is nothing to price, and a lien that has eaten its credit is worth nothing.
+    function test_minSellPriceForPosition_creditBoundaries() public view {
+        assertEq(wrapper.minSellPriceForPosition(4_00, 180 days, 0,    0),    1e18);
+        assertEq(wrapper.minSellPriceForPosition(4_00, 180 days, 1e18, 1e18), 0);
+    }
+
+    function testFuzz_minSellPriceForPosition_nonIncreasingInLien(uint256 pendingFee) public view {
+        pendingFee = bound(pendingFee, 1, 1e18);
+
+        assertLe(
+            wrapper.minSellPriceForPosition(4_00, 180 days, 1e18, pendingFee),
+            wrapper.minSellPriceForPosition(4_00, 180 days, 1e18, pendingFee - 1)
+        );
+    }
+
+    // A position's pending fee never exceeds its credit, so the payoff term cannot underflow.
+    function testFuzz_minSellPriceForPosition_withinPar(
+        uint256 maxYield,
+        uint256 timeToMaturity,
+        uint256 credit,
+        uint256 pendingFee
+    )
+        public view
+    {
+        maxYield       = bound(maxYield, 0, type(uint16).max);
+        timeToMaturity = bound(timeToMaturity, 0, MAX_TIME_TO_MATURITY);
+        credit         = bound(credit, 1, type(uint128).max);
+        pendingFee     = bound(pendingFee, 0, credit);
+
+        assertLe(
+            wrapper.minSellPriceForPosition(maxYield, timeToMaturity, credit, pendingFee), 1e18
+        );
     }
 
 }
