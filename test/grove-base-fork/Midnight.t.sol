@@ -1043,6 +1043,129 @@ contract ForeignControllerMidnightSellTests is MidnightTestBase {
 
 }
 
+contract ForeignControllerMidnightSellFloorFeeTests is MidnightTestBase {
+
+    uint256 constant SEEDED_UNITS = 1_000_000e18;
+
+    uint16 constant SELL_YIELD = 2_00;
+
+    function test_sellMidnight_yieldFloorIgnoresLaterFeeIncrease() public {
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+        _seedCredit(SEEDED_UNITS);
+
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
+        uint256 fee = _settlementFee();
+        uint256 ttm = _timeToMaturity();
+
+        uint256 positionFloor = MidnightLib.minSellPrice(SELL_YIELD, ttm, 0) + fee;
+        uint256 marketFloor   =
+            MidnightLib.minSellPrice(SELL_YIELD, ttm, MidnightLib.MAX_CONTINUOUS_FEE) + fee;
+
+        uint16 tick = TICK_99;
+        while (MidnightTickLib.tickToPrice(tick) >= positionFloor) tick -= TICK_SPACING;
+
+        assertGe(MidnightTickLib.tickToPrice(tick), marketFloor);
+        assertGe(MidnightTickLib.tickToPrice(tick), MidnightTickLib.tickToPrice(TICK_98) + fee);
+
+        uint256 units = SEEDED_UNITS / 2;
+
+        vm.expectRevert("MidnightLib/sell-yield-too-high");
+        _sell(_offer(true, tick, uint128(units)), units, 1);
+    }
+
+    function test_sellMidnight_yieldFloorIgnoresLaterFeeDecrease() public {
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+
+        harness.setMarketContinuousFee(marketId, 0);
+
+        uint256 fee = _settlementFee();
+        uint256 ttm = _timeToMaturity();
+
+        uint256 positionFloor =
+            MidnightLib.minSellPrice(SELL_YIELD, ttm, MidnightLib.MAX_CONTINUOUS_FEE) + fee;
+        uint256 marketFloor   = MidnightLib.minSellPrice(SELL_YIELD, ttm, 0) + fee;
+
+        uint16 tick = TICK_99;
+        while (MidnightTickLib.tickToPrice(tick) >= marketFloor) tick -= TICK_SPACING;
+
+        assertGe(MidnightTickLib.tickToPrice(tick), positionFloor);
+        assertGe(MidnightTickLib.tickToPrice(tick), MidnightTickLib.tickToPrice(TICK_98) + fee);
+
+        uint256 units = SEEDED_UNITS / 2;
+
+        assertEq(_sell(_offer(true, tick, uint128(units)), units, 1), _sellerAssets(units, tick));
+    }
+
+    function _blendedFloor() internal view returns (uint256) {
+        ( uint128 credit, uint128 pendingFee, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        assertEq(uint256(pendingFee) * 1e18 / credit, _capFraction() / 2);
+
+        return MidnightLib.minSellPriceForPosition(
+            SELL_YIELD, _timeToMaturity(), credit, pendingFee
+        ) + _settlementFee();
+    }
+
+    function _capFraction() internal view returns (uint256) {
+        return MidnightLib.MAX_CONTINUOUS_FEE * _timeToMaturity();
+    }
+
+    function test_sellMidnight_trancheFloorBlendsAcrossFeeIncrease() public {
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+
+        _seedCredit(SEEDED_UNITS);
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+
+        uint256 blendedFloor = _blendedFloor();
+        uint256 marketFloor  =
+            MidnightLib.minSellPrice(SELL_YIELD, _timeToMaturity(), MidnightLib.MAX_CONTINUOUS_FEE)
+            + _settlementFee();
+
+        assertLt(marketFloor, blendedFloor);
+
+        uint16 tick = TICK_99;
+        while (MidnightTickLib.tickToPrice(tick) >= blendedFloor) tick -= TICK_SPACING;
+
+        assertGe(MidnightTickLib.tickToPrice(tick), marketFloor);
+        assertGe(MidnightTickLib.tickToPrice(tick), MidnightTickLib.tickToPrice(TICK_98) + _settlementFee());
+
+        vm.expectRevert("MidnightLib/sell-yield-too-high");
+        _sell(_offer(true, tick, uint128(SEEDED_UNITS)), SEEDED_UNITS, 1);
+    }
+
+    function test_sellMidnight_trancheFloorBlendsAcrossFeeDecrease() public {
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+        harness.setMarketContinuousFee(marketId, 0);
+        _seedCredit(SEEDED_UNITS);
+
+        uint256 blendedFloor = _blendedFloor();
+        uint256 marketFloor  =
+            MidnightLib.minSellPrice(SELL_YIELD, _timeToMaturity(), 0) + _settlementFee();
+
+        assertLt(blendedFloor, marketFloor);
+
+        uint16 tick = TICK_99;
+        while (MidnightTickLib.tickToPrice(tick) >= marketFloor) tick -= TICK_SPACING;
+
+        assertGe(MidnightTickLib.tickToPrice(tick), blendedFloor);
+        assertGe(MidnightTickLib.tickToPrice(tick), MidnightTickLib.tickToPrice(TICK_98) + _settlementFee());
+
+        assertEq(
+            _sell(_offer(true, tick, uint128(SEEDED_UNITS)), SEEDED_UNITS, 1),
+            _sellerAssets(SEEDED_UNITS, tick)
+        );
+    }
+
+}
+
 contract ForeignControllerMidnightRedeemTests is MidnightTestBase {
 
     uint256 constant SEEDED_UNITS = 1_000_000e18;

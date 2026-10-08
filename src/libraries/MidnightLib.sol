@@ -112,14 +112,28 @@ library MidnightLib {
     function maxBuyPrice(uint256 minYield, uint256 timeToMaturity, uint256 continuousFee)
         internal pure returns (uint256)
     {
-        return _yieldPrice(minYield, timeToMaturity, continuousFee, false);
+        return _yieldPrice(minYield, timeToMaturity, continuousFee * timeToMaturity, false);
     }
 
     // Lowest net price a sell can accept and still give up at most `maxYield` basis points a year.
     function minSellPrice(uint256 maxYield, uint256 timeToMaturity, uint256 continuousFee)
         internal pure returns (uint256)
     {
-        return _yieldPrice(maxYield, timeToMaturity, continuousFee, true);
+        return _yieldPrice(maxYield, timeToMaturity, continuousFee * timeToMaturity, true);
+    }
+
+    // Midnight crystallizes the fee at purchase, so the market rate can move after and this cannot.
+    function minSellPriceForPosition(
+        uint256 maxYield,
+        uint256 timeToMaturity,
+        uint256 credit,
+        uint256 pendingFee
+    )
+        internal pure returns (uint256)
+    {
+        return _yieldPrice(
+            maxYield, timeToMaturity, credit == 0 ? 0 : pendingFee * WAD / credit, true
+        );
     }
 
     /**********************************************************************************************/
@@ -196,19 +210,21 @@ library MidnightLib {
 
         _requireMarketId(market, params.marketId);
 
-        // No ceiling on the continuous fee or the loss factor here: a market that has turned
-        // against the position is exactly the one that has to stay exitable.
-        uint256 continuousFee = IMidnight(market.midnight).continuousFee(params.marketId);
-
+        // No ceiling on the loss factor here: a market that has turned against the position is
+        // exactly the one that has to stay exitable.
         uint256 timeToMaturity = _timeToMaturity(market.maturity);
 
-        uint256 creditBefore  = _credit(market, params.marketId, address(params.proxy));
+        ( uint256 creditBefore, uint256 pendingFee ) =
+            _position(market, params.marketId, address(params.proxy));
+
         uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
 
         TakeContext memory ctx = TakeContext({
             selling         : true,
             tickPriceBound  : MidnightTickLib.tickToPrice(params.config.minSellTick),
-            yieldPriceBound : minSellPrice(params.config.maxSellYield, timeToMaturity, continuousFee),
+            yieldPriceBound : minSellPriceForPosition(
+                params.config.maxSellYield, timeToMaturity, creditBefore, pendingFee
+            ),
             settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity),
             creditCap       : creditBefore
         });
@@ -354,14 +370,14 @@ library MidnightLib {
     function _yieldPrice(
         uint256 yieldBp,
         uint256 timeToMaturity,
-        uint256 continuousFee,
+        uint256 crystallizedFee,
         bool    roundUp
     )
         private pure returns (uint256)
     {
         // Midnight caps maturity 100 years out and the continuous fee at one percent a year, so
         // the crystallized fee stays below par.
-        uint256 numerator   = (WAD - continuousFee * timeToMaturity) * YEAR * WAD;
+        uint256 numerator   = (WAD - crystallizedFee) * YEAR * WAD;
         uint256 denominator = YEAR * WAD + yieldBp * YIELD_BP_RATE * timeToMaturity;
 
         return roundUp ? (numerator + denominator - 1) / denominator : numerator / denominator;
@@ -386,8 +402,15 @@ library MidnightLib {
     function _credit(Market memory market, bytes32 marketId, address user)
         internal view returns (uint256 credit)
     {
+        ( credit, ) = _position(market, marketId, user);
+    }
+
+    function _position(Market memory market, bytes32 marketId, address user)
+        internal view returns (uint256 credit, uint256 pendingFee)
+    {
         // Stored credit is stale; the view applies pending fee accrual and slashing.
-        ( credit, , ) = IMidnight(market.midnight).updatePositionView(market, marketId, user);
+        ( credit, pendingFee, ) =
+            IMidnight(market.midnight).updatePositionView(market, marketId, user);
     }
 
     function _requireDebtFree(address midnight, bytes32 marketId, address user) internal view {
