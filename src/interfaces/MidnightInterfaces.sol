@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/interfaces/IMidnight.sol.
+// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/interfaces/IMidnight.sol.
 // Structs verbatim (the market id hashes abi.encode(market)); IMidnight trimmed to the lend-side surface.
 
 struct CollateralParams {
@@ -55,8 +55,6 @@ interface IMidnight {
 
     function withdraw(Market memory market, uint256 units, address onBehalf, address receiver) external;
 
-    function touchMarket(Market memory market) external returns (bytes32);
-
     function updatePositionView(Market memory market, bytes32 id, address user)
         external view returns (uint128 newCredit, uint128 newPendingFee, uint128 accruedFee);
 
@@ -67,8 +65,6 @@ interface IMidnight {
     function withdrawable(bytes32 id) external view returns (uint128);
 
     function lossFactor(bytes32 id) external view returns (uint128);
-
-    function tickSpacing(bytes32 id) external view returns (uint8);
 
     function continuousFee(bytes32 id) external view returns (uint32);
 
