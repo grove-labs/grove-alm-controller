@@ -1470,6 +1470,32 @@ contract ForeignControllerMidnightSlashingTests is MidnightTestBase {
         assertEq(midnight.debt(marketId, address(almProxy)), 0);
     }
 
+    // Slashing scales the lien with the credit, which is what keeps the sell floor under par.
+    function test_sellMidnight_slashingPreservesLienPerUnit() public {
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+
+        ( uint128 creditBefore, uint128 pendingFeeBefore, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        assertGt(pendingFeeBefore, 0);
+
+        uint256 ratioBefore = uint256(pendingFeeBefore) * 1e18 / creditBefore;
+
+        _slash();
+
+        ( uint128 creditAfter, uint128 pendingFeeAfter, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        assertLt(creditAfter, creditBefore);
+
+        uint256 ratioAfter = uint256(pendingFeeAfter) * 1e18 / creditAfter;
+
+        assertApproxEqAbs(ratioAfter, ratioBefore, 1);
+        assertLe(ratioAfter, ratioBefore);
+        assertLe(ratioAfter, 1e18);
+    }
+
     function test_redeemMidnight_afterSlashing() public {
         _slash();
 
