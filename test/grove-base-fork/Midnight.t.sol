@@ -140,11 +140,11 @@ contract MidnightTestBase is ForkTestBase {
 
     uint256 offerNonce;
 
-    function _getBlock() internal override pure returns (uint256) {
+    function _getBlock() internal pure override returns (uint256) {
         return 51_000_000;  // Midnight was deployed on Base at block 48,286,884
     }
 
-    function _midnight() internal override pure returns (address) {
+    function _midnight() internal pure override returns (address) {
         return MIDNIGHT_BASE;
     }
 

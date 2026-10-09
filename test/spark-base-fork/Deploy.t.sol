@@ -21,7 +21,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef),  // unused
+            uniswapV3PositionManager : address(0xDeadBeef), // unused
             midnight                 : address(0)
         });
 
@@ -50,7 +50,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
             cctp                     : GroveBase.CCTP_TOKEN_MESSENGER_V2,
             pendleRouter             : PENDLE_ROUTER,
             uniswapV3Router          : address(0xDeadBeef), // unused
-            uniswapV3PositionManager : address(0xDeadBeef),  // unused
+            uniswapV3PositionManager : address(0xDeadBeef), // unused
             midnight                 : address(0)
         }));
 
@@ -69,6 +69,7 @@ contract ForeignControllerDeploySuccessTests is ForkTestBase {
         assertEq(address(controller.pendleRouter()),             PENDLE_ROUTER);
         assertEq(address(controller.uniswapV3Router()),          address(0xDeadBeef));
         assertEq(address(controller.uniswapV3PositionManager()), address(0xDeadBeef));
+        assertEq(address(controller.midnight()),                 address(0));
     }
 
 }

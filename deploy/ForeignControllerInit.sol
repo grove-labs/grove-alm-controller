@@ -146,11 +146,8 @@ library ForeignControllerInit {
         // Step 1b: Perform Midnight sanity checks when it is wired
 
         if (checkAddresses.midnight != address(0)) {
-            require(checkAddresses.midnight.code.length != 0, "ForeignControllerInit/midnight-not-a-contract");
-            require(
-                IMidnightLike(checkAddresses.midnight).configurator() != address(0),
-                "ForeignControllerInit/midnight-not-configured"
-            );
+            require(checkAddresses.midnight.code.length != 0,                            "ForeignControllerInit/midnight-not-a-contract");
+            require(IMidnightLike(checkAddresses.midnight).configurator() != address(0), "ForeignControllerInit/midnight-not-configured");
         }
 
         // Step 2: Perform PSM sanity checks
