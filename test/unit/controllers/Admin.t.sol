@@ -1139,7 +1139,10 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             minBuyYield      : minBuyYield,
             maxSellYield     : maxSellYield,
             maxContinuousFee : maxContinuousFee,
-            maxLossFactor    : maxLossFactor
+            maxLossFactor    : maxLossFactor,
+            maturity         : 0,
+            maxOfferSize     : 0,
+            loanToken        : address(0)
         });
     }
 
@@ -1220,7 +1223,9 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             uint16  minBuyYield,
             uint16  maxSellYield,
             uint16  maxContinuousFee,
-            uint128 maxLossFactor
+            uint128 maxLossFactor,
+            ,
+            ,
         ) = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       0);
@@ -1235,7 +1240,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         emit MidnightMarketConfigSet(marketId, 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18);
         _setConfig(marketId, _config(4000, 3000, 100, 1e18));
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
             = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       4000);
@@ -1245,7 +1250,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         assertEq(maxContinuousFee, 100);
         assertEq(maxLossFactor,    1e18);
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
             = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
 
         assertEq(maxBuyTick,       0);
@@ -1278,7 +1283,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             )
         );
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
             = foreignController.midnightMarketConfigs(marketId);
 
         assertEq(maxBuyTick,       0);

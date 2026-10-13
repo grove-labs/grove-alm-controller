@@ -55,6 +55,10 @@ interface IMidnight {
 
     function withdraw(Market memory market, uint256 units, address onBehalf, address receiver) external;
 
+    function setConsumed(bytes32 group, uint128 amount, address onBehalf) external;
+
+    function setIsAuthorized(address authorized, bool newIsAuthorized, address onBehalf) external;
+
     function updatePositionView(Market memory market, bytes32 id, address user)
         external view returns (uint128 newCredit, uint128 newPendingFee, uint128 accruedFee);
 

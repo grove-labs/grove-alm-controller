@@ -2174,7 +2174,7 @@ contract ForeignControllerMidnightLiveMarketTests is MidnightTestBase {
     }
 
     function test_midnightLiveMarket_configIsKeyedByProtocolId() public view {
-        ( uint16 maxBuyTick, uint16 minSellTick, , , , ) =
+        ( uint16 maxBuyTick, uint16 minSellTick, , , , , , , ) =
             foreignController.midnightMarketConfigs(LIVE_MARKET_ID);
 
         assertEq(maxBuyTick,  TICK_99);
