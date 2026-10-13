@@ -598,3 +598,55 @@ contract MidnightMakerInvariantTests is MidnightMakerTestBase {
     }
 
 }
+
+contract MidnightMakerMaturityTests is MidnightMakerTestBase {
+
+    function _straddlingBuyOffer() internal view returns (Offer memory offer) {
+        offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
+
+        offer.start  = market.maturity - 1 hours;
+        offer.expiry = market.maturity + 1 hours;
+    }
+
+    function test_maturity_ratifierAcceptsAWindowStraddlingMaturity() public {
+        Offer memory offer = _straddlingBuyOffer();
+
+        vm.warp(market.maturity + 30 minutes);
+
+        assertEq(
+            makerRatifier.isRatified(offer, _sign(offer), taker),
+            makerRatifier.CALLBACK_SUCCESS()
+        );
+    }
+
+    function test_maturity_protocolBlocksAShortSellerPostMaturity() public {
+        Offer memory offer = _straddlingBuyOffer();
+
+        vm.warp(market.maturity + 30 minutes);
+
+        _expectTakeRevert(
+            offer, 1_000e18, abi.encodeWithSignature("CannotIncreaseDebtPostMaturity()")
+        );
+    }
+
+    function test_maturity_creditHoldingTakerCanStillFill() public {
+        _seedCredit(1_000_000e18);
+
+        _take(_makerOffer(false, TICK_98, 500_000e18), 500_000e18);
+
+        Offer memory offer = _straddlingBuyOffer();
+
+        vm.warp(market.maturity + 30 minutes);
+
+        uint256 creditBefore = _credit();
+
+        ( uint256 buyerAssets, ) = _take(offer, 100_000e18);
+
+        assertEq(_credit(),                                  creditBefore + 100_000e18);
+        assertEq(midnight.debt(marketId, address(almProxy)), 0);
+
+        // At maturity the yield bound stops binding, so maxBuyTick is the only price guard left.
+        assertLe(buyerAssets, 100_000e18 * MidnightTickLib.tickToPrice(MAKER_BUY_TICK) / 1e18);
+    }
+
+}
