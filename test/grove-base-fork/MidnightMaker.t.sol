@@ -650,3 +650,146 @@ contract MidnightMakerMaturityTests is MidnightMakerTestBase {
     }
 
 }
+
+contract FundFillReenterer {
+
+    bytes32 constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+
+    address public controller;
+    bytes32 public marketId;
+
+    bool  public reentered;
+    bytes public revertData;
+
+    constructor(address midnight_) {
+        midnight = midnight_;
+    }
+
+    function approveMidnight(address token) external {
+        IERC20(token).approve(midnight, type(uint256).max);
+    }
+
+    function arm(address controller_, bytes32 marketId_) external {
+        controller = controller_;
+        marketId   = marketId_;
+    }
+
+    function onBuy(
+        bytes32, Market memory, uint256, uint256 units, uint256, address, bytes memory
+    )
+        external returns (bytes32)
+    {
+        _reenter(units);
+        return CALLBACK_SUCCESS;
+    }
+
+    function onSell(
+        bytes32, Market memory, uint256, uint256 units, uint256, address, address, bytes memory
+    )
+        external returns (bytes32)
+    {
+        _reenter(units);
+        return CALLBACK_SUCCESS;
+    }
+
+    // Deliberately well inside any configured price bound, so the guard is the only thing left.
+    function _reenter(uint256 units) internal {
+        (bool ok, bytes memory ret) = controller.call(
+            abi.encodeWithSignature(
+                "fundMidnightFill(bytes32,uint256,uint256)", marketId, units / 2, units
+            )
+        );
+
+        reentered  = ok;
+        revertData = ret;
+    }
+
+}
+
+contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
+
+    FundFillReenterer reenterer;
+
+    function setUp() public override {
+        super.setUp();
+
+        reenterer = new FundFillReenterer(MIDNIGHT);
+
+        reenterer.arm(address(foreignController), marketId);
+
+        loanToken.mint(address(reenterer), 10_000_000e18);
+        reenterer.approveMidnight(address(loanToken));
+
+        _enableMake(MAX_OFFER_SIZE);
+
+        bytes32 reentererKey = foreignController.midnightStrategyKey(address(reenterer), marketId);
+
+        // Keyed like a real strategy, so only the reentrancy guard is left to stop it.
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(reentererKey, STRATEGY_LIMIT, STRATEGY_LIMIT / 1 days);
+    }
+
+    function _assertGuardBlockedTheFill() internal view {
+        assertFalse(reenterer.reentered());
+
+        assertEq(
+            reenterer.revertData(),
+            abi.encodeWithSignature("ReentrancyGuardReentrantCall()")
+        );
+    }
+
+    function test_buyMidnight_makerCallbackCannotFundFill() public {
+        uint256 units    = 1_000e18;
+        uint256 expected = _buyerAssets(units, TICK_99);
+
+        Offer memory offer = _offer(false, TICK_99, uint128(units));
+        offer.callback     = address(reenterer);
+
+        uint256 balanceBefore = loanToken.balanceOf(address(almProxy));
+
+        assertEq(_buy(offer, units, type(uint256).max), expected);
+
+        _assertGuardBlockedTheFill();
+
+        assertEq(loanToken.balanceOf(address(almProxy)), balanceBefore - expected);
+        assertEq(_credit(),                              units);
+
+        // The proxy pays on this leg, so nothing should have reached the callback at all.
+        assertEq(loanToken.balanceOf(address(reenterer)), 10_000_000e18);
+    }
+
+    function test_sellMidnight_makerCallbackCannotFundFill() public {
+        uint256 units = 1_000e18;
+
+        _seedCredit(units);
+
+        uint256 balanceBefore = loanToken.balanceOf(address(almProxy));
+
+        Offer memory offer = _offer(true, TICK_99, uint128(units));
+        offer.callback     = address(reenterer);
+
+        uint256 received = _sell(offer, units, 1);
+
+        _assertGuardBlockedTheFill();
+
+        assertEq(loanToken.balanceOf(address(almProxy)), balanceBefore + received);
+        assertEq(midnight.debt(marketId, address(almProxy)), 0);
+
+        // The callback is the payer on this leg, so it is out exactly the buyer's side and no more.
+        assertEq(
+            loanToken.balanceOf(address(reenterer)),
+            10_000_000e18 - _buyerAssets(units, TICK_99)
+        );
+    }
+
+    function test_fundMidnightFill_unkeyedCallerIsRejectedOutrightAnyway() public {
+        address stranger = makeAddr("stranger");
+
+        vm.prank(stranger);
+        vm.expectRevert("MidnightLib/strategy-not-keyed");
+        foreignController.fundMidnightFill(marketId, 1, 1);
+    }
+
+}
