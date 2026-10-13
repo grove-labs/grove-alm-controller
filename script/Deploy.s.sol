@@ -9,11 +9,6 @@ import { ControllerInstance } from "../deploy/ControllerInstance.sol";
 
 import { ForeignControllerDeploy, MainnetControllerDeploy } from "../deploy/ControllerDeploy.sol";
 
-import { MidnightMakerDeploy } from "../deploy/MidnightMakerDeploy.sol";
-
-import { MidnightRatifier }     from "../src/MidnightRatifier.sol";
-import { ProxyFundingStrategy } from "../src/ProxyFundingStrategy.sol";
-
 contract DeployMainnetFull is Script {
 
     using stdJson     for string;
@@ -221,93 +216,6 @@ contract DeployForeignController is ForeignScript {
         console.log("Controller deployed at", controller);
 
         ScriptTools.exportContract(fileSlug, "controller", controller);
-    }
-
-}
-
-contract DeployMidnightMaker is ForeignScript {
-
-    using stdJson     for string;
-    using ScriptTools for string;
-
-    function run() external {
-        setUpNonStandardChains();
-
-        vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
-        vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
-
-        string memory chainName = vm.envString("CHAIN");
-        string memory fileSlug  = string(abi.encodePacked(chainName, "-", vm.envString("ENV")));
-        string memory config    = ScriptTools.loadConfig(fileSlug);
-
-        vm.createSelectFork(getChain(chainName).rpcUrl);
-
-        address admin      = config.readAddress(".admin");
-        address almProxy   = config.readAddress(".almProxy");
-        address controller = config.readAddress(".controller");
-        address midnight   = config.readAddress(".midnight");
-        address rateLimits = config.readAddress(".rateLimits");
-        address quoter     = config.readAddress(".midnightQuoter");
-
-        uint256 maxOfferWindow = config.readUint(".midnightMaxOfferWindow");
-
-        console.log(string(abi.encodePacked("Deploying ", chainName, " Midnight maker contracts...")));
-
-        vm.startBroadcast();
-
-        address ratifier = MidnightMakerDeploy.deployRatifier({
-            admin          : admin,
-            midnight       : midnight,
-            almProxy       : almProxy,
-            controller     : controller,
-            rateLimits     : rateLimits,
-            quoter         : quoter,
-            maxOfferWindow : maxOfferWindow
-        });
-
-        address fundingStrategy = MidnightMakerDeploy.deployFundingStrategy({
-            midnight   : midnight,
-            almProxy   : almProxy,
-            controller : controller
-        });
-
-        vm.stopBroadcast();
-
-        _verify(ratifier, fundingStrategy, midnight, almProxy, controller);
-
-        console.log("MidnightRatifier     deployed at", ratifier);
-        console.log("ProxyFundingStrategy deployed at", fundingStrategy);
-
-        ScriptTools.exportContract(fileSlug, "midnightRatifier",        ratifier);
-        ScriptTools.exportContract(fileSlug, "midnightFundingStrategy", fundingStrategy);
-    }
-
-    function _verify(
-        address ratifier,
-        address fundingStrategy,
-        address midnight,
-        address almProxy,
-        address controller
-    )
-        internal view
-    {
-        require(midnight.code.length   != 0, "DeployMidnightMaker/midnight-not-a-contract");
-        require(almProxy.code.length   != 0, "DeployMidnightMaker/proxy-not-a-contract");
-        require(controller.code.length != 0, "DeployMidnightMaker/controller-not-a-contract");
-
-        require(
-            MidnightRatifier(ratifier).midnight() == midnight &&
-            MidnightRatifier(ratifier).proxy() == almProxy &&
-            MidnightRatifier(ratifier).controller() == controller,
-            "DeployMidnightMaker/ratifier-wiring-mismatch"
-        );
-
-        require(
-            ProxyFundingStrategy(fundingStrategy).midnight() == midnight &&
-            ProxyFundingStrategy(fundingStrategy).proxy() == almProxy &&
-            ProxyFundingStrategy(fundingStrategy).controller() == controller,
-            "DeployMidnightMaker/strategy-wiring-mismatch"
-        );
     }
 
 }
