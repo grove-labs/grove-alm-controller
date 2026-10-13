@@ -75,6 +75,7 @@ contract MidnightRatifier is AccessControl {
         address quoter_,
         uint256 maxOfferWindow_
     ) {
+        require(admin_          != address(0), "MidnightRatifier/invalid-admin");
         require(midnight_       != address(0), "MidnightRatifier/invalid-midnight");
         require(proxy_          != address(0), "MidnightRatifier/invalid-proxy");
         require(controller_     != address(0), "MidnightRatifier/invalid-controller");
@@ -188,18 +189,21 @@ contract MidnightRatifier is AccessControl {
             "MidnightRatifier/offer-too-large"
         );
 
+        // Midnight compares this cap against the market's per-second rate, not the annual figure.
         require(
-            offer.continuousFeeCap <= config.maxContinuousFee,
+            offer.continuousFeeCap
+                <= MidnightLib.continuousFeePerSecond(config.maxContinuousFee),
             "MidnightRatifier/fee-cap-too-high"
         );
 
         ( bytes32 buyGroup, bytes32 sellGroup )
             = IForeignControllerLike(controller).midnightOfferGroups(marketId);
 
-        require(
-            offer.group == (offer.buy ? buyGroup : sellGroup),
-            "MidnightRatifier/group-mismatch"
-        );
+        bytes32 expectedGroup = offer.buy ? buyGroup : sellGroup;
+
+        // Zero means not yet designated; matching on it would merge the buy and sell books.
+        require(expectedGroup != 0,            "MidnightRatifier/group-not-designated");
+        require(offer.group == expectedGroup,  "MidnightRatifier/group-mismatch");
 
         _checkPrice(offer, marketId, config);
     }
@@ -237,9 +241,10 @@ contract MidnightRatifier is AccessControl {
             require(offer.reduceOnly,                 "MidnightRatifier/sell-not-reduce-only");
             require(offer.tick >= config.minSellTick, "MidnightRatifier/tick-too-low");
 
+            // Fee is crystallized at purchase; a later rate cannot change what we already hold.
             require(
                 offerPrice
-                    >= MidnightLib.minSellPrice(config.maxSellYield, timeToMaturity, feePerSecond),
+                    >= MidnightLib.minSellPrice(config.maxSellYield, timeToMaturity, 0),
                 "MidnightRatifier/price-too-low"
             );
 

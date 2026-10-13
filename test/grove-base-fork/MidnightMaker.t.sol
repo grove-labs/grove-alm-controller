@@ -106,7 +106,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
             reduceOnly              : !buy,
             maxUnits                : maxUnits,
             maxAssets               : 0,
-            continuousFeeCap        : MAX_CONTINUOUS_FEE_CBP
+            continuousFeeCap        : MidnightLib.continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP)
         });
     }
 

@@ -15,7 +15,8 @@ import { MidnightLib } from "../../../src/libraries/MidnightLib.sol";
 
 import { CollateralParams, Market, Offer } from "../../../src/interfaces/MidnightInterfaces.sol";
 
-import { MidnightIdLib } from "../../../src/libraries/midnight/MidnightIdLib.sol";
+import { MidnightIdLib }   from "../../../src/libraries/midnight/MidnightIdLib.sol";
+import { MAX_TICK, MidnightTickLib } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
 import { UnitTestBase } from "../UnitTestBase.t.sol";
 
@@ -145,6 +146,10 @@ contract MidnightRatifierTestBase is UnitTestBase {
         });
     }
 
+    function _feeCapCeiling() internal pure returns (uint256) {
+        return MidnightLib.continuousFeePerSecond(MAX_CONTINUOUS_FEE);
+    }
+
     function _buyOffer() internal view returns (Offer memory) {
         return Offer({
             market                  : _market(),
@@ -161,7 +166,7 @@ contract MidnightRatifierTestBase is UnitTestBase {
             reduceOnly              : false,
             maxUnits                : 0,
             maxAssets               : uint128(MAX_OFFER_SIZE),
-            continuousFeeCap        : MAX_CONTINUOUS_FEE
+            continuousFeeCap        : _feeCapCeiling()
         });
     }
 
@@ -181,7 +186,7 @@ contract MidnightRatifierTestBase is UnitTestBase {
             reduceOnly              : true,
             maxUnits                : 0,
             maxAssets               : uint128(MAX_OFFER_SIZE),
-            continuousFeeCap        : MAX_CONTINUOUS_FEE
+            continuousFeeCap        : _feeCapCeiling()
         });
     }
 
@@ -229,6 +234,14 @@ contract ConstructorTests is MidnightRatifierTestBase {
         assertEq(
             ratifier.CALLBACK_SUCCESS(),
             0x7f87788ea698181ea4d28d1576d0ba4fc92c0dbe5bf75b43692af2ce91dbaea2
+        );
+    }
+
+    function test_constructor_invalidAdmin() public {
+        vm.expectRevert("MidnightRatifier/invalid-admin");
+        new MidnightRatifier(
+            address(0), address(venue), address(proxy), address(controller), address(rateLimits),
+            quoter, MAX_OFFER_WINDOW
         );
     }
 
@@ -439,7 +452,7 @@ contract IsRatifiedBuyTests is MidnightRatifierTestBase {
 
     function test_isRatified_buy_feeCapTooHigh() public {
         Offer memory offer = _buyOffer();
-        offer.continuousFeeCap = MAX_CONTINUOUS_FEE + 1;
+        offer.continuousFeeCap = _feeCapCeiling() + 1;
 
         _expectRatifyRevert(offer, "MidnightRatifier/fee-cap-too-high");
     }
@@ -449,6 +462,16 @@ contract IsRatifiedBuyTests is MidnightRatifierTestBase {
         offer.group = SELL_GROUP;
 
         _expectRatifyRevert(offer, "MidnightRatifier/group-mismatch");
+    }
+
+    function test_isRatified_buy_groupNotDesignated() public {
+        vm.prank(admin);
+        controller.setMidnightGroups(marketId, bytes32(0), SELL_GROUP);
+
+        Offer memory offer = _buyOffer();
+        offer.group = bytes32(0);
+
+        _expectRatifyRevert(offer, "MidnightRatifier/group-not-designated");
     }
 
     function test_isRatified_buy_tickTooHigh() public {
@@ -544,6 +567,55 @@ contract IsRatifiedSellTests is MidnightRatifierTestBase {
         _expectRatifyRevert(offer, "MidnightRatifier/group-mismatch");
     }
 
+    function test_isRatified_sell_groupNotDesignated() public {
+        vm.prank(admin);
+        controller.setMidnightGroups(marketId, BUY_GROUP, bytes32(0));
+
+        Offer memory offer = _sellOffer();
+        offer.group = bytes32(0);
+
+        _expectRatifyRevert(offer, "MidnightRatifier/group-not-designated");
+    }
+
+    function _lowestPassingSellTick() internal view returns (uint256) {
+        uint256 floor = MidnightLib.minSellPrice(MAX_SELL_YIELD, maturity - block.timestamp, 0);
+
+        for (uint256 tick = MIN_SELL_TICK; tick <= MAX_TICK; ++tick) {
+            if (MidnightTickLib.tickToPrice(tick) >= floor) return tick;
+        }
+
+        revert("no passing tick");
+    }
+
+    function test_isRatified_sell_floorIgnoresTheFeeCeiling() public {
+        uint256 boundary = _lowestPassingSellTick();
+
+        Offer memory passing = _sellOffer();
+        passing.tick = boundary;
+
+        Offer memory failing = _sellOffer();
+        failing.tick = boundary - 1;
+
+        assertEq(_ratify(passing), ratifier.CALLBACK_SUCCESS());
+        _expectRatifyRevert(failing, "MidnightRatifier/price-too-low");
+
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            marketId,
+            MAX_BUY_TICK,
+            MIN_SELL_TICK,
+            MIN_BUY_YIELD,
+            MAX_SELL_YIELD,
+            MAX_CONTINUOUS_FEE * 10,
+            type(uint128).max
+        );
+
+        assertEq(_lowestPassingSellTick(), boundary);
+
+        assertEq(_ratify(passing), ratifier.CALLBACK_SUCCESS());
+        _expectRatifyRevert(failing, "MidnightRatifier/price-too-low");
+    }
+
 }
 
 contract SignatureCoverageTests is MidnightRatifierTestBase {
@@ -613,7 +685,7 @@ contract SignatureCoverageTests is MidnightRatifierTestBase {
 
     function test_signatureCovers_continuousFeeCap() public {
         Offer memory mutated = _buyOffer();
-        mutated.continuousFeeCap = MAX_CONTINUOUS_FEE - 1;
+        mutated.continuousFeeCap = _feeCapCeiling() - 1;
 
         _expectTamperedRevert(_buyOffer(), mutated);
     }
