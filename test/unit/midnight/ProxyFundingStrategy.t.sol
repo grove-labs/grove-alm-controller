@@ -94,6 +94,8 @@ contract MockFundingController {
 
 contract ProxyFundingStrategyTestBase is Test {
 
+    event Skimmed(address indexed token, uint256 amount);
+
     bytes32 constant MARKET_ID = keccak256("market");
 
     uint256 constant ASSETS = 500e18;
@@ -300,6 +302,8 @@ contract SkimTests is ProxyFundingStrategyTestBase {
         assertEq(loanToken.balanceOf(address(strategy)), 123e18);
         assertEq(loanToken.balanceOf(proxy),             0);
 
+        vm.expectEmit(address(strategy));
+        emit Skimmed(address(loanToken), 123e18);
         strategy.skim(address(loanToken));
 
         assertEq(loanToken.balanceOf(address(strategy)), 0);

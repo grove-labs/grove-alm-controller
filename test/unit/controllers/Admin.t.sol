@@ -1217,48 +1217,38 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     }
 
     function test_setMidnightMarketConfig() public {
-        (
-            uint16  maxBuyTick,
-            uint16  minSellTick,
-            uint16  minBuyYield,
-            uint16  maxSellYield,
-            uint16  maxContinuousFee,
-            uint128 maxLossFactor,
-            ,
-            ,
-        ) = foreignController.midnightMarketConfigs(marketId);
+        MidnightLib.MarketConfig memory config
+            = foreignController.midnightMarketConfigs(marketId);
 
-        assertEq(maxBuyTick,       0);
-        assertEq(minSellTick,      0);
-        assertEq(minBuyYield,      0);
-        assertEq(maxSellYield,     0);
-        assertEq(maxContinuousFee, 0);
-        assertEq(maxLossFactor,    0);
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      0);
+        assertEq(config.minBuyYield,      0);
+        assertEq(config.maxSellYield,     0);
+        assertEq(config.maxContinuousFee, 0);
+        assertEq(config.maxLossFactor,    0);
 
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
         emit MidnightMarketConfigSet(marketId, 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18);
         _setConfig(marketId, _config(4000, 3000, 100, 1e18));
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
-            = foreignController.midnightMarketConfigs(marketId);
+        config = foreignController.midnightMarketConfigs(marketId);
 
-        assertEq(maxBuyTick,       4000);
-        assertEq(minSellTick,      3000);
-        assertEq(minBuyYield,      MIN_BUY_YIELD);
-        assertEq(maxSellYield,     MAX_SELL_YIELD);
-        assertEq(maxContinuousFee, 100);
-        assertEq(maxLossFactor,    1e18);
+        assertEq(config.maxBuyTick,       4000);
+        assertEq(config.minSellTick,      3000);
+        assertEq(config.minBuyYield,      MIN_BUY_YIELD);
+        assertEq(config.maxSellYield,     MAX_SELL_YIELD);
+        assertEq(config.maxContinuousFee, 100);
+        assertEq(config.maxLossFactor,    1e18);
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
-            = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
+        config = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
 
-        assertEq(maxBuyTick,       0);
-        assertEq(minSellTick,      0);
-        assertEq(minBuyYield,      0);
-        assertEq(maxSellYield,     0);
-        assertEq(maxContinuousFee, 0);
-        assertEq(maxLossFactor,    0);
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      0);
+        assertEq(config.minBuyYield,      0);
+        assertEq(config.maxSellYield,     0);
+        assertEq(config.maxContinuousFee, 0);
+        assertEq(config.maxLossFactor,    0);
 
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
@@ -1283,15 +1273,14 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             )
         );
 
-        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor,,, )
-            = foreignController.midnightMarketConfigs(marketId);
+        config = foreignController.midnightMarketConfigs(marketId);
 
-        assertEq(maxBuyTick,       0);
-        assertEq(minSellTick,      MIDNIGHT_MAX_TICK);
-        assertEq(minBuyYield,      0);
-        assertEq(maxSellYield,     type(uint16).max);
-        assertEq(maxContinuousFee, MAX_CONTINUOUS_FEE_CBP);
-        assertEq(maxLossFactor,    type(uint128).max);
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      MIDNIGHT_MAX_TICK);
+        assertEq(config.minBuyYield,      0);
+        assertEq(config.maxSellYield,     type(uint16).max);
+        assertEq(config.maxContinuousFee, MAX_CONTINUOUS_FEE_CBP);
+        assertEq(config.maxLossFactor,    type(uint128).max);
     }
 
 }

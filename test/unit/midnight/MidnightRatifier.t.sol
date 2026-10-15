@@ -17,6 +17,12 @@ import { CollateralParams, Market, Offer } from "../../../src/interfaces/Midnigh
 
 import { MidnightIdLib }   from "../../../src/libraries/midnight/MidnightIdLib.sol";
 import { MAX_TICK, MidnightTickLib } from "../../../src/libraries/midnight/MidnightTickLib.sol";
+import {
+    COLLATERAL_PARAMS_TYPEHASH,
+    MARKET_TYPEHASH,
+    OFFER_TYPEHASH,
+    MidnightHashLib
+} from "../../../src/libraries/midnight/MidnightHashLib.sol";
 
 import { UnitTestBase } from "../UnitTestBase.t.sol";
 
@@ -388,6 +394,18 @@ contract IsRatifiedBuyTests is MidnightRatifierTestBase {
         ratifier.isRatified(_buyOffer(), hex"dead", taker);
     }
 
+    function test_isRatified_buy_signatureIsCheckedBeforeEveryOtherGuard() public {
+        Offer memory offer = _buyOffer();
+
+        offer.maker            = makeAddr("notTheProxy");
+        offer.continuousFeeCap = _feeCapCeiling() + 1;
+        offer.tick             = MAX_BUY_TICK + 1;
+        offer.group            = keccak256("notTheBuyGroup");
+
+        vm.expectRevert("MidnightRatifier/invalid-signature");
+        ratifier.isRatified(offer, hex"dead", taker);
+    }
+
     function test_isRatified_buy_makeNotEnabled() public {
         vm.prank(admin);
         controller.setMidnightMakeConfig(marketId, 0);
@@ -717,11 +735,11 @@ contract ControllerViewDecodeTests is MidnightRatifierTestBase {
     }
 
     function test_offerGroupsDecode() public view {
-        ( bytes32 buyGroup, bytes32 sellGroup )
+        MidnightLib.OfferGroups memory groups
             = IForeignControllerLike(address(controller)).midnightOfferGroups(marketId);
 
-        assertEq(buyGroup,  BUY_GROUP);
-        assertEq(sellGroup, SELL_GROUP);
+        assertEq(groups.buyGroup,  BUY_GROUP);
+        assertEq(groups.sellGroup, SELL_GROUP);
     }
 
     function test_strategyKeyMatchesTheController() public view {
@@ -761,6 +779,50 @@ contract NeverCallsMidnightTests is MidnightRatifierTestBase {
         vm.etch(address(venue), hex"fe");
 
         assertEq(ratifier.hashOffer(offer), before);
+    }
+
+    function test_containsNoStateChangingCallOpcode() public view {
+        bytes memory code = _strippedCode(address(ratifier));
+
+        uint256 statics;
+        uint256 i;
+
+        while (i < code.length) {
+            uint8 op = uint8(code[i]);
+
+            // PUSH1..PUSH32: skip the immediate so constants are never read as opcodes.
+            if (op >= 0x60 && op <= 0x7F) {
+                i += 1 + (op - 0x5F);
+                continue;
+            }
+
+            assertTrue(op != 0xF1, "CALL present");
+            assertTrue(op != 0xF2, "CALLCODE present");
+            assertTrue(op != 0xF4, "DELEGATECALL present");
+            assertTrue(op != 0xF0, "CREATE present");
+            assertTrue(op != 0xF5, "CREATE2 present");
+            assertTrue(op != 0xFF, "SELFDESTRUCT present");
+
+            if (op == 0xFA) ++statics;
+
+            ++i;
+        }
+
+        // Control: the walk reaches real call opcodes, so the assertions above are not vacuous.
+        assertGt(statics, 0);
+    }
+
+    // Trailing CBOR metadata is data, not code; walking it finds opcodes that do not exist.
+    function _strippedCode(address target) internal view returns (bytes memory stripped) {
+        bytes memory raw = target.code;
+
+        uint256 length = (uint256(uint8(raw[raw.length - 2])) << 8) | uint8(raw[raw.length - 1]);
+
+        assertLt(length + 2, raw.length);
+
+        stripped = new bytes(raw.length - length - 2);
+
+        for (uint256 i; i < stripped.length; ++i) stripped[i] = raw[i];
     }
 
 }
@@ -831,17 +893,48 @@ contract Eip712VectorTests is Test {
         });
     }
 
+    function _vectorOfferWithCollateral() internal pure returns (Offer memory) {
+        CollateralParams[] memory params = new CollateralParams[](2);
+
+        params[0] = CollateralParams({
+            token             : 0x5555555555555555555555555555555555555555,
+            lltv              : 800000000000000000,
+            liquidationCursor : 50000000000000000,
+            oracle            : 0x6666666666666666666666666666666666666666
+        });
+        params[1] = CollateralParams({
+            token             : 0x7777777777777777777777777777777777777777,
+            lltv              : 900000000000000000,
+            liquidationCursor : 60000000000000000,
+            oracle            : 0x8888888888888888888888888888888888888888
+        });
+
+        Offer memory offer = _vectorOffer();
+
+        offer.market.collateralParams = params;
+        offer.buy                     = false;
+        offer.tick                    = 4400;
+        offer.callback                = address(0);
+        offer.callbackData            = hex"deadbeef";
+        offer.receiverIfMakerIsSeller = PROXY;
+        offer.reduceOnly              = true;
+        offer.maxUnits                = 500000000000000000000;
+        offer.maxAssets               = 0;
+
+        return offer;
+    }
+
     function test_vector_offerTypehash() public view {
         assertEq(
             ratifier.OFFER_TYPEHASH(),
-            0xc55435cccba59b4cd8469c72337e53a659ead153107662471386b052c92268a7
+            0x9905214264a9fb7b6cc1b0e33db7a04687c6e4185a84755d29914314aa9d8906
         );
     }
 
     function test_vector_domainTypehash() public view {
         assertEq(
             ratifier.DOMAIN_TYPEHASH(),
-            0xd87cd6ef79d4e2b95e15ce8abf732db51ec771f1ca2edccf22a46c729ac56472
+            0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f
         );
     }
 
@@ -852,17 +945,81 @@ contract Eip712VectorTests is Test {
         );
     }
 
+    function test_vector_marketHash() public pure {
+        assertEq(
+            MidnightHashLib.hashMarket(_vectorMarket()),
+            0xd0630db03c836b1de748ec0a7ee870a84de4115b40d01b5e719117eab13da93c
+        );
+    }
+
+    function test_vector_offerStructHash() public pure {
+        assertEq(
+            MidnightHashLib.hashOffer(_vectorOffer()),
+            0x219f7c152077ed914f88f2ead9f3e130b612fe6541345a707b0004efc8f978d6
+        );
+    }
+
     function test_vector_domainSeparator() public view {
         assertEq(
             ratifier.DOMAIN_SEPARATOR(),
-            0xafbda2149aff51065c80b739ebe32ea6c5445f2ea9c45dfa4c9f545611619b9f
+            0xb0122d94e78afd1c9d2efc7601bdb6e4251263aeef99bbe04ad25536b7cc5ba4
         );
     }
 
     function test_vector_digest() public view {
         assertEq(
             ratifier.hashOffer(_vectorOffer()),
-            0xb2434cd92d66ecc14a5223c30b63343a94585ffb28705ec8a7d7fcfdcb94a4cf
+            0xa7ed3d43992138c3031c9a21cca8bd63d7195765bfeae88dff7b3836fef4680a
+        );
+    }
+
+    function test_vector_collateralParamsHash() public pure {
+        CollateralParams[] memory params = _vectorOfferWithCollateral().market.collateralParams;
+
+        assertEq(
+            MidnightHashLib.hashCollateralParams(params[0]),
+            0xfe57851550819ded1ddf2368b296e90df1dc7e51c1d43f249aa268cba438e602
+        );
+        assertEq(
+            MidnightHashLib.hashCollateralParams(params[1]),
+            0x14860994a350cc64c434021bb33d863f42819b12fdf2815286bf9fd098b80453
+        );
+    }
+
+    function test_vector_marketHashWithCollateral() public pure {
+        assertEq(
+            MidnightHashLib.hashMarket(_vectorOfferWithCollateral().market),
+            0x0c2602fa60f1264063f83451f6d7596ae70b97ad33b6f2545b6a098068d682c3
+        );
+    }
+
+    function test_vector_digestWithCollateral() public view {
+        assertEq(
+            ratifier.hashOffer(_vectorOfferWithCollateral()),
+            0xb7c9838990c214ac21db0d7e390998b40f141d9223a0c91385eadda2b4017f27
+        );
+    }
+
+    function test_vector_typehashesMatchUpstreamTypeStrings() public pure {
+        bytes memory collateralParamsType =
+            "CollateralParams(address token,uint256 lltv,uint256 liquidationCursor,address oracle)";
+
+        bytes memory marketType =
+            "Market(uint256 chainId,address midnight,address loanToken,"
+            "CollateralParams[] collateralParams,uint256 maturity,uint256 rcfThreshold,"
+            "address enterGate,address liquidatorGate)";
+
+        bytes memory offerType =
+            "Offer(Market market,bool buy,address maker,uint256 start,uint256 expiry,uint256 tick,"
+            "bytes32 group,address callback,bytes callbackData,address receiverIfMakerIsSeller,"
+            "address ratifier,bool reduceOnly,uint128 maxUnits,uint128 maxAssets,"
+            "uint256 continuousFeeCap)";
+
+        assertEq(COLLATERAL_PARAMS_TYPEHASH, keccak256(collateralParamsType));
+        assertEq(MARKET_TYPEHASH, keccak256(bytes.concat(marketType, collateralParamsType)));
+        assertEq(
+            OFFER_TYPEHASH,
+            keccak256(bytes.concat(offerType, collateralParamsType, marketType))
         );
     }
 

@@ -10,19 +10,19 @@ import { IRateLimits } from "./interfaces/IRateLimits.sol";
 import { Offer } from "./interfaces/MidnightInterfaces.sol";
 
 import { MidnightLib }     from "./libraries/MidnightLib.sol";
+import {
+    OFFER_TYPEHASH as CANONICAL_OFFER_TYPEHASH,
+    MidnightHashLib
+} from "./libraries/midnight/MidnightHashLib.sol";
 import { MidnightIdLib }   from "./libraries/midnight/MidnightIdLib.sol";
 import { MidnightTickLib } from "./libraries/midnight/MidnightTickLib.sol";
 
 interface IForeignControllerLike {
-    // Every MarketConfig member is a static type, so the generated getter's nine return words are
-    // byte-identical to this struct's encoding. MidnightRatifier.t.sol pins that field by field.
     function midnightMarketConfigs(bytes32 marketId)
         external view returns (MidnightLib.MarketConfig memory);
 
-    function midnightOfferGroups(bytes32 marketId) external view returns (
-        bytes32 buyGroup,
-        bytes32 sellGroup
-    );
+    function midnightOfferGroups(bytes32 marketId)
+        external view returns (MidnightLib.OfferGroups memory);
 
     function midnightStrategyKey(address strategy, bytes32 marketId) external view returns (bytes32);
 }
@@ -42,12 +42,11 @@ contract MidnightRatifier is AccessControl {
     bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
 
     bytes32 public constant DOMAIN_TYPEHASH = keccak256(
-        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
 
-    bytes32 public constant OFFER_TYPEHASH = keccak256(
-        "Offer(bytes32 marketId,bool buy,address maker,uint256 start,uint256 expiry,uint256 tick,bytes32 group,address callback,bytes callbackData,address receiverIfMakerIsSeller,address ratifier,bool reduceOnly,uint128 maxUnits,uint128 maxAssets,uint256 continuousFeeCap)"
-    );
+    // No salt: hashMarket already binds the venue and the chain.
+    bytes32 public constant OFFER_TYPEHASH = CANONICAL_OFFER_TYPEHASH;
 
     string public constant NAME    = "GroveMidnightRatifier";
     string public constant VERSION = "1";
@@ -112,10 +111,12 @@ contract MidnightRatifier is AccessControl {
     function isRatified(Offer memory offer, bytes memory data, address)
         external view returns (bytes32)
     {
+        // First, because every check below reads policy keyed by an id taken from the offer itself.
+        _checkSignature(offer, data);
+
         bytes32 marketId = MidnightIdLib.toId(offer.market);
 
         _checkIdentity(offer);
-        _checkSignature(offer, marketId, data);
         _checkPolicy(offer, marketId);
 
         return CALLBACK_SUCCESS;
@@ -131,13 +132,12 @@ contract MidnightRatifier is AccessControl {
             keccak256(bytes(NAME)),
             keccak256(bytes(VERSION)),
             block.chainid,
-            address(this),
-            bytes32(uint256(uint160(midnight)))
+            address(this)
         ));
     }
 
     function hashOffer(Offer memory offer) external view returns (bytes32) {
-        return _hashOffer(offer, MidnightIdLib.toId(offer.market));
+        return _hashOffer(offer);
     }
 
     /**********************************************************************************************/
@@ -158,11 +158,9 @@ contract MidnightRatifier is AccessControl {
         );
     }
 
-    function _checkSignature(Offer memory offer, bytes32 marketId, bytes memory data)
-        internal view
-    {
+    function _checkSignature(Offer memory offer, bytes memory data) internal view {
         ( address signer, ECDSA.RecoverError err, )
-            = ECDSA.tryRecover(_hashOffer(offer, marketId), data);
+            = ECDSA.tryRecover(_hashOffer(offer), data);
 
         require(
             err == ECDSA.RecoverError.NoError && signer == quoter,
@@ -196,10 +194,10 @@ contract MidnightRatifier is AccessControl {
             "MidnightRatifier/fee-cap-too-high"
         );
 
-        ( bytes32 buyGroup, bytes32 sellGroup )
+        MidnightLib.OfferGroups memory groups
             = IForeignControllerLike(controller).midnightOfferGroups(marketId);
 
-        bytes32 expectedGroup = offer.buy ? buyGroup : sellGroup;
+        bytes32 expectedGroup = offer.buy ? groups.buyGroup : groups.sellGroup;
 
         // Zero means not yet designated; matching on it would merge the buy and sell books.
         require(expectedGroup != 0,            "MidnightRatifier/group-not-designated");
@@ -252,33 +250,10 @@ contract MidnightRatifier is AccessControl {
         }
     }
 
-    function _hashOffer(Offer memory offer, bytes32 marketId) internal view returns (bytes32) {
-        // Every encoded member is a static word, so concatenating the halves is identical to
-        // encoding all sixteen at once, which does not fit on the stack.
-        bytes32 structHash = keccak256(bytes.concat(
-            abi.encode(
-                OFFER_TYPEHASH,
-                marketId,
-                offer.buy,
-                offer.maker,
-                offer.start,
-                offer.expiry,
-                offer.tick,
-                offer.group
-            ),
-            abi.encode(
-                offer.callback,
-                keccak256(offer.callbackData),
-                offer.receiverIfMakerIsSeller,
-                offer.ratifier,
-                offer.reduceOnly,
-                offer.maxUnits,
-                offer.maxAssets,
-                offer.continuousFeeCap
-            )
-        ));
-
-        return keccak256(abi.encodePacked(hex"1901", DOMAIN_SEPARATOR(), structHash));
+    function _hashOffer(Offer memory offer) internal view returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(hex"1901", DOMAIN_SEPARATOR(), MidnightHashLib.hashOffer(offer))
+        );
     }
 
 }

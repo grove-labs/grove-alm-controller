@@ -15,6 +15,12 @@ interface IForeignControllerLike {
 contract ProxyFundingStrategy is ReentrancyGuard {
 
     /**********************************************************************************************/
+    /*** Events                                                                                 ***/
+    /**********************************************************************************************/
+
+    event Skimmed(address indexed token, uint256 amount);
+
+    /**********************************************************************************************/
     /*** State variables                                                                        ***/
     /**********************************************************************************************/
 
@@ -71,7 +77,11 @@ contract ProxyFundingStrategy is ReentrancyGuard {
     /**********************************************************************************************/
 
     function skim(address token) external {
-        SafeERC20.safeTransfer(IERC20(token), proxy, IERC20(token).balanceOf(address(this)));
+        uint256 amount = IERC20(token).balanceOf(address(this));
+
+        SafeERC20.safeTransfer(IERC20(token), proxy, amount);
+
+        emit Skimmed(token, amount);
     }
 
 }

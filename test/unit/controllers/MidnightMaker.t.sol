@@ -12,6 +12,7 @@ import { RateLimitHelpers }  from "../../../src/RateLimitHelpers.sol";
 
 import { CollateralParams, Market } from "../../../src/interfaces/MidnightInterfaces.sol";
 
+import { MidnightLib }     from "../../../src/libraries/MidnightLib.sol";
 import { MidnightIdLib }   from "../../../src/libraries/midnight/MidnightIdLib.sol";
 import { MidnightTickLib } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
@@ -264,24 +265,22 @@ contract SetMidnightMakeConfigTests is MidnightMakerTestBase {
     function test_setMidnightMakeConfig() public {
         _onboardTake();
 
-        ( , , , , , , uint48 configMaturity, uint128 maxOfferSize, address token )
-            = controller.midnightMarketConfigs(marketId);
+        MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(configMaturity, 0);
-        assertEq(maxOfferSize,   0);
-        assertEq(token,          address(0));
+        assertEq(config.maturity,     0);
+        assertEq(config.maxOfferSize, 0);
+        assertEq(config.loanToken,    address(0));
 
         vm.prank(admin);
         vm.expectEmit(address(controller));
         emit MidnightMakeConfigSet(marketId, address(loanToken), maturity, MAX_OFFER_SIZE);
         controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
 
-        ( , , , , , , configMaturity, maxOfferSize, token )
-            = controller.midnightMarketConfigs(marketId);
+        config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(configMaturity, maturity);
-        assertEq(maxOfferSize,   MAX_OFFER_SIZE);
-        assertEq(token,          address(loanToken));
+        assertEq(config.maturity,     maturity);
+        assertEq(config.maxOfferSize, MAX_OFFER_SIZE);
+        assertEq(config.loanToken,    address(loanToken));
     }
 
     function test_setMidnightMakeConfig_zeroDisablesMake() public {
@@ -291,9 +290,7 @@ contract SetMidnightMakeConfigTests is MidnightMakerTestBase {
         vm.prank(admin);
         controller.setMidnightMakeConfig(marketId, 0);
 
-        ( , , , , , , , uint128 maxOfferSize, ) = controller.midnightMarketConfigs(marketId);
-
-        assertEq(maxOfferSize, 0);
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
     }
 
     function test_setMidnightMarketConfig_preservesMakeConfig() public {
@@ -305,15 +302,12 @@ contract SetMidnightMakeConfigTests is MidnightMakerTestBase {
             marketId, MAX_BUY_TICK - 1, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
         );
 
-        (
-            uint16 maxBuyTick, , , , , ,
-            uint48 configMaturity, uint128 maxOfferSize, address token
-        ) = controller.midnightMarketConfigs(marketId);
+        MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(maxBuyTick,     MAX_BUY_TICK - 1);
-        assertEq(configMaturity, maturity);
-        assertEq(maxOfferSize,   MAX_OFFER_SIZE);
-        assertEq(token,          address(loanToken));
+        assertEq(config.maxBuyTick,   MAX_BUY_TICK - 1);
+        assertEq(config.maturity,     maturity);
+        assertEq(config.maxOfferSize, MAX_OFFER_SIZE);
+        assertEq(config.loanToken,    address(loanToken));
     }
 
 }
@@ -330,25 +324,25 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
     }
 
     function test_setMidnightGroups() public {
-        ( bytes32 buyGroup, bytes32 sellGroup ) = controller.midnightOfferGroups(marketId);
+        MidnightLib.OfferGroups memory groups = controller.midnightOfferGroups(marketId);
 
-        assertEq(buyGroup,  bytes32(0));
-        assertEq(sellGroup, bytes32(0));
+        assertEq(groups.buyGroup,  bytes32(0));
+        assertEq(groups.sellGroup, bytes32(0));
 
         vm.prank(admin);
         vm.expectEmit(address(controller));
         emit MidnightGroupsSet(marketId, bytes32("buy"), bytes32("sell"));
         controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
 
-        ( buyGroup, sellGroup ) = controller.midnightOfferGroups(marketId);
+        groups = controller.midnightOfferGroups(marketId);
 
-        assertEq(buyGroup,  bytes32("buy"));
-        assertEq(sellGroup, bytes32("sell"));
+        assertEq(groups.buyGroup,  bytes32("buy"));
+        assertEq(groups.sellGroup, bytes32("sell"));
 
-        ( buyGroup, sellGroup ) = controller.midnightOfferGroups(keccak256("otherMarket"));
+        groups = controller.midnightOfferGroups(keccak256("otherMarket"));
 
-        assertEq(buyGroup,  bytes32(0));
-        assertEq(sellGroup, bytes32(0));
+        assertEq(groups.buyGroup,  bytes32(0));
+        assertEq(groups.sellGroup, bytes32(0));
     }
 
     function test_setMidnightGroups_directionsAreIndependent() public {
@@ -357,10 +351,10 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
         controller.setMidnightGroups(marketId, bytes32("buy2"), bytes32("sell"));
         vm.stopPrank();
 
-        ( bytes32 buyGroup, bytes32 sellGroup ) = controller.midnightOfferGroups(marketId);
+        MidnightLib.OfferGroups memory groups = controller.midnightOfferGroups(marketId);
 
-        assertEq(buyGroup,  bytes32("buy2"));
-        assertEq(sellGroup, bytes32("sell"));
+        assertEq(groups.buyGroup,  bytes32("buy2"));
+        assertEq(groups.sellGroup, bytes32("sell"));
     }
 
 }

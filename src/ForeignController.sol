@@ -138,8 +138,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
-    mapping(bytes32 marketId => MidnightLib.MarketConfig config) public midnightMarketConfigs;
-    mapping(bytes32 marketId => MidnightLib.OfferGroups groups) public midnightOfferGroups;
+    mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
+    mapping(bytes32 marketId => MidnightLib.OfferGroups groups) internal _midnightOfferGroups;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -304,7 +304,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
         MidnightLib.setTakeConfig(
-            midnightMarketConfigs[marketId],
+            _midnightMarketConfigs[marketId],
             maxBuyTick,
             minSellTick,
             minBuyYield,
@@ -328,7 +328,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
         ( address loanToken, uint256 maturity ) = MidnightLib.setMakeConfig(
-            midnightMarketConfigs[marketId], midnight, marketId, maxOfferSize
+            _midnightMarketConfigs[marketId], midnight, marketId, maxOfferSize
         );
 
         emit MidnightMakeConfigSet(marketId, loanToken, maturity, maxOfferSize);
@@ -337,7 +337,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function setMidnightGroups(bytes32 marketId, bytes32 buyGroup, bytes32 sellGroup) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        midnightOfferGroups[marketId] = MidnightLib.OfferGroups({
+        _midnightOfferGroups[marketId] = MidnightLib.OfferGroups({
             buyGroup  : buyGroup,
             sellGroup : sellGroup
         });
@@ -829,7 +829,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             buyRateLimitId    : LIMIT_MIDNIGHT_BUY,
             redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
             marketId          : marketId,
-            config            : midnightMarketConfigs[marketId],
+            config            : _midnightMarketConfigs[marketId],
             units             : units,
             minAssetsOut      : minAssetsOut
         }));
@@ -861,13 +861,25 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             buyRateLimitId : LIMIT_MIDNIGHT_BUY,
             strategyKey    : midnightStrategyKey(msg.sender, marketId),
             marketId       : marketId,
-            config         : midnightMarketConfigs[marketId],
+            config         : _midnightMarketConfigs[marketId],
             strategy       : msg.sender,
             assets         : assets,
             units          : units
         }));
 
         emit MidnightFillFunded(marketId, msg.sender, assets, units);
+    }
+
+    function midnightMarketConfigs(bytes32 marketId)
+        external view returns (MidnightLib.MarketConfig memory)
+    {
+        return _midnightMarketConfigs[marketId];
+    }
+
+    function midnightOfferGroups(bytes32 marketId)
+        external view returns (MidnightLib.OfferGroups memory)
+    {
+        return _midnightOfferGroups[marketId];
     }
 
     function midnightStrategyKey(address strategy, bytes32 marketId)
@@ -1022,7 +1034,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
             sellRateLimitId : LIMIT_MIDNIGHT_SELL,
             marketId        : marketId,
-            config          : midnightMarketConfigs[marketId],
+            config          : _midnightMarketConfigs[marketId],
             fills           : fills,
             assetsBound     : assetsBound
         });
