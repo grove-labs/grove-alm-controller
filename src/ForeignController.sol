@@ -13,6 +13,7 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { MessagingFee }  from "./interfaces/ILayerZero.sol";
+import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -746,27 +747,35 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /**********************************************************************************************/
 
     function buyMidnight(
-        bytes32            marketId,
-        MidnightLib.Fill[] memory fills,
-        uint256            maxAssetsIn
+        bytes32        marketId,
+        Offer   memory offer,
+        bytes   memory ratifierData,
+        uint256        units,
+        uint256        maxAssetsIn
     )
         external nonReentrant returns (uint256 assetsSpent)
     {
         _checkRole(RELAYER);
 
-        assetsSpent = MidnightLib.buy(_midnightTakeParams(marketId, fills, maxAssetsIn));
+        assetsSpent = MidnightLib.buy(
+            _midnightTakeParams(marketId, offer, ratifierData, units, maxAssetsIn)
+        );
     }
 
     function sellMidnight(
-        bytes32            marketId,
-        MidnightLib.Fill[] memory fills,
-        uint256            minAssetsOut
+        bytes32        marketId,
+        Offer   memory offer,
+        bytes   memory ratifierData,
+        uint256        units,
+        uint256        minAssetsOut
     )
         external nonReentrant returns (uint256 assetsReceived)
     {
         _checkRole(RELAYER);
 
-        assetsReceived = MidnightLib.sell(_midnightTakeParams(marketId, fills, minAssetsOut));
+        assetsReceived = MidnightLib.sell(
+            _midnightTakeParams(marketId, offer, ratifierData, units, minAssetsOut)
+        );
     }
 
     function redeemMidnight(bytes32 marketId, uint256 units, uint256 minAssetsOut)
@@ -920,9 +929,11 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function _midnightTakeParams(
-        bytes32            marketId,
-        MidnightLib.Fill[] memory fills,
-        uint256            assetsBound
+        bytes32        marketId,
+        Offer   memory offer,
+        bytes   memory ratifierData,
+        uint256        units,
+        uint256        assetsBound
     )
         internal view returns (MidnightLib.TakeParams memory)
     {
@@ -934,7 +945,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             sellRateLimitId : LIMIT_MIDNIGHT_SELL,
             marketId        : marketId,
             config          : midnightMarketConfigs[marketId],
-            fills           : fills,
+            offer           : offer,
+            ratifierData    : ratifierData,
+            units           : units,
             assetsBound     : assetsBound
         });
     }
