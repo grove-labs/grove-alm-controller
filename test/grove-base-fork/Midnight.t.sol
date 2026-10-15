@@ -1843,7 +1843,7 @@ contract SlashingCallback {
 
 }
 
-contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
+contract ForeignControllerMidnightMidFillSlashTests is MidnightTestBase {
 
     uint256 constant VICTIM_UNITS = 1_000_000e18;
 
@@ -1874,7 +1874,7 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
         slasher.approveMidnight(address(loanToken));
     }
 
-    function test_buyMidnight_slashedMidBatch() public {
+    function test_buyMidnight_slashedMidFill() public {
         uint256 creditBefore = _credit();
 
         Offer memory offer = _offer(false, TICK_98, 1_000e18);
@@ -1888,7 +1888,7 @@ contract ForeignControllerMidnightMidBatchSlashTests is MidnightTestBase {
         assertEq(midnight.debt(marketId, victim), VICTIM_UNITS);
     }
 
-    function test_sellMidnight_slashedMidBatch() public {
+    function test_sellMidnight_slashedMidFill() public {
         uint256 creditBefore = _credit();
         uint256 units        = VICTIM_UNITS / 2;
 

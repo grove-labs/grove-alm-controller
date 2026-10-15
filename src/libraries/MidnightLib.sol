@@ -59,7 +59,6 @@ library MidnightLib {
         uint256 tickPriceBound;
         uint256 yieldPriceBound;
         uint256 settlementFee;
-        uint256 creditCap;  // Sellable position, ignored when buying.
     }
 
     struct RedeemParams {
@@ -165,8 +164,7 @@ library MidnightLib {
             selling         : false,
             tickPriceBound  : MidnightTickLib.tickToPrice(params.config.maxBuyTick),
             yieldPriceBound : maxBuyPrice(params.config.minBuyYield, timeToMaturity, continuousFee),
-            settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity),
-            creditCap       : 0
+            settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity)
         });
 
         uint256 creditBefore  = _credit(market, params.marketId, address(params.proxy));
@@ -210,6 +208,9 @@ library MidnightLib {
         ( uint256 creditBefore, uint256 pendingFee ) =
             _position(market, params.marketId, address(params.proxy));
 
+        // Credit can shrink from fee accrual and slashing between quote and take.
+        require(params.units <= creditBefore, "MidnightLib/units-exceed-credit");
+
         uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
 
         TakeContext memory ctx = TakeContext({
@@ -218,8 +219,7 @@ library MidnightLib {
             yieldPriceBound : minSellPriceForPosition(
                 params.config.maxSellYield, timeToMaturity, creditBefore, pendingFee
             ),
-            settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity),
-            creditCap       : creditBefore
+            settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity)
         });
 
         _take(params, ctx);
@@ -296,9 +296,6 @@ library MidnightLib {
         uint256 price = MidnightTickLib.tickToPrice(offer.tick);
 
         if (ctx.selling) {
-            // Credit can shrink from fee accrual and slashing between quote and take.
-            require(params.units <= ctx.creditCap, "MidnightLib/units-exceed-credit");
-
             // The fee is taken out of the proceeds, so both floors bind on the gross price.
             require(
                 price >= ctx.tickPriceBound + ctx.settlementFee,
