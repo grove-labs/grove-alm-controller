@@ -4,7 +4,7 @@ pragma solidity ^0.8.21;
 
 import { Market } from "../../interfaces/MidnightInterfaces.sol";
 
-// Vendored from morpho-org/midnight @ 3e4e49e74cbc199b84f11afc94599929df215370, src/libraries/IdLib.sol (toId only).
+// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/libraries/IdLib.sol (toId only).
 
 library MidnightIdLib {
 

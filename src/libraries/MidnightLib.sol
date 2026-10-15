@@ -30,12 +30,6 @@ library MidnightLib {
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
 
-    struct Fill {
-        Offer   offer;
-        bytes   ratifierData;
-        uint256 units;
-    }
-
     // minSellTick != 0 marks the market as onboarded; maxLossFactor is a fraction of type(uint128).max.
     struct MarketConfig {
         uint16  maxBuyTick;
@@ -54,7 +48,9 @@ library MidnightLib {
         bytes32      sellRateLimitId;
         bytes32      marketId;
         MarketConfig config;
-        Fill[]       fills;
+        Offer        offer;
+        bytes        ratifierData;
+        uint256      units;
         uint256      assetsBound;  // maxAssetsIn when buying, minAssetsOut when selling
     }
 
@@ -144,9 +140,8 @@ library MidnightLib {
     function buy(TakeParams memory params) external returns (uint256 assetsSpent) {
         require(params.config.maxBuyTick != 0, "MidnightLib/buy-not-enabled");
         require(params.assetsBound != 0,       "MidnightLib/max-assets-in-not-set");
-        require(params.fills.length != 0,      "MidnightLib/empty-batch");
 
-        Market memory market = params.fills[0].offer.market;
+        Market memory market = params.offer.market;
 
         require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
 
@@ -179,7 +174,7 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, params.assetsBound);
 
-        uint256 totalUnits = _takeBatch(params, ctx);
+        _take(params, ctx);
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
@@ -188,7 +183,7 @@ library MidnightLib {
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
 
         require(
-            _credit(market, params.marketId, address(params.proxy)) == creditBefore + totalUnits,
+            _credit(market, params.marketId, address(params.proxy)) == creditBefore + params.units,
             "MidnightLib/credit-delta-mismatch"
         );
 
@@ -203,9 +198,8 @@ library MidnightLib {
     function sell(TakeParams memory params) external returns (uint256 assetsReceived) {
         require(params.config.minSellTick != 0, "MidnightLib/sell-not-enabled");
         require(params.assetsBound != 0,        "MidnightLib/min-assets-out-not-set");
-        require(params.fills.length != 0,       "MidnightLib/empty-batch");
 
-        Market memory market = params.fills[0].offer.market;
+        Market memory market = params.offer.market;
 
         require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
 
@@ -228,14 +222,14 @@ library MidnightLib {
             creditCap       : creditBefore
         });
 
-        uint256 totalUnits = _takeBatch(params, ctx);
+        _take(params, ctx);
 
         assetsReceived = IERC20(market.loanToken).balanceOf(address(params.proxy)) - balanceBefore;
 
         require(assetsReceived >= params.assetsBound, "MidnightLib/min-assets-out-not-met");
 
         require(
-            creditBefore == _credit(market, params.marketId, address(params.proxy)) + totalUnits,
+            creditBefore == _credit(market, params.marketId, address(params.proxy)) + params.units,
             "MidnightLib/credit-delta-mismatch"
         );
 
@@ -293,75 +287,60 @@ library MidnightLib {
     /*** Internal functions                                                                     ***/
     /**********************************************************************************************/
 
-    function _takeBatch(TakeParams memory params, TakeContext memory ctx)
-        internal returns (uint256 totalUnits)
-    {
-        address receiverIfTakerIsSeller = ctx.selling ? address(params.proxy) : address(0);
+    function _take(TakeParams memory params, TakeContext memory ctx) internal {
+        Offer memory offer = params.offer;
 
-        for (uint256 i = 0; i < params.fills.length; i++) {
-            Fill  memory fill  = params.fills[i];
-            Offer memory offer = fill.offer;
+        require(offer.buy == ctx.selling, "MidnightLib/invalid-offer-direction");
+        require(params.units != 0,        "MidnightLib/zero-units");
 
-            _requireMarketId(offer.market, params.marketId);
+        uint256 price = MidnightTickLib.tickToPrice(offer.tick);
 
-            require(offer.buy == ctx.selling, "MidnightLib/invalid-offer-direction");
-            require(fill.units != 0,          "MidnightLib/zero-units");
+        if (ctx.selling) {
+            // Credit can shrink from fee accrual and slashing between quote and take.
+            require(params.units <= ctx.creditCap, "MidnightLib/units-exceed-credit");
 
-            uint256 price = MidnightTickLib.tickToPrice(offer.tick);
-            uint256 units = fill.units;
+            // The fee is taken out of the proceeds, so both floors bind on the gross price.
+            require(
+                price >= ctx.tickPriceBound + ctx.settlementFee,
+                "MidnightLib/sell-price-too-low"
+            );
+            require(
+                price >= ctx.yieldPriceBound + ctx.settlementFee,
+                "MidnightLib/sell-yield-too-high"
+            );
+        } else {
+            // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
+            require(
+                price + ctx.settlementFee <= ctx.tickPriceBound,
+                "MidnightLib/buy-price-too-high"
+            );
+            require(
+                price + ctx.settlementFee <= ctx.yieldPriceBound,
+                "MidnightLib/buy-yield-too-low"
+            );
 
-            if (ctx.selling) {
-                // Credit can shrink from fee accrual and slashing between quote and take.
-                if (units > ctx.creditCap) units = ctx.creditCap;
-                if (units == 0)            break;
-
-                ctx.creditCap -= units;
-
-                // The fee is taken out of the proceeds, so both floors bind on the gross price.
-                require(
-                    price >= ctx.tickPriceBound + ctx.settlementFee,
-                    "MidnightLib/sell-price-too-low"
-                );
-                require(
-                    price >= ctx.yieldPriceBound + ctx.settlementFee,
-                    "MidnightLib/sell-yield-too-high"
-                );
-            } else {
-                // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
-                require(
-                    price + ctx.settlementFee <= ctx.tickPriceBound,
-                    "MidnightLib/buy-price-too-high"
-                );
-                require(
-                    price + ctx.settlementFee <= ctx.yieldPriceBound,
-                    "MidnightLib/buy-yield-too-low"
-                );
-
-                // Paying ourselves would net the transfer to zero, hiding the spend from the rate limit.
-                require(
-                    offer.receiverIfMakerIsSeller != address(params.proxy),
-                    "MidnightLib/invalid-offer-receiver"
-                );
-            }
-
-            totalUnits += units;
-
-            params.proxy.doCall(
-                offer.market.midnight,
-                abi.encodeCall(
-                    IMidnight.take,
-                    (
-                        offer,
-                        fill.ratifierData,
-                        units,
-                        address(params.proxy),
-                        receiverIfTakerIsSeller,
-                        address(0),
-                        new bytes(0)
-                    )
-                )
+            // Paying ourselves would net the transfer to zero, hiding the spend from the rate limit.
+            require(
+                offer.receiverIfMakerIsSeller != address(params.proxy),
+                "MidnightLib/invalid-offer-receiver"
             );
         }
+
+        params.proxy.doCall(
+            offer.market.midnight,
+            abi.encodeCall(
+                IMidnight.take,
+                (
+                    offer,
+                    params.ratifierData,
+                    params.units,
+                    address(params.proxy),
+                    ctx.selling ? address(params.proxy) : address(0),
+                    address(0),
+                    new bytes(0)
+                )
+            )
+        );
     }
 
     // Rounds against the caller: down for the buy ceiling, up for the sell floor.
