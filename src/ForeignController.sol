@@ -57,8 +57,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     event MidnightFillFunded(
         bytes32 indexed marketId,
         address indexed strategy,
-        uint256 assets,
-        uint256 units
+        bool            buy,
+        uint256         assets,
+        uint256         units
     );
     event MidnightGroupsSet(bytes32 indexed marketId, bytes32 buyGroup, bytes32 sellGroup);
     event MidnightMakeConfigSet(
@@ -78,6 +79,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     );
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
+    event MidnightStrategySet(bytes32 indexed marketId, address indexed strategy, bool allowed);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -106,9 +108,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
+    bytes32 public LIMIT_MIDNIGHT_MAKE       = keccak256("LIMIT_MIDNIGHT_MAKE");
     bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
     bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
-    bytes32 public LIMIT_MIDNIGHT_STRATEGY   = keccak256("LIMIT_MIDNIGHT_STRATEGY");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -140,6 +142,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
     mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
     mapping(bytes32 marketId => MidnightLib.OfferGroups groups) internal _midnightOfferGroups;
+
+    mapping(bytes32 marketId => mapping(address strategy => bool allowed)) internal _midnightStrategies;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -337,6 +341,12 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function setMidnightGroups(bytes32 marketId, bytes32 buyGroup, bytes32 sellGroup) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
+        // Zero is the ratifier's "not designated" sentinel, and one shared group cancels both sides.
+        require(
+            buyGroup != 0 && sellGroup != 0 && buyGroup != sellGroup,
+            "FC/invalid-groups"
+        );
+
         _midnightOfferGroups[marketId] = MidnightLib.OfferGroups({
             buyGroup  : buyGroup,
             sellGroup : sellGroup
@@ -354,6 +364,17 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         );
 
         emit MidnightRatifierAuthorizationSet(ratifier, authorized);
+    }
+
+    function setMidnightStrategy(bytes32 marketId, address strategy, bool allowed) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        // Allowing the zero address would let an offer with no callback settle unmetered.
+        require(strategy != address(0), "FC/invalid-strategy");
+
+        _midnightStrategies[marketId][strategy] = allowed;
+
+        emit MidnightStrategySet(marketId, strategy, allowed);
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -850,24 +871,34 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /*** Midnight maker funding                                                                 ***/
     /**********************************************************************************************/
 
-    // Deliberately roleless: a keyed (strategy, market) pair is the authorization.
-    function fundMidnightFill(bytes32 marketId, uint256 assets, uint256 units)
+    // Deliberately roleless: a whitelisted (market, strategy) pair is the authorization.
+    function midnight_fundFill(
+        bytes32 marketId,
+        bool    buy,
+        uint256 assets,
+        uint256 units,
+        uint256 pendingFee
+    )
         external nonReentrant
     {
         MidnightLib.fundFill(MidnightLib.FundFillParams({
-            proxy          : proxy,
-            rateLimits     : rateLimits,
-            midnight       : midnight,
-            buyRateLimitId : LIMIT_MIDNIGHT_BUY,
-            strategyKey    : midnightStrategyKey(msg.sender, marketId),
-            marketId       : marketId,
-            config         : _midnightMarketConfigs[marketId],
-            strategy       : msg.sender,
-            assets         : assets,
-            units          : units
+            proxy           : proxy,
+            rateLimits      : rateLimits,
+            midnight        : midnight,
+            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
+            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
+            makeRateLimitId : LIMIT_MIDNIGHT_MAKE,
+            marketId        : marketId,
+            config          : _midnightMarketConfigs[marketId],
+            strategy        : msg.sender,
+            allowed         : _midnightStrategies[marketId][msg.sender],
+            buy             : buy,
+            assets          : assets,
+            units           : units,
+            pendingFee      : pendingFee
         }));
 
-        emit MidnightFillFunded(marketId, msg.sender, assets, units);
+        emit MidnightFillFunded(marketId, msg.sender, buy, assets, units);
     }
 
     function midnightMarketConfigs(bytes32 marketId)
@@ -876,16 +907,16 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return _midnightMarketConfigs[marketId];
     }
 
-    function midnightOfferGroups(bytes32 marketId)
+    function midnight_getDesignatedGroups(bytes32 marketId)
         external view returns (MidnightLib.OfferGroups memory)
     {
         return _midnightOfferGroups[marketId];
     }
 
-    function midnightStrategyKey(address strategy, bytes32 marketId)
-        public view returns (bytes32)
+    function midnight_isCallbackAllowed(bytes32 marketId, address callback)
+        external view returns (bool)
     {
-        return RateLimitHelpers.makeAddressBytes32Key(LIMIT_MIDNIGHT_STRATEGY, strategy, marketId);
+        return _midnightStrategies[marketId][callback];
     }
 
     /**********************************************************************************************/

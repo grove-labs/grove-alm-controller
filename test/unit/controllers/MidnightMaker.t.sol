@@ -22,6 +22,9 @@ contract MockMidnightVenue {
 
     mapping(bytes32 => bytes)   internal _markets;
     mapping(bytes32 => uint128) public   lossFactor;
+    mapping(bytes32 => uint256) public   continuousFee;
+
+    mapping(bytes32 => mapping(address => uint256)) public debt;
 
     bool public marketCreated;
 
@@ -42,6 +45,14 @@ contract MockMidnightVenue {
 
     function setLossFactor(bytes32 id, uint128 value) external {
         lossFactor[id] = value;
+    }
+
+    function setContinuousFee(bytes32 id, uint256 value) external {
+        continuousFee[id] = value;
+    }
+
+    function setDebt(bytes32 id, address user, uint256 value) external {
+        debt[id][user] = value;
     }
 
     function toMarket(bytes32 id) external view returns (Market memory) {
@@ -70,8 +81,9 @@ contract MidnightMakerTestBase is UnitTestBase {
     event MidnightFillFunded(
         bytes32 indexed marketId,
         address indexed strategy,
-        uint256 assets,
-        uint256 units
+        bool            buy,
+        uint256         assets,
+        uint256         units
     );
     event MidnightGroupsSet(bytes32 indexed marketId, bytes32 buyGroup, bytes32 sellGroup);
     event MidnightMakeConfigSet(
@@ -158,24 +170,52 @@ contract MidnightMakerTestBase is UnitTestBase {
         controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
     }
 
-    function _strategyKey() internal view returns (bytes32) {
-        return controller.midnightStrategyKey(strategy, marketId);
-    }
-
     function _buyKey() internal view returns (bytes32) {
         return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_BUY(), marketId);
     }
 
+    function _sellKey() internal view returns (bytes32) {
+        return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_SELL(), marketId);
+    }
+
+    function _makeKey() internal view returns (bytes32) {
+        return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_MAKE(), marketId);
+    }
+
     function _setLimits(uint256 maxAmount) internal {
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_strategyKey(), maxAmount, 0);
-        rateLimits.setRateLimitData(_buyKey(),      maxAmount, 0);
+        rateLimits.setRateLimitData(_buyKey(),  maxAmount, 0);
+        rateLimits.setRateLimitData(_sellKey(), maxAmount, 0);
+        rateLimits.setRateLimitData(_makeKey(), maxAmount, 0);
         vm.stopPrank();
+    }
+
+    function _allowStrategy(bool allowed) internal {
+        vm.prank(admin);
+        controller.setMidnightStrategy(marketId, strategy, allowed);
     }
 
     // Exactly what Midnight pays on a maker buy: floor(units * tickToPrice(tick) / WAD).
     function _honestAssets(uint256 units, uint16 tick) internal pure returns (uint256) {
         return units * MidnightTickLib.tickToPrice(tick) / WAD;
+    }
+
+    // Both sell floors sit at or below par, so pricing at par clears whichever binds.
+    function _parAssets(uint256 units) internal pure returns (uint256) {
+        return units;
+    }
+
+    function _minSellAssets(uint256 units, uint256 pendingFee) internal view returns (uint256) {
+        uint256 timeToMaturity = maturity > block.timestamp ? maturity - block.timestamp : 0;
+
+        uint256 floor = MidnightTickLib.tickToPrice(MIN_SELL_TICK);
+
+        uint256 yieldFloor =
+            MidnightLib.minSellPriceForPosition(MAX_SELL_YIELD, timeToMaturity, units, pendingFee);
+
+        if (yieldFloor > floor) floor = yieldFloor;
+
+        return (units * floor + WAD - 1) / WAD;
     }
 
 }
@@ -324,7 +364,7 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
     }
 
     function test_setMidnightGroups() public {
-        MidnightLib.OfferGroups memory groups = controller.midnightOfferGroups(marketId);
+        MidnightLib.OfferGroups memory groups = controller.midnight_getDesignatedGroups(marketId);
 
         assertEq(groups.buyGroup,  bytes32(0));
         assertEq(groups.sellGroup, bytes32(0));
@@ -334,15 +374,33 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
         emit MidnightGroupsSet(marketId, bytes32("buy"), bytes32("sell"));
         controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
 
-        groups = controller.midnightOfferGroups(marketId);
+        groups = controller.midnight_getDesignatedGroups(marketId);
 
         assertEq(groups.buyGroup,  bytes32("buy"));
         assertEq(groups.sellGroup, bytes32("sell"));
 
-        groups = controller.midnightOfferGroups(keccak256("otherMarket"));
+        groups = controller.midnight_getDesignatedGroups(keccak256("otherMarket"));
 
         assertEq(groups.buyGroup,  bytes32(0));
         assertEq(groups.sellGroup, bytes32(0));
+    }
+
+    function test_setMidnightGroups_zeroBuyGroup() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-groups");
+        controller.setMidnightGroups(marketId, bytes32(0), bytes32("sell"));
+    }
+
+    function test_setMidnightGroups_zeroSellGroup() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-groups");
+        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32(0));
+    }
+
+    function test_setMidnightGroups_sameGroupBothSides() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-groups");
+        controller.setMidnightGroups(marketId, bytes32("same"), bytes32("same"));
     }
 
     function test_setMidnightGroups_directionsAreIndependent() public {
@@ -351,7 +409,7 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
         controller.setMidnightGroups(marketId, bytes32("buy2"), bytes32("sell"));
         vm.stopPrank();
 
-        MidnightLib.OfferGroups memory groups = controller.midnightOfferGroups(marketId);
+        MidnightLib.OfferGroups memory groups = controller.midnight_getDesignatedGroups(marketId);
 
         assertEq(groups.buyGroup,  bytes32("buy2"));
         assertEq(groups.sellGroup, bytes32("sell"));
@@ -434,27 +492,119 @@ contract CancelMidnightOfferGroupTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightStrategyKeyTests is MidnightMakerTestBase {
+contract SetMidnightStrategyTests is MidnightMakerTestBase {
 
-    function test_midnightStrategyKey_matchesHelperDerivation() public view {
-        assertEq(
-            controller.midnightStrategyKey(strategy, marketId),
-            RateLimitHelpers.makeAddressBytes32Key(
-                controller.LIMIT_MIDNIGHT_STRATEGY(), strategy, marketId
-            )
-        );
+    event MidnightStrategySet(bytes32 indexed marketId, address indexed strategy, bool allowed);
+
+    function test_setMidnightStrategy_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        controller.setMidnightStrategy(marketId, strategy, true);
     }
 
-    function test_midnightStrategyKey_isPairScoped() public {
-        bytes32 key = controller.midnightStrategyKey(strategy, marketId);
+    function test_setMidnightStrategy_relayerCannotCall() public {
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            relayer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        controller.setMidnightStrategy(marketId, strategy, true);
+    }
 
-        assertTrue(key != controller.midnightStrategyKey(makeAddr("other"), marketId));
-        assertTrue(key != controller.midnightStrategyKey(strategy, keccak256("otherMarket")));
+    function test_setMidnightStrategy_zeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-strategy");
+        controller.setMidnightStrategy(marketId, address(0), true);
+    }
+
+    function test_setMidnightStrategy_setsAndClears() public {
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
+
+        _allowStrategy(true);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy));
+
+        _allowStrategy(false);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
+    }
+
+    function test_setMidnightStrategy_isPairScoped() public {
+        _allowStrategy(true);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, makeAddr("other")));
+        assertFalse(controller.midnight_isCallbackAllowed(keccak256("otherMarket"), strategy));
+    }
+
+    function test_setMidnightStrategy_emitsSet() public {
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(marketId, strategy, true);
+
+        vm.prank(admin);
+        controller.setMidnightStrategy(marketId, strategy, true);
     }
 
 }
 
-contract FundMidnightFillTests is MidnightMakerTestBase {
+contract MidnightPeripheryViewTests is MidnightMakerTestBase {
+
+    // The ratifier reaches both views through staticcall, so neither may revert.
+    function test_midnightViews_areStaticcallSafeOnUnknownMarkets() public {
+        bytes32 unknown = keccak256("unknownMarket");
+
+        ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
+            abi.encodeCall(ForeignController.midnight_getDesignatedGroups, (unknown))
+        );
+
+        ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
+            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (unknown, strategy))
+        );
+
+        assertTrue(groupsOk);
+        assertTrue(allowedOk);
+
+        MidnightLib.OfferGroups memory groups =
+            abi.decode(groupsOut, (MidnightLib.OfferGroups));
+
+        assertEq(groups.buyGroup,  bytes32(0));
+        assertEq(groups.sellGroup, bytes32(0));
+
+        assertFalse(abi.decode(allowedOut, (bool)));
+    }
+
+    function test_midnightViews_areStaticcallSafeOnConfiguredMarkets() public {
+        vm.startPrank(admin);
+        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
+        controller.setMidnightStrategy(marketId, strategy, true);
+        vm.stopPrank();
+
+        ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
+            abi.encodeCall(ForeignController.midnight_getDesignatedGroups, (marketId))
+        );
+
+        ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
+            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (marketId, strategy))
+        );
+
+        assertTrue(groupsOk);
+        assertTrue(allowedOk);
+
+        MidnightLib.OfferGroups memory groups =
+            abi.decode(groupsOut, (MidnightLib.OfferGroups));
+
+        assertEq(groups.buyGroup,  bytes32("buy"));
+        assertEq(groups.sellGroup, bytes32("sell"));
+
+        assertTrue(abi.decode(allowedOut, (bool)));
+    }
+
+}
+
+contract MidnightFundFillTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 1_000e18;
 
@@ -463,11 +613,12 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         _onboardTake();
         _enableMake();
+        _allowStrategy(true);
 
         loanToken.mint(address(proxy), 10_000_000e18);
     }
 
-    function test_fundMidnightFill_makeNotEnabled() public {
+    function test_midnight_fundFill_makeNotEnabled() public {
         vm.prank(admin);
         controller.setMidnightMakeConfig(marketId, 0);
 
@@ -475,27 +626,132 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/make-not-enabled");
-        controller.fundMidnightFill(marketId, 1, UNITS);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
-    function test_fundMidnightFill_strategyNotKeyed() public {
+    function test_midnight_fundFill_zeroAssets() public {
+        _setLimits(MAX_OFFER_SIZE);
+
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/strategy-not-keyed");
-        controller.fundMidnightFill(marketId, 1, UNITS);
+        vm.expectRevert("MidnightLib/zero-assets");
+        controller.midnight_fundFill(marketId, true, 0, UNITS, 0);
     }
 
-    function test_fundMidnightFill_keyIsPairScoped() public {
-        bytes32 otherKey = controller.midnightStrategyKey(strategy, keccak256("otherMarket"));
+    function test_midnight_fundFill_zeroUnits() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/zero-units");
+        controller.midnight_fundFill(marketId, true, 1, 0, 0);
+    }
+
+    function test_midnight_fundFill_buyLiveContinuousFeeAboveCeiling() public {
+        _setLimits(MAX_OFFER_SIZE);
 
         vm.prank(admin);
-        rateLimits.setRateLimitData(otherKey, MAX_OFFER_SIZE, 0);
+        controller.setMidnightMarketConfig(
+            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, type(uint128).max
+        );
+
+        uint256 ceiling = MidnightLib.continuousFeePerSecond(10);
+
+        venue.setContinuousFee(marketId, ceiling);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/strategy-not-keyed");
-        controller.fundMidnightFill(marketId, 1, UNITS);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        venue.setContinuousFee(marketId, ceiling + 1);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/continuous-fee-too-high");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
-    function test_fundMidnightFill_lossFactorTooHigh() public {
+    function test_midnight_fundFill_sellFloorBoundary() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        uint256 minAssets = _minSellAssets(UNITS, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-low");
+        controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, 0);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, false, minAssets, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_sellFloorFallsWithCrystallizedFee() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        uint256 pendingFee = UNITS / 100;
+
+        uint256 withoutFee = _minSellAssets(UNITS, 0);
+        uint256 withFee    = _minSellAssets(UNITS, pendingFee);
+
+        assertLt(withFee, withoutFee);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-low");
+        controller.midnight_fundFill(marketId, false, withFee, UNITS, 0);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, false, withFee, UNITS, pendingFee);
+    }
+
+    function test_midnight_fundFill_sellIntoDebtIsRejected() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        venue.setDebt(marketId, address(proxy), 1);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/debt-not-zero");
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
+    }
+
+    function test_midnight_fundFill_buyIgnoresDebt() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        venue.setDebt(marketId, address(proxy), 1);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_strategyNotAllowed() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _allowStrategy(false);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_whitelistIsPairScoped() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _allowStrategy(false);
+
+        vm.prank(admin);
+        controller.setMidnightStrategy(keccak256("otherMarket"), strategy, true);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_revokedStrategyIsRejected() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        _allowStrategy(false);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_lossFactorTooHigh() public {
         _setLimits(MAX_OFFER_SIZE);
 
         vm.prank(admin);
@@ -507,26 +763,26 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/loss-factor-too-high");
-        controller.fundMidnightFill(marketId, 1, UNITS);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
 
         venue.setLossFactor(marketId, 100);
 
         vm.prank(strategy);
-        controller.fundMidnightFill(marketId, 1, UNITS);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
-    function test_fundMidnightFill_honestFillAtTheBound() public {
+    function test_midnight_fundFill_honestFillAtTheBound() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.prank(strategy);
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
         assertEq(loanToken.balanceOf(strategy), assets);
     }
 
-    function test_fundMidnightFill_oneTickTooExpensive() public {
+    function test_midnight_fundFill_oneTickTooExpensive() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK + 1);
@@ -535,20 +791,20 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/fill-price-too-high");
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    function test_fundMidnightFill_oneWeiOverTheBound() public {
+    function test_midnight_fundFill_oneWeiOverTheBound() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/fill-price-too-high");
-        controller.fundMidnightFill(marketId, assets + 1, UNITS);
+        controller.midnight_fundFill(marketId, true, assets + 1, UNITS, 0);
     }
 
-    function test_fundMidnightFill_yieldBoundCanBind() public {
+    function test_midnight_fundFill_yieldBoundCanBind() public {
         _setLimits(MAX_OFFER_SIZE);
 
         vm.prank(admin);
@@ -560,96 +816,169 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/fill-price-too-high");
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    function test_fundMidnightFill_decrementsBothKeys() public {
+    function test_midnight_fundFill_buyDecrementsMakeAndBuy() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
-        assertEq(rateLimits.getCurrentRateLimit(_strategyKey()), MAX_OFFER_SIZE);
-        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),      MAX_OFFER_SIZE);
+        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE);
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  MAX_OFFER_SIZE);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE);
 
         vm.prank(strategy);
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
-        assertEq(rateLimits.getCurrentRateLimit(_strategyKey()), MAX_OFFER_SIZE - assets);
-        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),      MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE);
     }
 
-    function test_fundMidnightFill_strategyLimitBinds() public {
+    function test_midnight_fundFill_sellDecrementsMakeAndSellAndRestoresBuy() public {
+        uint256 assets = _parAssets(UNITS);
+
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_sellKey(), MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_buyKey(),  MAX_OFFER_SIZE, 0, 0, block.timestamp);
+        vm.stopPrank();
+
+        uint256 proxyPre = loanToken.balanceOf(address(proxy));
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, false, assets, UNITS, 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  assets);
+
+        assertEq(loanToken.balanceOf(strategy),       0);
+        assertEq(loanToken.balanceOf(address(proxy)), proxyPre);
+    }
+
+    function test_midnight_fundFill_sellSkipsTheBuyPriceBound() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        uint256 wayOverBuyBound = _honestAssets(UNITS, MAX_BUY_TICK) * 10;
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, false, wayOverBuyBound, UNITS, 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - wayOverBuyBound);
+    }
+
+    function test_midnight_fundFill_sellSkipsTheLossFactorGate() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 100
+        );
+
+        venue.setLossFactor(marketId, 101);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/loss-factor-too-high");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
+    }
+
+    function test_midnight_fundFill_makeLimitBinds() public {
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_strategyKey(), assets - 1, 0);
-        rateLimits.setRateLimitData(_buyKey(),      MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_makeKey(), assets - 1,     0);
+        rateLimits.setRateLimitData(_buyKey(),  MAX_OFFER_SIZE, 0);
         vm.stopPrank();
 
         vm.prank(strategy);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    function test_fundMidnightFill_buyLimitBinds() public {
-        uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
+    function test_midnight_fundFill_sellLimitBinds() public {
+        uint256 assets = _parAssets(UNITS);
 
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_strategyKey(), MAX_OFFER_SIZE, 0);
-        rateLimits.setRateLimitData(_buyKey(),      assets - 1, 0);
+        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_sellKey(), assets - 1,     0);
         vm.stopPrank();
 
         vm.prank(strategy);
         vm.expectRevert("RateLimits/rate-limit-exceeded");
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, false, assets, UNITS, 0);
     }
 
-    function test_fundMidnightFill_paysTheCallerOnly() public {
+    function test_midnight_fundFill_buyLimitBinds() public {
+        uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
+
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_buyKey(),  assets - 1,     0);
+        vm.stopPrank();
+
+        vm.prank(strategy);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+    }
+
+    function test_midnight_fundFill_paysTheCallerOnly() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets   = _honestAssets(UNITS, MAX_BUY_TICK);
         uint256 proxyPre = loanToken.balanceOf(address(proxy));
 
         vm.prank(strategy);
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
         assertEq(loanToken.balanceOf(strategy),       assets);
         assertEq(loanToken.balanceOf(address(proxy)), proxyPre - assets);
         assertEq(loanToken.balanceOf(ratifier),       0);
     }
 
-    function test_fundMidnightFill_needsNoRole() public {
-        address keyed    = makeAddr("anotherStrategy");
-        bytes32 keyedKey = controller.midnightStrategyKey(keyed, marketId);
-        bytes32 buyKey   = _buyKey();
+    function test_midnight_fundFill_needsNoRole() public {
+        address allowed = makeAddr("anotherStrategy");
 
-        vm.startPrank(admin);
-        rateLimits.setRateLimitData(keyedKey, MAX_OFFER_SIZE, 0);
-        rateLimits.setRateLimitData(buyKey,   MAX_OFFER_SIZE, 0);
-        vm.stopPrank();
+        _setLimits(MAX_OFFER_SIZE);
 
-        assertFalse(controller.hasRole(RELAYER, keyed));
+        vm.prank(admin);
+        controller.setMidnightStrategy(marketId, allowed, true);
+
+        assertFalse(controller.hasRole(RELAYER, allowed));
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
-        vm.prank(keyed);
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        vm.prank(allowed);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
-        assertEq(loanToken.balanceOf(keyed), assets);
+        assertEq(loanToken.balanceOf(allowed), assets);
     }
 
-    function test_fundMidnightFill_emitsFunded() public {
+    function test_midnight_fundFill_emitsFunded() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.prank(strategy);
         vm.expectEmit(address(controller));
-        emit MidnightFillFunded(marketId, strategy, assets, UNITS);
-        controller.fundMidnightFill(marketId, assets, UNITS);
+        emit MidnightFillFunded(marketId, strategy, true, assets, UNITS);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    function testFuzz_fundMidnightFill_honestFillNeverTrips(uint256 units, uint16 tick) public {
+    function test_midnight_fundFill_emitsFundedOnSell() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(strategy);
+        vm.expectEmit(address(controller));
+        emit MidnightFillFunded(marketId, strategy, false, 1_000e18, UNITS);
+        controller.midnight_fundFill(marketId, false, 1_000e18, UNITS, 0);
+    }
+
+    function testFuzz_midnight_fundFill_honestFillNeverTrips(uint256 units, uint16 tick) public {
         units = bound(units, 1, 1_000_000e18);
         tick  = uint16(bound(tick, 0, MAX_BUY_TICK));
 
@@ -657,8 +986,10 @@ contract FundMidnightFillTests is MidnightMakerTestBase {
 
         uint256 assets = _honestAssets(units, tick);
 
+        vm.assume(assets != 0);
+
         vm.prank(strategy);
-        controller.fundMidnightFill(marketId, assets, units);
+        controller.midnight_fundFill(marketId, true, assets, units, 0);
 
         assertEq(loanToken.balanceOf(strategy), assets);
     }
