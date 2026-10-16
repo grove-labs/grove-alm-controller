@@ -1630,6 +1630,55 @@ contract HostileCallback {
 
 }
 
+contract DonatingCallback {
+
+    bytes32 constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+    address public immutable proxy;
+
+    uint256 public donation;
+
+    constructor(address midnight_, address proxy_) {
+        midnight = midnight_;
+        proxy    = proxy_;
+    }
+
+    function approveMidnight(address token) external {
+        IERC20(token).approve(midnight, type(uint256).max);
+    }
+
+    function setDonation(uint256 donation_) external {
+        donation = donation_;
+    }
+
+    function onBuy(bytes32, Market memory market, uint256, uint256, uint256, address, bytes memory)
+        external returns (bytes32)
+    {
+        IERC20(market.loanToken).transfer(proxy, donation);
+
+        return CALLBACK_SUCCESS;
+    }
+
+    function onSell(
+        bytes32,
+        Market  memory market,
+        uint256,
+        uint256,
+        uint256,
+        address,
+        address,
+        bytes   memory
+    )
+        external returns (bytes32)
+    {
+        IERC20(market.loanToken).transfer(proxy, donation);
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
 contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
 
     HostileCallback hostile;
@@ -1662,6 +1711,40 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
             continuousFeeCap        : type(uint256).max
         });
     }
+
+    function _donor(uint256 donation) internal returns (DonatingCallback donor) {
+        donor = new DonatingCallback(MIDNIGHT, address(almProxy));
+
+        loanToken.mint(address(donor), 10_000_000e18);
+
+        donor.approveMidnight(address(loanToken));
+        donor.setDonation(donation);
+    }
+
+    function test_buyMidnight_callbackDonationCannotUnderstateSpend() public {
+        uint256 units = 1_000e18;
+
+        Offer memory offer = _offer(false, TICK_98, uint128(units));
+        offer.callback     = address(_donor(1));
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/assets-spent-mismatch");
+        foreignController.buyMidnight(marketId, offer, new bytes(0), units, type(uint256).max);
+    }
+
+    function test_sellMidnight_callbackDonationCannotOverstateProceeds() public {
+        uint256 units = 1_000e18;
+
+        _seedCredit(units);
+
+        Offer memory offer = _offer(true, TICK_98, uint128(units));
+        offer.callback     = address(_donor(1));
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("MidnightLib/assets-received-mismatch");
+        foreignController.sellMidnight(marketId, offer, new bytes(0), units, 1);
+    }
+
 
     function test_buyMidnight_hostileMakerCallbackIsContained() public {
         uint256 units    = 1_000e18;
