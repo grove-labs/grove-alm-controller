@@ -3,7 +3,10 @@ pragma solidity ^0.8.21;
 
 import { ForeignController } from "../../../src/ForeignController.sol";
 import { MainnetController } from "../../../src/MainnetController.sol";
+import { MidnightLib }       from "../../../src/libraries/MidnightLib.sol";
 import { UniswapV3Lib }      from "../../../src/libraries/UniswapV3Lib.sol";
+
+import { MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
 import { MockDaiUsds } from "../mocks/MockDaiUsds.sol";
 import { MockPSM }     from "../mocks/MockPSM.sol";
@@ -483,7 +486,6 @@ contract MainnetControllerSetUniswapV3TwapSecondsAgoTests is MainnetControllerAd
 
 }
 
-
 contract ForeignControllerAdminTestBase is UnitTestBase {
 
     event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
@@ -503,7 +505,7 @@ contract ForeignControllerAdminTestBase is UnitTestBase {
     bytes32 mintRecipient1      = bytes32(uint256(uint160(makeAddr("mintRecipient1"))));
     bytes32 mintRecipient2      = bytes32(uint256(uint160(makeAddr("mintRecipient2"))));
 
-    function setUp() public {
+    function setUp() public virtual {
         foreignController = new ForeignController(
             admin,
             makeAddr("almProxy"),
@@ -1065,6 +1067,266 @@ contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAd
 
         (,, twapSecondsAgo ) = foreignController.uniswapV3PoolParams(pool);
         assertEq(twapSecondsAgo, 1800);
+    }
+
+}
+
+contract ForeignControllerSetMidnightTests is ForeignControllerAdminTestBase {
+
+    event MidnightSet(address indexed midnight);
+
+    function test_setMidnight_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnight(makeAddr("midnight"));
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnight(makeAddr("midnight"));
+    }
+
+    function test_setMidnight() public {
+        assertEq(foreignController.midnight(), address(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightSet(makeAddr("midnight"));
+        foreignController.setMidnight(makeAddr("midnight"));
+
+        assertEq(foreignController.midnight(), makeAddr("midnight"));
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightSet(makeAddr("midnight2"));
+        foreignController.setMidnight(makeAddr("midnight2"));
+
+        assertEq(foreignController.midnight(), makeAddr("midnight2"));
+    }
+
+}
+
+contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdminTestBase {
+
+    event MidnightMarketConfigSet(
+        bytes32 indexed marketId,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    );
+
+    // Midnight's own ceiling, as the annual rate the config now speaks in: percent_bp_cbp.
+    uint16 constant MAX_CONTINUOUS_FEE_CBP = 1_00_00;
+
+    uint16 constant MIN_BUY_YIELD  = 1_00;
+    uint16 constant MAX_SELL_YIELD = 10_00;
+
+    bytes32 marketId = keccak256("market");
+
+    function _setConfig(bytes32 marketId_, MidnightLib.MarketConfig memory config) internal {
+        foreignController.setMidnightMarketConfig(
+            marketId_,
+            config.maxBuyTick,
+            config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
+            config.maxContinuousFee,
+            config.maxLossFactor
+        );
+    }
+
+    function _config(uint16 maxBuyTick, uint16 minSellTick, uint16 maxContinuousFee)
+        internal pure returns (MidnightLib.MarketConfig memory)
+    {
+        return _config(maxBuyTick, minSellTick, maxContinuousFee, 0);
+    }
+
+    function _config(
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
+        internal pure returns (MidnightLib.MarketConfig memory)
+    {
+        return _config(
+            maxBuyTick, minSellTick, MIN_BUY_YIELD, MAX_SELL_YIELD, maxContinuousFee, maxLossFactor
+        );
+    }
+
+    function _config(
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
+        internal pure returns (MidnightLib.MarketConfig memory)
+    {
+        return MidnightLib.MarketConfig({
+            maxBuyTick       : maxBuyTick,
+            minSellTick      : minSellTick,
+            minBuyYield      : minBuyYield,
+            maxSellYield     : maxSellYield,
+            maxContinuousFee : maxContinuousFee,
+            maxLossFactor    : maxLossFactor
+        });
+    }
+
+    function test_setMidnightMarketConfig_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        _setConfig(marketId, _config(4000, 3000, 0));
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        _setConfig(marketId, _config(4000, 3000, 0));
+    }
+
+    function test_setMidnightMarketConfig_maxBuyTickOutOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-buy-tick-oob");
+        _setConfig(
+            marketId,
+            _config(uint16(MIDNIGHT_MAX_TICK + 1), 3000, 0)
+        );
+    }
+
+    function test_setMidnightMarketConfig_minSellTickOutOfBounds() public {
+        vm.startPrank(admin);
+
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
+        _setConfig(marketId, _config(4000, 0, 0));
+
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
+        _setConfig(
+            marketId,
+            _config(4000, uint16(MIDNIGHT_MAX_TICK + 1), 0)
+        );
+
+        vm.stopPrank();
+    }
+
+    function test_setMidnightMarketConfig_maxContinuousFeeOutOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-continuous-fee-oob");
+        _setConfig(
+            marketId,
+            _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP + 1)
+        );
+
+        assertEq(
+            MidnightLib.continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP),
+            MidnightLib.MAX_CONTINUOUS_FEE
+        );
+
+        vm.prank(admin);
+        _setConfig(
+            marketId,
+            _config(4000, 3000, MAX_CONTINUOUS_FEE_CBP)
+        );
+    }
+
+    function test_setMidnightMarketConfig_maxSellYieldNotSet() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-sell-yield-not-set");
+        _setConfig(
+            marketId,
+            _config(4000, 3000, MIN_BUY_YIELD, 0, MAX_CONTINUOUS_FEE_CBP, 0)
+        );
+    }
+
+    function test_setMidnightMarketConfig() public {
+        (
+            uint16  maxBuyTick,
+            uint16  minSellTick,
+            uint16  minBuyYield,
+            uint16  maxSellYield,
+            uint16  maxContinuousFee,
+            uint128 maxLossFactor
+        ) = foreignController.midnightMarketConfigs(marketId);
+
+        assertEq(maxBuyTick,       0);
+        assertEq(minSellTick,      0);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     0);
+        assertEq(maxContinuousFee, 0);
+        assertEq(maxLossFactor,    0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightMarketConfigSet(marketId, 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18);
+        _setConfig(marketId, _config(4000, 3000, 100, 1e18));
+
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+            = foreignController.midnightMarketConfigs(marketId);
+
+        assertEq(maxBuyTick,       4000);
+        assertEq(minSellTick,      3000);
+        assertEq(minBuyYield,      MIN_BUY_YIELD);
+        assertEq(maxSellYield,     MAX_SELL_YIELD);
+        assertEq(maxContinuousFee, 100);
+        assertEq(maxLossFactor,    1e18);
+
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+            = foreignController.midnightMarketConfigs(keccak256("otherMarket"));
+
+        assertEq(maxBuyTick,       0);
+        assertEq(minSellTick,      0);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     0);
+        assertEq(maxContinuousFee, 0);
+        assertEq(maxLossFactor,    0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightMarketConfigSet(
+            marketId,
+            0,
+            uint16(MIDNIGHT_MAX_TICK),
+            0,
+            type(uint16).max,
+            MAX_CONTINUOUS_FEE_CBP,
+            type(uint128).max
+        );
+        _setConfig(
+            marketId,
+            _config(
+                0,
+                uint16(MIDNIGHT_MAX_TICK),
+                0,
+                type(uint16).max,
+                MAX_CONTINUOUS_FEE_CBP,
+                type(uint128).max
+            )
+        );
+
+        ( maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor )
+            = foreignController.midnightMarketConfigs(marketId);
+
+        assertEq(maxBuyTick,       0);
+        assertEq(minSellTick,      MIDNIGHT_MAX_TICK);
+        assertEq(minBuyYield,      0);
+        assertEq(maxSellYield,     type(uint16).max);
+        assertEq(maxContinuousFee, MAX_CONTINUOUS_FEE_CBP);
+        assertEq(maxLossFactor,    type(uint128).max);
     }
 
 }
