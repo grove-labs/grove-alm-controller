@@ -12,6 +12,7 @@ library MidnightIdLib {
     bytes constant SSTORE2_PREFIX = hex"600b380380600b5f395ff3";
 
     function toId(Market memory market) internal pure returns (bytes32) {
+        // The packed pair cannot collide: SSTORE2_PREFIX is a fixed size.
         return keccak256(
             abi.encodePacked(
                 uint8(0xff),
