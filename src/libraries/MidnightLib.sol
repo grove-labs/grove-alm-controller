@@ -103,10 +103,6 @@ library MidnightLib {
     /*** Config functions                                                                       ***/
     /**********************************************************************************************/
 
-    function validateMarketConfig(MarketConfig memory config) external pure {
-        _validateMarketConfig(config);
-    }
-
     function setTakeConfig(
         MarketConfig storage config,
         uint16               maxBuyTick,

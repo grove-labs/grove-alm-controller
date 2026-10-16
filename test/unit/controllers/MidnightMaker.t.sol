@@ -553,7 +553,7 @@ contract SetMidnightStrategyTests is MidnightMakerTestBase {
 contract MidnightPeripheryViewTests is MidnightMakerTestBase {
 
     // The ratifier reaches both views through staticcall, so neither may revert.
-    function test_midnightViews_areStaticcallSafeOnUnknownMarkets() public {
+    function test_midnightViews_areStaticcallSafeOnUnknownMarkets() public view {
         bytes32 unknown = keccak256("unknownMarket");
 
         ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
