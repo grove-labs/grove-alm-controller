@@ -172,13 +172,15 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, params.assetsBound);
 
-        _take(params, ctx);
+        ( uint256 buyerAssets, ) = _take(params, ctx);
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
         assetsSpent = balanceBefore - IERC20(market.loanToken).balanceOf(address(params.proxy));
 
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
+
+        require(assetsSpent == buyerAssets, "MidnightLib/assets-spent-mismatch");
 
         require(
             _credit(market, params.marketId, address(params.proxy)) == creditBefore + params.units,
@@ -222,11 +224,13 @@ library MidnightLib {
             settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity)
         });
 
-        _take(params, ctx);
+        ( , uint256 sellerAssets ) = _take(params, ctx);
 
         assetsReceived = IERC20(market.loanToken).balanceOf(address(params.proxy)) - balanceBefore;
 
         require(assetsReceived >= params.assetsBound, "MidnightLib/min-assets-out-not-met");
+
+        require(assetsReceived == sellerAssets, "MidnightLib/assets-received-mismatch");
 
         require(
             creditBefore == _credit(market, params.marketId, address(params.proxy)) + params.units,
@@ -287,7 +291,9 @@ library MidnightLib {
     /*** Internal functions                                                                     ***/
     /**********************************************************************************************/
 
-    function _take(TakeParams memory params, TakeContext memory ctx) internal {
+    function _take(TakeParams memory params, TakeContext memory ctx)
+        internal returns (uint256 buyerAssets, uint256 sellerAssets)
+    {
         Offer memory offer = params.offer;
 
         require(offer.buy == ctx.selling, "MidnightLib/invalid-offer-direction");
@@ -323,7 +329,7 @@ library MidnightLib {
             );
         }
 
-        params.proxy.doCall(
+        bytes memory result = params.proxy.doCall(
             offer.market.midnight,
             abi.encodeCall(
                 IMidnight.take,
@@ -338,6 +344,8 @@ library MidnightLib {
                 )
             )
         );
+
+        ( buyerAssets, sellerAssets ) = abi.decode(result, (uint256, uint256));
     }
 
     // Rounds against the caller: down for the buy ceiling, up for the sell floor.
