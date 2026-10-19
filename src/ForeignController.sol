@@ -368,7 +368,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function setMidnightStrategy(bytes32 marketId, address strategy, bool allowed) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
+        // Offboarding is a safety action the freezer may take; onboarding stays with governance.
+        if (allowed || !hasRole(FREEZER, msg.sender)) _checkRole(DEFAULT_ADMIN_ROLE);
 
         // Allowing the zero address would let an offer with no callback settle unmetered.
         require(strategy != address(0), "FC/invalid-strategy");
@@ -866,7 +867,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function cancelMidnightOfferGroup(bytes32 group) external nonReentrant {
-        _checkRole(RELAYER);
+        // The freezer needs a maker kill switch; removing relayers does not stop fills.
+        if (!hasRole(FREEZER, msg.sender)) _checkRole(RELAYER);
 
         proxy.doCall(
             midnight,

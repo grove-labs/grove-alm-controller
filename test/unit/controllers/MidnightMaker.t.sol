@@ -142,6 +142,7 @@ contract MidnightMakerTestBase is UnitTestBase {
         proxy.grantRole(proxy.CONTROLLER(), address(controller));
         rateLimits.grantRole(rateLimits.CONTROLLER(), address(controller));
         controller.grantRole(RELAYER, relayer);
+        controller.grantRole(FREEZER, freezer);
         vm.stopPrank();
     }
 
@@ -490,6 +491,18 @@ contract CancelMidnightOfferGroupTests is MidnightMakerTestBase {
         assertEq(venue.consumedOnBehalf(), address(proxy));
     }
 
+    function test_cancelMidnightOfferGroup_freezer() public {
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightOfferGroupCancelled(bytes32("sell"));
+        controller.cancelMidnightOfferGroup(bytes32("sell"));
+
+        assertEq(venue.consumedCalls(),    1);
+        assertEq(venue.consumedGroup(),    bytes32("sell"));
+        assertEq(venue.consumedAmount(),   type(uint128).max);
+        assertEq(venue.consumedOnBehalf(), address(proxy));
+    }
+
 }
 
 contract SetMidnightStrategyTests is MidnightMakerTestBase {
@@ -513,6 +526,49 @@ contract SetMidnightStrategyTests is MidnightMakerTestBase {
             DEFAULT_ADMIN_ROLE
         ));
         controller.setMidnightStrategy(marketId, strategy, true);
+    }
+
+    function test_setMidnightStrategy_freezerCannotAllow() public {
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        controller.setMidnightStrategy(marketId, strategy, true);
+    }
+
+    function test_setMidnightStrategy_freezerCanRemove() public {
+        _allowStrategy(true);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy));
+
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(marketId, strategy, false);
+        controller.setMidnightStrategy(marketId, strategy, false);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
+    }
+
+    function test_setMidnightStrategy_relayerCannotRemove() public {
+        _allowStrategy(true);
+
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            relayer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        controller.setMidnightStrategy(marketId, strategy, false);
+    }
+
+    function test_setMidnightStrategy_adminCanStillRemove() public {
+        _allowStrategy(true);
+
+        _allowStrategy(false);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
     }
 
     function test_setMidnightStrategy_zeroAddress() public {
