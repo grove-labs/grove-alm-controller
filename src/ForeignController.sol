@@ -794,7 +794,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy             : proxy,
             rateLimits        : rateLimits,
             midnight          : midnight,
-            buyRateLimitId    : LIMIT_MIDNIGHT_BUY,
             redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
             marketId          : marketId,
             config            : midnightMarketConfigs[marketId],

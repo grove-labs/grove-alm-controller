@@ -894,7 +894,7 @@ contract ForeignControllerMidnightSellSuccessTests is MidnightSellTestBase {
         assertEq(loanToken.balanceOf(address(almProxy)),     balanceBefore + expected);
         assertEq(rateLimits.getCurrentRateLimit(sellKey),    5_000_000e18 - expected);
 
-        assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18 - buySpend + expected);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18 - buySpend);
     }
 
     function test_sellMidnight_unitsExceedCredit() public {
@@ -1277,7 +1277,7 @@ contract ForeignControllerMidnightRedeemSuccessTests is MidnightRedeemTestBase {
         assertEq(midnight.debt(marketId, address(almProxy)), 0);
         assertEq(loanToken.balanceOf(address(almProxy)),      balanceBefore + units);
         assertEq(rateLimits.getCurrentRateLimit(redeemKey),   5_000_000e18 - units);
-        assertEq(rateLimits.getCurrentRateLimit(buyKey),      buyLimit + units);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey),      buyLimit);
     }
 
     function test_redeemMidnight_clampsUnitsToWithdrawable() public {
@@ -2061,16 +2061,6 @@ contract ForeignControllerMidnightRateLimitPolicyTests is MidnightTestBase {
         assertEq(rateLimits.getCurrentRateLimit(buyKey),    0);
         assertEq(rateLimits.getCurrentRateLimit(sellKey),   type(uint256).max);
         assertEq(rateLimits.getCurrentRateLimit(redeemKey), type(uint256).max);
-    }
-
-    function test_sellMidnight_restoreIsCappedAtMaxAmount() public {
-        uint256 expected = _sellerAssets(SEEDED_UNITS, TICK_99);
-
-        assertGt(expected, _buyerAssets(SEEDED_UNITS, TICK_98));
-
-        assertEq(_sell(_offer(true, TICK_99, uint128(SEEDED_UNITS)), SEEDED_UNITS, expected), expected);
-
-        assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18);
     }
 
     function test_midnight_continuousFeeRoundTrip() public {
