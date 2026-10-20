@@ -120,7 +120,6 @@ contract MidnightMakerTestBase is MidnightTestBase {
     uint256 constant PROBE_UNITS = 1e18;
 
     uint256 constant MAX_OFFER_SIZE   = 2_000_000e18;
-    uint256 constant MAKE_LIMIT       = 5_000_000e18;
 
     bytes32 constant BUY_GROUP  = "grove-midnight-buy";
     bytes32 constant SELL_GROUP = "grove-midnight-sell";
@@ -129,8 +128,6 @@ contract MidnightMakerTestBase is MidnightTestBase {
     MirrorFundingStrategy strategy;
 
     address taker = makeAddr("taker");
-
-    bytes32 makeKey;
 
     function setUp() public virtual override {
         super.setUp();
@@ -141,16 +138,11 @@ contract MidnightMakerTestBase is MidnightTestBase {
             MIDNIGHT, address(almProxy), address(foreignController)
         );
 
-        makeKey = RateLimitHelpers.makeBytes32Key(
-            foreignController.LIMIT_MIDNIGHT_MAKE(), marketId
-        );
-
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
         foreignController.setMidnightGroups(marketId, BUY_GROUP, SELL_GROUP);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
         foreignController.setMidnightStrategy(marketId, address(strategy), true);
-        rateLimits.setRateLimitData(makeKey, MAKE_LIMIT, MAKE_LIMIT / 1 days);
         vm.stopPrank();
 
         // Selling units into our buy offer puts the taker short, which Midnight collateralises.
@@ -216,11 +208,6 @@ contract MidnightMakerTestBase is MidnightTestBase {
         foreignController.setMidnightMakeConfig(marketId, maxOfferSize);
     }
 
-    function _setMakeLimit(uint256 maxAmount) internal {
-        vm.prank(GROVE_EXECUTOR);
-        rateLimits.setRateLimitData(makeKey, maxAmount, maxAmount / 1 days);
-    }
-
     function _allowStrategy(address strategy_, bool allowed) internal {
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightStrategy(marketId, strategy_, allowed);
@@ -240,12 +227,12 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
         Offer memory offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
 
         uint256 proxyBefore = loanToken.balanceOf(address(almProxy));
-        uint256 makeBefore  = rateLimits.getCurrentRateLimit(makeKey);
+        uint256 buyBefore   = rateLimits.getCurrentRateLimit(buyKey);
 
         _take(offer, 1);
 
         assertEq(loanToken.balanceOf(address(almProxy)), proxyBefore);
-        assertEq(rateLimits.getCurrentRateLimit(makeKey), makeBefore);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey), buyBefore);
     }
 
     function test_makerBuy_lifecycle() public {
@@ -256,7 +243,6 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
         assertEq(midnight.debt(marketId, address(almProxy)),    0);
         assertEq(loanToken.balanceOf(address(almProxy)),        10_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(buyKey),        5_000_000e18);
-        assertEq(rateLimits.getCurrentRateLimit(makeKey),       MAKE_LIMIT);
 
         uint256 takerBalanceBefore = loanToken.balanceOf(taker);
 
@@ -277,7 +263,6 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
         assertEq(loanToken.allowance(address(almProxy), MIDNIGHT),   0);
 
         assertEq(rateLimits.getCurrentRateLimit(buyKey),  5_000_000e18 - buyerAssets);
-        assertEq(rateLimits.getCurrentRateLimit(makeKey), MAKE_LIMIT - buyerAssets);
     }
 
     function test_makerBuy_fundingEventReconcilesWithTake() public {
@@ -333,13 +318,13 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
         assertEq(loanToken.balanceOf(taker) - takerBalanceBefore, sellerAssets);
     }
 
-    function test_makerBuy_makeLimitBindsBeforeTheBuyLimit() public {
-        _setMakeLimit(1_000e18);
+    function test_makerBuy_offerSizeCeilingBindsBeforeTheBuyLimit() public {
+        _enableMake(1_000e18);
 
         _expectTakeRevert(
             _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18),
             1_000_000e18,
-            "RateLimits/rate-limit-exceeded"
+            "MidnightLib/offer-size-too-large"
         );
     }
 
@@ -377,7 +362,6 @@ contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
 
         assertEq(rateLimits.getCurrentRateLimit(buyKey),  buyLimitBefore);
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 5_000_000e18 - sellerAssets);
-        assertEq(rateLimits.getCurrentRateLimit(makeKey), MAKE_LIMIT - sellerAssets);
     }
 
     function test_makerSell_cannotGoShort() public {
@@ -409,33 +393,24 @@ contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
         );
     }
 
-    function test_makerSell_exhaustedMakeLimitMakesTheAskUnfillable() public {
-        _setMakeLimit(1);
+    function test_makerSell_offerSizeCeilingMakesTheAskUnfillable() public {
+        _enableMake(1);
 
         _expectTakeRevert(
             _makerOffer(false, TICK_98, uint128(400_000e18)),
             400_000e18,
-            "RateLimits/rate-limit-exceeded"
+            "MidnightLib/offer-size-too-large"
         );
     }
 
-    function test_makerSell_unsetMakeLimitMakesTheAskUnfillable() public {
-        _setMakeLimit(0);
+    function test_makerSell_disabledMakeMakesTheAskUnfillable() public {
+        _enableMake(0);
 
         _expectTakeRevert(
             _makerOffer(false, TICK_98, uint128(400_000e18)),
             400_000e18,
-            "RateLimits/zero-maxAmount"
+            "MidnightLib/make-not-enabled"
         );
-    }
-
-    function test_makerSell_restoredBuyCapacityIsCappedAtTheMaximum() public {
-        vm.prank(GROVE_EXECUTOR);
-        rateLimits.setRateLimitData(buyKey, 5_000_000e18, 0);
-
-        _take(_makerOffer(false, TICK_98, uint128(400_000e18)), 400_000e18);
-
-        assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18);
     }
 
 }
@@ -648,7 +623,6 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
 
         assertEq(rateLimits.getCurrentRateLimit(buyKey),  1_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 5_000_000e18 - 500_000e18);
-        assertEq(rateLimits.getCurrentRateLimit(makeKey), MAKE_LIMIT  - 500_000e18);
     }
 
     function test_attack_noOpTakePokeOnAConsumedOffer() public {
@@ -703,8 +677,7 @@ contract MidnightMakerInvariantTests is MidnightMakerTestBase {
         uint256 spent = proxyBalanceBefore - loanToken.balanceOf(address(almProxy));
 
         assertEq(spent, buyerAssets);
-        assertEq(5_000_000e18 - rateLimits.getCurrentRateLimit(buyKey),  spent);
-        assertEq(MAKE_LIMIT   - rateLimits.getCurrentRateLimit(makeKey), spent);
+        assertEq(5_000_000e18 - rateLimits.getCurrentRateLimit(buyKey), spent);
     }
 
 }

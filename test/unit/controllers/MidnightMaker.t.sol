@@ -179,15 +179,10 @@ contract MidnightMakerTestBase is UnitTestBase {
         return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_SELL(), marketId);
     }
 
-    function _makeKey() internal view returns (bytes32) {
-        return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_MAKE(), marketId);
-    }
-
     function _setLimits(uint256 maxAmount) internal {
         vm.startPrank(admin);
         rateLimits.setRateLimitData(_buyKey(),  maxAmount, 0);
         rateLimits.setRateLimitData(_sellKey(), maxAmount, 0);
-        rateLimits.setRateLimitData(_makeKey(), maxAmount, 0);
         vm.stopPrank();
     }
 
@@ -875,28 +870,25 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    function test_midnight_fundFill_buyDecrementsMakeAndBuy() public {
+    function test_midnight_fundFill_buyDecrementsBuyOnly() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
-        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE);
         assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  MAX_OFFER_SIZE);
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE);
 
         vm.prank(strategy);
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
-        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE - assets);
         assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  MAX_OFFER_SIZE - assets);
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE);
     }
 
-    function test_midnight_fundFill_sellDecrementsMakeAndSellAndLeavesBuy() public {
+    function test_midnight_fundFill_sellDecrementsSellAndLeavesBuy() public {
         uint256 assets = _parAssets(UNITS);
 
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
         rateLimits.setRateLimitData(_sellKey(), MAX_OFFER_SIZE, 0);
         rateLimits.setRateLimitData(_buyKey(),  MAX_OFFER_SIZE, 0, 0, block.timestamp);
         vm.stopPrank();
@@ -906,7 +898,6 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         vm.prank(strategy);
         controller.midnight_fundFill(marketId, false, assets, UNITS, 0);
 
-        assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE - assets);
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - assets);
         assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  0);
 
@@ -943,25 +934,45 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
     }
 
-    function test_midnight_fundFill_makeLimitBinds() public {
+    function test_midnight_fundFill_offerSizeCeilingBinds() public {
+        _setLimits(MAX_OFFER_SIZE);
+
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
-        vm.startPrank(admin);
-        rateLimits.setRateLimitData(_makeKey(), assets - 1,     0);
-        rateLimits.setRateLimitData(_buyKey(),  MAX_OFFER_SIZE, 0);
-        vm.stopPrank();
+        vm.prank(admin);
+        controller.setMidnightMakeConfig(marketId, assets - 1);
 
         vm.prank(strategy);
-        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        vm.expectRevert("MidnightLib/offer-size-too-large");
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        vm.prank(admin);
+        controller.setMidnightMakeConfig(marketId, assets);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()), MAX_OFFER_SIZE - assets);
+    }
+
+    function test_midnight_fundFill_offerSizeCeilingBindsOnSell() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        uint256 assets = _parAssets(UNITS);
+
+        vm.prank(admin);
+        controller.setMidnightMakeConfig(marketId, assets - 1);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/offer-size-too-large");
+        controller.midnight_fundFill(marketId, false, assets, UNITS, 0);
     }
 
     function test_midnight_fundFill_sellLimitBinds() public {
         uint256 assets = _parAssets(UNITS);
 
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
-        rateLimits.setRateLimitData(_sellKey(), assets - 1,     0);
+        rateLimits.setRateLimitData(_sellKey(), assets - 1, 0);
         vm.stopPrank();
 
         vm.prank(strategy);
@@ -973,8 +984,7 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.startPrank(admin);
-        rateLimits.setRateLimitData(_makeKey(), MAX_OFFER_SIZE, 0);
-        rateLimits.setRateLimitData(_buyKey(),  assets - 1,     0);
+        rateLimits.setRateLimitData(_buyKey(), assets - 1, 0);
         vm.stopPrank();
 
         vm.prank(strategy);

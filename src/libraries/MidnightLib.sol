@@ -31,7 +31,7 @@ library MidnightLib {
     /**********************************************************************************************/
 
     // minSellTick != 0 marks the market as onboarded; maxLossFactor is a fraction of type(uint128).max.
-    // maxOfferSize != 0 marks it as make-enabled, independently of take onboarding.
+    // maxOfferSize != 0 marks it as make-enabled independently of take onboarding, and caps each fill.
     struct MarketConfig {
         uint16  maxBuyTick;
         uint16  minSellTick;
@@ -76,7 +76,6 @@ library MidnightLib {
         address      midnight;
         bytes32      buyRateLimitId;
         bytes32      sellRateLimitId;
-        bytes32      makeRateLimitId;
         bytes32      marketId;
         MarketConfig config;
         address      strategy;
@@ -368,6 +367,11 @@ library MidnightLib {
         require(params.assets != 0,       "MidnightLib/zero-assets");
         require(params.units  != 0,       "MidnightLib/zero-units");
 
+        require(
+            params.assets <= config.maxOfferSize,
+            "MidnightLib/offer-size-too-large"
+        );
+
         uint256 timeToMaturity = _timeToMaturity(config.maturity);
 
         if (params.buy) {
@@ -391,8 +395,7 @@ library MidnightLib {
 
             require(params.assets <= params.units * bound / WAD, "MidnightLib/fill-price-too-high");
 
-            _decreaseLimit(params.rateLimits, params.makeRateLimitId, marketId, params.assets);
-            _decreaseLimit(params.rateLimits, params.buyRateLimitId,  marketId, params.assets);
+            _decreaseLimit(params.rateLimits, params.buyRateLimitId, marketId, params.assets);
 
             ERC20Lib.transfer(params.proxy, config.loanToken, params.strategy, params.assets);
 
@@ -410,7 +413,6 @@ library MidnightLib {
 
         _requireDebtFree(params.midnight, marketId, address(params.proxy));
 
-        _decreaseLimit(params.rateLimits, params.makeRateLimitId, marketId, params.assets);
         _decreaseLimit(params.rateLimits, params.sellRateLimitId, marketId, params.assets);
     }
 

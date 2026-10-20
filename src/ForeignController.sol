@@ -109,7 +109,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
     bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
-    bytes32 public LIMIT_MIDNIGHT_MAKE       = keccak256("LIMIT_MIDNIGHT_MAKE");
     bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
     bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
@@ -897,7 +896,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             midnight        : midnight,
             buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
             sellRateLimitId : LIMIT_MIDNIGHT_SELL,
-            makeRateLimitId : LIMIT_MIDNIGHT_MAKE,
             marketId        : marketId,
             config          : _midnightMarketConfigs[marketId],
             strategy        : msg.sender,
