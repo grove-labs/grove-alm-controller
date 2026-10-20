@@ -596,7 +596,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
             proxy               : proxy,
             rateLimits          : rateLimits,
-            depositRateLimitId  : LIMIT_AAVE_V4_DEPOSIT,
             withdrawRateLimitId : LIMIT_AAVE_V4_WITHDRAW,
             spoke               : spoke,
             reserveId           : reserveId,
