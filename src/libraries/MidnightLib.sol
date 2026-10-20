@@ -91,7 +91,6 @@ library MidnightLib {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
         address      midnight;
-        bytes32      buyRateLimitId;
         bytes32      redeemRateLimitId;
         bytes32      marketId;
         MarketConfig config;
@@ -315,8 +314,6 @@ library MidnightLib {
             RateLimitHelpers.makeBytes32Key(params.sellRateLimitId, params.marketId),
             assetsReceived
         );
-
-        _restoreBuyLimit(params.rateLimits, params.buyRateLimitId, params.marketId, assetsReceived);
     }
 
     function redeem(RedeemParams memory params) external returns (uint256 assetsWithdrawn) {
@@ -355,8 +352,6 @@ library MidnightLib {
             RateLimitHelpers.makeBytes32Key(params.redeemRateLimitId, marketId),
             assetsWithdrawn
         );
-
-        _restoreBuyLimit(params.rateLimits, params.buyRateLimitId, marketId, assetsWithdrawn);
     }
 
     /**********************************************************************************************/
@@ -417,8 +412,6 @@ library MidnightLib {
 
         _decreaseLimit(params.rateLimits, params.makeRateLimitId, marketId, params.assets);
         _decreaseLimit(params.rateLimits, params.sellRateLimitId, marketId, params.assets);
-
-        _restoreBuyLimit(params.rateLimits, params.buyRateLimitId, marketId, params.assets);
     }
 
     /**********************************************************************************************/
@@ -544,21 +537,6 @@ library MidnightLib {
             RateLimitHelpers.makeBytes32Key(rateLimitId, marketId),
             amount
         );
-    }
-
-    function _restoreBuyLimit(
-        IRateLimits rateLimits,
-        bytes32     buyRateLimitId,
-        bytes32     marketId,
-        uint256     amount
-    )
-        internal
-    {
-        bytes32 key = RateLimitHelpers.makeBytes32Key(buyRateLimitId, marketId);
-
-        if (rateLimits.getRateLimitData(key).maxAmount != 0) {
-            rateLimits.triggerRateLimitIncrease(key, amount);
-        }
     }
 
 }

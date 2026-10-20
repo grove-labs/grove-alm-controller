@@ -375,7 +375,7 @@ contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
 
         assertEq(loanToken.balanceOf(address(almProxy)), proxyBalanceBefore + sellerAssets);
 
-        assertEq(rateLimits.getCurrentRateLimit(buyKey),  buyLimitBefore + sellerAssets);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey),  buyLimitBefore);
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 5_000_000e18 - sellerAssets);
         assertEq(rateLimits.getCurrentRateLimit(makeKey), MAKE_LIMIT - sellerAssets);
     }
@@ -637,7 +637,7 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
         foreignController.midnight_fundFill(marketId, true, 1_000_000e18, 1_000_000e18, 0);
     }
 
-    function test_attack_directSellFillTradesSellCapacityForBuyCapacity() public {
+    function test_attack_directSellFillCannotCreateBuyCapacity() public {
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(buyKey, 5_000_000e18, 0, 1_000_000e18, block.timestamp);
 
@@ -646,7 +646,7 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
 
         assertEq(loanToken.balanceOf(address(strategy)), 0);
 
-        assertEq(rateLimits.getCurrentRateLimit(buyKey),  1_500_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey),  1_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 5_000_000e18 - 500_000e18);
         assertEq(rateLimits.getCurrentRateLimit(makeKey), MAKE_LIMIT  - 500_000e18);
     }

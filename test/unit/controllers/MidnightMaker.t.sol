@@ -892,7 +892,7 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE);
     }
 
-    function test_midnight_fundFill_sellDecrementsMakeAndSellAndRestoresBuy() public {
+    function test_midnight_fundFill_sellDecrementsMakeAndSellAndLeavesBuy() public {
         uint256 assets = _parAssets(UNITS);
 
         vm.startPrank(admin);
@@ -908,7 +908,7 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
 
         assertEq(rateLimits.getCurrentRateLimit(_makeKey()), MAX_OFFER_SIZE - assets);
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - assets);
-        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  assets);
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  0);
 
         assertEq(loanToken.balanceOf(strategy),       0);
         assertEq(loanToken.balanceOf(address(proxy)), proxyPre);
