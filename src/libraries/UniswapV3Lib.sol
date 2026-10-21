@@ -132,10 +132,13 @@ library UniswapV3Lib {
 
         _validateAddLiquidityMinAmounts(context, params);
 
+        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
+
         if (params.tokenId == 0) {
-            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
+            (tokenId, liquidity,,) = _mintLiquidity(context, params);
         } else {
-            (tokenId, liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
+            (tokenId, liquidity,,) = _addLiquidityToExistingPosition(context, params);
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
@@ -143,6 +146,9 @@ library UniswapV3Lib {
         // Clear approvals of dust
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
+
+        amount0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
+        amount1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
 
         _decreaseRateLimits(context, token0, token1, amount0, amount1);
     }

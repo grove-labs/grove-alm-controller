@@ -2069,3 +2069,157 @@ contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
         assertEq(dai.balanceOf(address(almProxy)), victimDaiBalanceBefore,            "proxy should have same balance of DAI as before attack");
     }
 }
+
+contract OverreportingPositionManager is INonfungiblePositionManager {
+
+    INonfungiblePositionManager internal immutable real;
+
+    uint256 internal immutable overreport;
+
+    constructor(address real_, uint256 overreport_) {
+        real       = INonfungiblePositionManager(real_);
+        overreport = overreport_;
+    }
+
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        _pull(params.token0, params.amount0Desired);
+        _pull(params.token1, params.amount1Desired);
+
+        (tokenId, liquidity, amount0, amount1) = real.mint(params);
+
+        _refund(params.token0, params.amount0Desired - amount0);
+        _refund(params.token1, params.amount1Desired - amount1);
+
+        amount0 += overreport;
+        amount1 += overreport;
+    }
+
+    function increaseLiquidity(IncreaseLiquidityParams calldata params)
+        external
+        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
+    {
+        ( , , address token0_, address token1_, , , , , , , , ) = real.positions(params.tokenId);
+
+        _pull(token0_, params.amount0Desired);
+        _pull(token1_, params.amount1Desired);
+
+        (liquidity, amount0, amount1) = real.increaseLiquidity(params);
+
+        _refund(token0_, params.amount0Desired - amount0);
+        _refund(token1_, params.amount1Desired - amount1);
+
+        amount0 += overreport;
+        amount1 += overreport;
+    }
+
+    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
+        external
+        returns (uint256, uint256)
+    {
+        return real.decreaseLiquidity(params);
+    }
+
+    function collect(CollectParams calldata params) external returns (uint256, uint256) {
+        return real.collect(params);
+    }
+
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return real.ownerOf(tokenId);
+    }
+
+    function positions(uint256 tokenId)
+        external
+        view
+        returns (
+            uint96, address, address, address, uint24, int24, int24, uint128,
+            uint256, uint256, uint128, uint128
+        )
+    {
+        return real.positions(tokenId);
+    }
+
+    function _pull(address token, uint256 amount) internal {
+        SafeERC20.safeTransferFrom(IERC20OZ(token), msg.sender, address(this), amount);
+        SafeERC20.forceApprove(IERC20OZ(token), address(real), amount);
+    }
+
+    function _refund(address token, uint256 amount) internal {
+        if (amount != 0) SafeERC20.safeTransfer(IERC20OZ(token), msg.sender, amount);
+    }
+
+}
+
+contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBase {
+
+    uint256 constant OVERREPORT = 1_000e6;
+
+    // Storage slot of MainnetController.uniswapV3PositionManager, which has no setter.
+    uint256 constant POSITION_MANAGER_SLOT = 35;
+
+    function _getPool() internal pure override returns (address) {
+        return UNISWAP_V3_USDC_USDT_POOL;
+    }
+
+    function setUp() public override {
+        super.setUp();
+
+        OverreportingPositionManager manager =
+            new OverreportingPositionManager(UNISWAP_V3_POSITION_MANAGER, OVERREPORT);
+
+        vm.store(
+            address(mainnetController),
+            bytes32(POSITION_MANAGER_SLOT),
+            bytes32(uint256(uint160(address(manager))))
+        );
+
+        assertEq(address(mainnetController.uniswapV3PositionManager()), address(manager));
+    }
+
+    function test_addLiquidityUniswapV3_metersMeasuredAmountsNotReported() public {
+        uint256 amount0 = 100_000e6;
+        uint256 amount1 = 100_000e6;
+
+        deal(address(token0), address(almProxy), amount0);
+        deal(address(token1), address(almProxy), amount1);
+
+        bytes32 key0 = RateLimitHelpers.makeAssetDestinationKey(
+            mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(), address(token0), _getPool()
+        );
+        bytes32 key1 = RateLimitHelpers.makeAssetDestinationKey(
+            mainnetController.LIMIT_UNISWAP_V3_DEPOSIT(), address(token1), _getPool()
+        );
+
+        uint256 balance0Before = token0.balanceOf(address(almProxy));
+        uint256 balance1Before = token1.balanceOf(address(almProxy));
+        uint256 limit0Before   = rateLimits.getCurrentRateLimit(key0);
+        uint256 limit1Before   = rateLimits.getCurrentRateLimit(key1);
+
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower : _toSpacedTick(initTick + DEFAULT_TICK_LOWER),
+            upper : _toSpacedTick(initTick + DEFAULT_TICK_UPPER)
+        });
+
+        ( , , uint256 amount0Used, uint256 amount1Used) = _addLiquidity(
+            0,
+            tick,
+            UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 }),
+            _minLiquidityPosition(amount0, amount1)
+        );
+
+        uint256 spent0 = balance0Before - token0.balanceOf(address(almProxy));
+        uint256 spent1 = balance1Before - token1.balanceOf(address(almProxy));
+
+        assertGt(spent0, 0);
+        assertGt(spent1, 0);
+
+        assertEq(amount0Used, spent0);
+        assertEq(amount1Used, spent1);
+
+        assertEq(limit0Before - rateLimits.getCurrentRateLimit(key0), spent0);
+        assertEq(limit1Before - rateLimits.getCurrentRateLimit(key1), spent1);
+    }
+
+}
