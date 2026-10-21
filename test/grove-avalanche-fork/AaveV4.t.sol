@@ -393,8 +393,7 @@ contract AaveV4MainSpokeDepositDeficitGuardTests is AaveV4MainSpokeBaseTest {
         assertApproxEqAbs(withdrawn, USDC_DEPOSIT_AMOUNT, 1);
         assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
 
-        // The restore is keyed on the same deposit key, so capacity comes back despite the deficit.
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT);
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
     }
 
 }
@@ -639,7 +638,7 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(usdcAvalanche.balanceOf(address(almProxy)),                     partialAmount);
         assertEq(usdcAvalanche.balanceOf(CORE_HUB),                              startingHubBalanceUsdc + USDC_DEPOSIT_AMOUNT - partialAmount);
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID),                      supplied - partialAmount, 1);
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),   USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT + partialAmount);
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),   USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey),  type(uint256).max);
 
         // Withdraw all
@@ -651,12 +650,12 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertApproxEqAbs(usdcAvalanche.balanceOf(address(almProxy)), supplied,               1);
         assertApproxEqAbs(usdcAvalanche.balanceOf(CORE_HUB),          startingHubBalanceUsdc, 1);
 
-        // Deposit capacity restored, withdraw capacity untouched (unlimited)
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),   USDC_DEPOSIT_LIMIT);
+        // Deposit capacity stays consumed, withdraw capacity untouched (unlimited)
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),   USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey),  type(uint256).max);
     }
 
-    function test_withdrawAaveV4_usdc_zeroDepositRateLimit() public {
+    function test_withdrawAaveV4_usdc_doesNotRestoreDepositLimit() public {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  USDC_DEPOSIT_LIMIT);
@@ -668,47 +667,22 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
 
-        // Partial withdraw restores deposit capacity
         vm.prank(ALM_RELAYER);
         assertEq(foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000_000e6), 1_000_000e6);
 
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT + 1_000_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  USDC_DEPOSIT_LIMIT - USDC_DEPOSIT_AMOUNT);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
 
-        // Disable the deposit rate limit
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(usdcDepositKey, 0, 0);
 
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), 0);
 
-        // Withdraw still works; deposit restore is skipped
         vm.prank(ALM_RELAYER);
         assertEq(foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_000_000e6), 1_000_000e6);
 
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  0);  // Stays at 0
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  0);
         assertEq(rateLimits.getCurrentRateLimit(usdcWithdrawKey), type(uint256).max);
-    }
-
-    // A withdraw restores deposit capacity only up to the configured maxAmount: after the deposit
-    // limit is tightened below the withdrawn amount, the restore clamps at the new cap instead of
-    // minting excess capacity.
-    function test_withdrawAaveV4_usdc_depositRestoreCappedAtMaxAmount() public {
-        deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
-        vm.prank(ALM_RELAYER);
-        foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, USDC_ASSET_ID, USDC_DEPOSIT_AMOUNT);
-
-        // Tighten the deposit limit below the withdrawn amount, with no remaining capacity.
-        uint256 tightenedLimit = 1_000_000e6;
-        vm.prank(GROVE_EXECUTOR);
-        rateLimits.setRateLimitData(usdcDepositKey, tightenedLimit, 0, 0, block.timestamp);
-
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), 0);
-
-        // Withdraw ~4M; the restore credits only up to the 1M cap.
-        vm.prank(ALM_RELAYER);
-        foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
-
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), tightenedLimit);
     }
 
     function test_withdrawAaveV4_wavax() public {
@@ -735,8 +709,8 @@ contract AaveV4MainSpokeWithdrawSuccessTests is AaveV4MainSpokeBaseTest {
         assertApproxEqAbs(wavax.balanceOf(address(almProxy)), amount,                  10);
         assertApproxEqAbs(wavax.balanceOf(CORE_HUB),          startingHubBalanceWavax, 10);
 
-        assertApproxEqAbs(rateLimits.getCurrentRateLimit(wavaxDepositKey),  WAVAX_DEPOSIT_LIMIT, 10);
-        assertEq(rateLimits.getCurrentRateLimit(wavaxWithdrawKey),          type(uint256).max);
+        assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey),  WAVAX_DEPOSIT_LIMIT - amount);
+        assertEq(rateLimits.getCurrentRateLimit(wavaxWithdrawKey), type(uint256).max);
     }
 
 }
@@ -772,7 +746,7 @@ contract AaveV4MainSpokeReserveRemapTests is AaveV4MainSpokeBaseTest {
         foreignController.depositAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, CORE_HUB, REMAPPED_ASSET_ID, USDC_DEPOSIT_AMOUNT);
     }
 
-    function test_withdrawAaveV4_remappedReserveSkipsRestore() external {
+    function test_withdrawAaveV4_remappedReserveStillExits() external {
         deal(address(usdcAvalanche), address(almProxy), USDC_DEPOSIT_AMOUNT);
 
         vm.prank(ALM_RELAYER);
@@ -787,13 +761,10 @@ contract AaveV4MainSpokeReserveRemapTests is AaveV4MainSpokeBaseTest {
         vm.prank(ALM_RELAYER);
         uint256 withdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, type(uint256).max);
 
-        // The exit succeeds and the funds come back...
-        assertApproxEqAbs(withdrawn,                          USDC_DEPOSIT_AMOUNT, 1);
+        assertApproxEqAbs(withdrawn,                                 USDC_DEPOSIT_AMOUNT, 1);
         assertApproxEqAbs(usdcAvalanche.balanceOf(address(almProxy)), USDC_DEPOSIT_AMOUNT, 1);
         assertEq(_suppliedAssets(USDC_RESERVE_ID), 0);
 
-        // ...but the restore targets the new, unconfigured key, so the original market's consumed
-        // capacity is not returned. Failing this way keeps funds recoverable, which is the point.
         assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), remainingBeforeRemap);
     }
 
@@ -803,9 +774,9 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
 
     // End-to-end flow across both reserves on the shared Main Spoke, interleaving successful and
     // failing deposits/withdrawals. Core invariant under test: rate limits are keyed per
-    // (spoke, reserveId), so USDC and WAVAX capacity move fully independently, and a withdraw only
-    // restores the deposit capacity of the asset withdrawn. Deposit limits are tightened to
-    // cap-safe sizes so the controller rate limit (not Aave's supply cap) is the binding constraint.
+    // (spoke, reserveId), so USDC and WAVAX capacity move fully independently, and a withdraw
+    // leaves deposit capacity consumed. Deposit limits are tightened to cap-safe sizes so the
+    // controller rate limit (not Aave's supply cap) is the binding constraint.
     function test_aaveV4_multiAssetInterleavedScenario() external {
         uint256 usdcLimit  = 3_000_000e6;
         uint256 wavaxLimit = 300_000e18;
@@ -869,21 +840,21 @@ contract AaveV4MainSpokeMultiAssetScenarioTests is AaveV4MainSpokeBaseTest {
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 0);
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), 3_000_000e6, 1);
 
-        // Stage 6: withdrawing USDC restores USDC deposit capacity only; WAVAX stays exhausted.
+        // Stage 6: withdrawing USDC returns no deposit capacity on either asset.
         vm.prank(ALM_RELAYER);
         assertEq(foreignController.withdrawAaveV4(MAIN_SPOKE, USDC_RESERVE_ID, 1_500_000e6), 1_500_000e6);
 
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  1_500_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  0);
         assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 0);
         assertApproxEqAbs(_suppliedAssets(USDC_RESERVE_ID), 1_500_000e6, 1);
 
-        // Stage 7: full WAVAX withdraw restores WAVAX deposit capacity only; USDC capacity unchanged.
+        // Stage 7: a full WAVAX withdraw likewise returns no deposit capacity.
         vm.prank(ALM_RELAYER);
         uint256 wavaxWithdrawn = foreignController.withdrawAaveV4(MAIN_SPOKE, WAVAX_RESERVE_ID, type(uint256).max);
         assertApproxEqAbs(wavaxWithdrawn, 300_000e18, 10);
 
-        assertApproxEqAbs(rateLimits.getCurrentRateLimit(wavaxDepositKey), 300_000e18, 10);
-        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey), 1_500_000e6);
+        assertEq(rateLimits.getCurrentRateLimit(wavaxDepositKey), 0);
+        assertEq(rateLimits.getCurrentRateLimit(usdcDepositKey),  0);
         assertEq(_suppliedAssets(WAVAX_RESERVE_ID), 0);
 
         // Final integrity: net USDC still supplied is custodied by the Hub; WAVAX fully unwound;
