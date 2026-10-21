@@ -33,7 +33,7 @@ contract CentrifugeTestBase is ForkTestBase {
 
         root       = centrifugeVault.root();
         vaultToken = centrifugeVault.share();
-        manager    = IAsyncRedeemManagerLike(centrifugeVault.manager());
+        manager    = IAsyncRedeemManagerLike(centrifugeVault.baseManager());
         spoke      = manager.spoke();
 
         poolId = centrifugeVault.poolId();
@@ -212,6 +212,30 @@ contract MainnetControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
 
         assertEq(proxyBalanceAfter,     proxyBalanceBefore     - 10_000_000e6);
         assertEq(shareTotalSupplyAfter, shareTotalSupplyBefore - 10_000_000e6);
+    }
+
+}
+
+// JTRSY USDS exposes baseManager() but not manager(), so it is the only onboarded vault whose
+// transfer path can tell the two getters apart.
+contract MainnetControllerTransferSharesCentrifugeNoManagerGetterTests is ForkTestBase {
+
+    address constant JTRSY_USDS_VAULT = 0x381f4F3B43C30B78C1f7777553236e57bB8AE9ff;
+
+    uint16 constant DESTINATION_CENTRIFUGE_ID = 5;
+
+    function _getBlock() internal pure override returns (uint256) {
+        return 26200000;  // Oct 15, 2025
+    }
+
+    // Reaching the rate limit check proves the spoke was resolved from the vault.
+    function test_transferSharesCentrifuge_vaultWithoutManagerGetter() external {
+        vm.prank(GROVE_PROXY);
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+
+        vm.prank(relayer);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        mainnetController.transferSharesCentrifuge(JTRSY_USDS_VAULT, 1_000_000e6, DESTINATION_CENTRIFUGE_ID);
     }
 
 }
