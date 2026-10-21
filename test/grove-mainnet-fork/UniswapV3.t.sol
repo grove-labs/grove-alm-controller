@@ -2070,7 +2070,9 @@ contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
     }
 }
 
-contract OverreportingPositionManager is INonfungiblePositionManager {
+// Not INonfungiblePositionManager: implementing its 12-value positions() overflows the stack in
+// the unoptimized build `forge coverage` uses.
+contract OverreportingPositionManager {
 
     INonfungiblePositionManager internal immutable real;
 
@@ -2081,7 +2083,7 @@ contract OverreportingPositionManager is INonfungiblePositionManager {
         overreport = overreport_;
     }
 
-    function mint(MintParams calldata params)
+    function mint(INonfungiblePositionManager.MintParams calldata params)
         external
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
     {
@@ -2095,50 +2097,6 @@ contract OverreportingPositionManager is INonfungiblePositionManager {
 
         amount0 += overreport;
         amount1 += overreport;
-    }
-
-    function increaseLiquidity(IncreaseLiquidityParams calldata params)
-        external
-        returns (uint128 liquidity, uint256 amount0, uint256 amount1)
-    {
-        ( , , address token0_, address token1_, , , , , , , , ) = real.positions(params.tokenId);
-
-        _pull(token0_, params.amount0Desired);
-        _pull(token1_, params.amount1Desired);
-
-        (liquidity, amount0, amount1) = real.increaseLiquidity(params);
-
-        _refund(token0_, params.amount0Desired - amount0);
-        _refund(token1_, params.amount1Desired - amount1);
-
-        amount0 += overreport;
-        amount1 += overreport;
-    }
-
-    function decreaseLiquidity(DecreaseLiquidityParams calldata params)
-        external
-        returns (uint256, uint256)
-    {
-        return real.decreaseLiquidity(params);
-    }
-
-    function collect(CollectParams calldata params) external returns (uint256, uint256) {
-        return real.collect(params);
-    }
-
-    function ownerOf(uint256 tokenId) external view returns (address) {
-        return real.ownerOf(tokenId);
-    }
-
-    function positions(uint256 tokenId)
-        external
-        view
-        returns (
-            uint96, address, address, address, uint24, int24, int24, uint128,
-            uint256, uint256, uint128, uint128
-        )
-    {
-        return real.positions(tokenId);
     }
 
     function _pull(address token, uint256 amount) internal {
