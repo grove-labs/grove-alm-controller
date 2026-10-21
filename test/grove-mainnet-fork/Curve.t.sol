@@ -179,7 +179,10 @@ contract MainnetControllerAddLiquidityCurveFailureTests is CurveTestBase {
         amounts[0] = 1_000_000e6;
         amounts[1] = 1_000_000e6;
 
-        uint256 boundaryAmount = 2_000_000e18 * 0.98e18 / curvePool.get_virtual_price();
+        uint256 virtualPrice = curvePool.get_virtual_price();
+
+        // Bound is cross-multiplied, so the smallest passing value is the ceiling of the division
+        uint256 boundaryAmount = (2_000_000e18 * 0.98e18 + virtualPrice - 1) / virtualPrice;
 
         assertApproxEqAbs(boundaryAmount, 1_950_000e18, 50_000e18);  // Sanity check on precision
 
@@ -539,23 +542,29 @@ contract MainnetControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
     function test_removeLiquidityCurve_underAllowableSlippageBoundary() public {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
-        uint256 minTotalReturned = lpTokensReceived * curvePool.get_virtual_price() * 98/100 / 1e18;
-
-        assertApproxEqAbs(minTotalReturned, 1_960_000e18, 50_000e18);  // Sanity check on precision
-
-        // Skewed pool, using 465k as anchor point because USDC balance of pool is low
+        // Skewed pool, keeping the USDC leg low because USDC balance of pool is low
         uint256[] memory minWithdrawAmounts = new uint256[](2);
-        minWithdrawAmounts[0] = 465_000e6;
-        minWithdrawAmounts[1] = minTotalReturned / 1e12 - 465_000e6;
+        minWithdrawAmounts[0] = 370_000e6;
+        minWithdrawAmounts[1] = 1_230_000e6;
+
+        uint256 minWithdrawValue = 1_600_000e18;  // Both tokens are 6 decimals at a 1e30 rate
+
+        // Smallest burn whose bound sits less than 1 wei above minWithdrawValue
+        uint256 denominator  = curvePool.get_virtual_price() * 0.98e18;
+        uint256 lpBurnAmount = minWithdrawValue * 1e36 / denominator + 1;
+
+        assertLe(lpBurnAmount, lpTokensReceived);
+        assertLt(minWithdrawValue * 1e36,  lpBurnAmount * denominator);
+        assertLt(lpBurnAmount * denominator, (minWithdrawValue + 1) * 1e36);
 
         vm.startPrank(relayer);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+        mainnetController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
 
         // Add one to get over the boundary
         minWithdrawAmounts[1] += 1;
 
-        mainnetController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+        mainnetController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
     }
 
     function _defaultMinWithdrawAmounts() internal pure returns (uint256[] memory minWithdrawAmounts) {
@@ -783,11 +792,15 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdc), address(almProxy), 1_000_000e6);
 
+        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
+        uint256 amountIn       = 999_999e6 + 1;
+        uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
+
         vm.startPrank(relayer);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        mainnetController.swapCurve(CURVE_POOL, 0, 1, 1_000_000e6, 980_000e6 - 1);
+        mainnetController.swapCurve(CURVE_POOL, 0, 1, amountIn, boundaryAmount - 1);
 
-        mainnetController.swapCurve(CURVE_POOL, 0, 1, 1_000_000e6, 980_000e6);
+        mainnetController.swapCurve(CURVE_POOL, 0, 1, amountIn, boundaryAmount);
     }
 
     function test_swapCurve_underAllowableSlippageBoundaryAsset1To0() public {
@@ -796,11 +809,15 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdt), address(almProxy), 1_000_000e6);
 
+        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
+        uint256 amountIn       = 999_999e6 + 1;
+        uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
+
         vm.startPrank(relayer);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6 - 1);
+        mainnetController.swapCurve(CURVE_POOL, 1, 0, amountIn, boundaryAmount - 1);
 
-        mainnetController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+        mainnetController.swapCurve(CURVE_POOL, 1, 0, amountIn, boundaryAmount);
     }
 
     function test_swapCurve_zeroMaxAmount() public {
