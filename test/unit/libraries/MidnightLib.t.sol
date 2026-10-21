@@ -8,19 +8,19 @@ import { MidnightLib } from "../../../src/libraries/MidnightLib.sol";
 contract MidnightLibWrapper {
 
     function continuousFeePerSecond(uint256 cbpsPerYear) public pure returns (uint256) {
-        return MidnightLib.continuousFeePerSecond(cbpsPerYear);
+        return MidnightLib._continuousFeePerSecond(cbpsPerYear);
     }
 
     function maxBuyPrice(uint256 minYield, uint256 timeToMaturity, uint256 continuousFee)
         public pure returns (uint256)
     {
-        return MidnightLib.maxBuyPrice(minYield, timeToMaturity, continuousFee);
+        return MidnightLib._maxBuyPrice(minYield, timeToMaturity, continuousFee);
     }
 
     function minSellPrice(uint256 maxYield, uint256 timeToMaturity, uint256 continuousFee)
         public pure returns (uint256)
     {
-        return MidnightLib.minSellPrice(maxYield, timeToMaturity, continuousFee);
+        return MidnightLib._minSellPrice(maxYield, timeToMaturity, 1e18, continuousFee * timeToMaturity);
     }
 
     function minSellPriceForPosition(
@@ -31,7 +31,7 @@ contract MidnightLibWrapper {
     )
         public pure returns (uint256)
     {
-        return MidnightLib.minSellPriceForPosition(maxYield, timeToMaturity, credit, pendingFee);
+        return MidnightLib._minSellPrice(maxYield, timeToMaturity, credit, pendingFee);
     }
 
 }

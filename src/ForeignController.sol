@@ -271,10 +271,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
-    function setMidnight(address midnight_)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function setMidnight(address midnight_) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
         midnight = midnight_;
         emit MidnightSet(midnight_);
     }

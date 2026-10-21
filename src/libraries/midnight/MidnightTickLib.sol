@@ -1,9 +1,8 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/libraries/TickLib.sol.
-// `priceToTick` omitted; the tick bound uses a repo-style require message.
+// Modified from https://github.com/morpho-org/midnight/blob/70607569ac348e9880b512ffd3b574be55405932/src/libraries/TickLib.sol
 
 int256  constant LN_ONE_PLUS_DELTA = 0.004987541511039073e18;  // floor(ln(1.005) * 1e18)
 uint256 constant MAX_TICK          = 6744;

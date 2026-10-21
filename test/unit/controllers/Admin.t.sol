@@ -1124,7 +1124,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         uint128 maxLossFactor
     );
 
-    // Midnight's own ceiling, as the annual rate the config now speaks in: percent_bp_cbp.
+    // Midnight's own ceiling: 1% a year, in centi-basis points.
     uint16 constant MAX_CONTINUOUS_FEE_CBP = 1_00_00;
 
     uint16 constant MIN_BUY_YIELD  = 1_00;
@@ -1233,7 +1233,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         );
 
         assertEq(
-            MidnightLib.continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP),
+            MidnightLib._continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP),
             MidnightLib.MAX_CONTINUOUS_FEE
         );
 
