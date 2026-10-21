@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
 import { Market } from "../../interfaces/MidnightInterfaces.sol";
 
-// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/libraries/IdLib.sol (toId only).
+// Modified from https://github.com/morpho-org/midnight/blob/70607569ac348e9880b512ffd3b574be55405932/src/libraries/IdLib.sol
 
 library MidnightIdLib {
 

@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Morpho Association
 pragma solidity ^0.8.21;
 
-// Vendored from morpho-org/midnight @ 70607569ac348e9880b512ffd3b574be55405932, src/interfaces/IMidnight.sol.
-// Structs verbatim (the market id hashes abi.encode(market)); IMidnight trimmed to the lend-side surface.
+// Modified from https://github.com/morpho-org/midnight/blob/70607569ac348e9880b512ffd3b574be55405932/src/interfaces/IMidnight.sol
+// Structs verbatim: the market id hashes abi.encode(market).
 
 struct CollateralParams {
     address token;
@@ -37,7 +37,7 @@ struct Offer {
     address ratifier;
     bool    reduceOnly;
     uint128 maxUnits;
-    uint128 maxAssets;  // buyerAssets if offer.buy else sellerAssets
+    uint128 maxAssets;
     uint256 continuousFeeCap;
 }
 
