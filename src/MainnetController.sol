@@ -910,10 +910,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         rateLimits.triggerRateLimitDecrease(key, amount);
     }
 
-    function _rateLimitedAsset(bytes32 key, address asset, uint256 amount) internal {
-        rateLimits.triggerRateLimitDecrease(RateLimitHelpers.makeAssetKey(key, asset), amount);
-    }
-
     function _cancelRateLimit(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitIncrease(key, amount);
     }
