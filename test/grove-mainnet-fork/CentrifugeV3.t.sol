@@ -225,7 +225,7 @@ contract MainnetControllerTransferSharesCentrifugeNoManagerGetterTests is ForkTe
     uint16 constant DESTINATION_CENTRIFUGE_ID = 5;
 
     function _getBlock() internal pure override returns (uint256) {
-        return 26200000;  // Oct 15, 2025
+        return 26200000;  // Oct 15, 2026
     }
 
     // Reaching the rate limit check proves the spoke was resolved from the vault.
