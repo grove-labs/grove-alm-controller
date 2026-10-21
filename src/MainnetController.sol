@@ -664,6 +664,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function setDelegatedSigner(address delegatedSigner) external nonReentrant {
         _checkRole(RELAYER);
+        _rateLimitExists(LIMIT_USDE_MINT);
 
         proxy.doCall(
             address(ethenaMinter),
@@ -916,6 +917,13 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function _cancelRateLimit(bytes32 key, uint256 amount) internal {
         rateLimits.triggerRateLimitIncrease(key, amount);
+    }
+
+    function _rateLimitExists(bytes32 key) internal view {
+        require(
+            rateLimits.getRateLimitData(key).maxAmount > 0,
+            "MainnetController/invalid-action"
+        );
     }
 
     /**********************************************************************************************/
