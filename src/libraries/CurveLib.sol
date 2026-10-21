@@ -135,11 +135,10 @@ library CurveLib {
             ERC20Lib.approve(params.proxy, tokens[i], params.pool, params.depositAmounts[i]);
             valueDeposited += params.depositAmounts[i] * rates[i];
         }
-        valueDeposited /= 1e18;
 
         // Ensure minimum LP amount expected is greater than max slippage amount.
         require(
-            params.minLpAmount * virtualPrice >= valueDeposited * params.maxSlippage,
+            params.minLpAmount * virtualPrice * 1e18 >= valueDeposited * params.maxSlippage,
             "CurveLib/min-amount-not-met"
         );
 

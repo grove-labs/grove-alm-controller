@@ -256,7 +256,6 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
 
         uint256 virtualPrice = curvePool.get_virtual_price();
 
-        // Bound is cross-multiplied, so the smallest passing value is the ceiling of the division
         uint256 boundaryAmount = (2_000_000e18 * 0.98e18 + virtualPrice - 1) / virtualPrice;
 
         assertApproxEqAbs(boundaryAmount, 1_950_000e18, 50_000e18);  // Sanity check on precision
@@ -627,7 +626,6 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
     function test_removeLiquidityCurve_underAllowableSlippageBoundary() public {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
-        // Proportional amounts for a burn comfortably inside the position
         uint256[] memory minWithdrawAmounts = _calcMinWithdrawAmounts(lpTokensReceived * 80 / 100);
 
         // Both tokens are 6 decimals at a 1e30 rate
@@ -645,7 +643,6 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
         vm.expectRevert("CurveLib/min-amount-not-met");
         foreignController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
 
-        // Add one to get over the boundary
         minWithdrawAmounts[0] += 1;
 
         foreignController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
@@ -858,7 +855,6 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
 
-        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
         uint256 amountIn       = 999_999e6 + 1;
         uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
 
@@ -875,7 +871,6 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(cgUSD), address(almProxy), 1_000_000e6);
 
-        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
         uint256 amountIn       = 999_999e6 + 1;
         uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
 

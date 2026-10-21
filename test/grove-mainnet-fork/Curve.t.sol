@@ -181,7 +181,6 @@ contract MainnetControllerAddLiquidityCurveFailureTests is CurveTestBase {
 
         uint256 virtualPrice = curvePool.get_virtual_price();
 
-        // Bound is cross-multiplied, so the smallest passing value is the ceiling of the division
         uint256 boundaryAmount = (2_000_000e18 * 0.98e18 + virtualPrice - 1) / virtualPrice;
 
         assertApproxEqAbs(boundaryAmount, 1_950_000e18, 50_000e18);  // Sanity check on precision
@@ -792,7 +791,6 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdc), address(almProxy), 1_000_000e6);
 
-        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
         uint256 amountIn       = 999_999e6 + 1;
         uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
 
@@ -809,7 +807,6 @@ contract MainnetControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdt), address(almProxy), 1_000_000e6);
 
-        // Both tokens share a rate, so the bound is amountIn * maxSlippage, rounded up
         uint256 amountIn       = 999_999e6 + 1;
         uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
 
@@ -1368,6 +1365,38 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
 
     function _getBlock() internal pure override returns (uint256) {
         return 22225000;  // April 8, 2025
+    }
+
+    // sUSDS carries an oracle rate, so the aggregated value has a fraction a floored bound discards.
+    function test_addLiquidityCurve_underAllowableSlippageBoundary() public {
+        uint256 susdsAmount = 955_285_049_803_540_991_920_500;
+        uint256 usdtAmount  = 1_000_000e6;
+
+        deal(address(susds), address(almProxy), susdsAmount);
+        deal(address(usdt),  address(almProxy), usdtAmount);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = susdsAmount;
+        amounts[1] = usdtAmount;
+
+        ICurvePoolLike pool = ICurvePoolLike(CURVE_POOL);
+
+        uint256           virtualPrice = pool.get_virtual_price();
+        uint256[] memory  rates        = pool.stored_rates();
+
+        uint256 valueDeposited = susdsAmount * rates[0] + usdtAmount * rates[1];
+
+        uint256 boundaryAmount  = (valueDeposited * 0.95e18 + virtualPrice * 1e18 - 1) / (virtualPrice * 1e18);
+        uint256 flooredBoundary = ((valueDeposited / 1e18) * 0.95e18 + virtualPrice - 1) / virtualPrice;
+
+        assertEq(valueDeposited % 1e18, 964_598_072_507_685_000);
+        assertEq(flooredBoundary,       boundaryAmount - 1);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("CurveLib/min-amount-not-met");
+        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, boundaryAmount - 1);
+
+        mainnetController.addLiquidityCurve(CURVE_POOL, amounts, boundaryAmount);
     }
 
     function test_e2e_addSwapAndRemoveLiquidityCurve() public {
