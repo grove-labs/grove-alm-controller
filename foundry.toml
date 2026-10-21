@@ -9,9 +9,7 @@ fs_permissions = [
     { access = "read", path = "./script/input/"},
     { access = "read-write", path = "./script/output/"}
 ]
-# Morpho Midnight is compiled for Osaka and its health check uses CLZ, so the EVM the tests run on
-# has to support it. forge normalizes this to the newest target solc 0.8.25 knows, so our own
-# bytecode is unchanged.
+# Midnight's health check uses CLZ, so the test EVM must support it; our own bytecode is unchanged.
 evm_version = 'osaka'
 remappings = [
     '@layerzerolabs/oft-evm/=lib/devtools/packages/oft-evm/',

@@ -207,7 +207,7 @@ contract MidnightMakerTestBase is UnitTestBase {
         uint256 floor = MidnightTickLib.tickToPrice(MIN_SELL_TICK);
 
         uint256 yieldFloor =
-            MidnightLib.minSellPriceForPosition(MAX_SELL_YIELD, timeToMaturity, units, pendingFee);
+            MidnightLib._minSellPrice(MAX_SELL_YIELD, timeToMaturity, units, pendingFee);
 
         if (yieldFloor > floor) floor = yieldFloor;
 
@@ -704,7 +704,7 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
             marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, type(uint128).max
         );
 
-        uint256 ceiling = MidnightLib.continuousFeePerSecond(10);
+        uint256 ceiling = MidnightLib._continuousFeePerSecond(10);
 
         venue.setContinuousFee(marketId, ceiling);
 
