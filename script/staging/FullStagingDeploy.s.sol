@@ -51,6 +51,11 @@ import { MockUsdsJoin }     from "./mocks/MockUsdsJoin.sol";
 import { MockVat }          from "./mocks/MockVat.sol";
 import { PSMWrapper }       from "./mocks/PSMWrapper.sol";
 
+interface IControllerLike {
+    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
+    function setMaxSlippage(address pool, uint256 maxSlippage) external;
+}
+
 struct Domain {
     string  input;
     string  output;
@@ -527,8 +532,7 @@ contract FullStagingDeploy is Script {
             0
         );
 
-        // AaveLib.deposit reverts unless this is set, so onboarding is incomplete without it
-        MainnetController(controllerInst.controller).setMaxSlippage(aToken, AAVE_MAX_SLIPPAGE);
+        IControllerLike(controllerInst.controller).setMaxSlippage(aToken, AAVE_MAX_SLIPPAGE);
 
         vm.stopBroadcast();
     }
@@ -554,10 +558,9 @@ contract FullStagingDeploy is Script {
         rateLimits.setRateLimitData(RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token), maxAmount,         slope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token),                                  type(uint256).max, 0);
 
-        // ERC4626Lib.deposit compares against this, so an unset rate rejects every deposit
         uint256 assetUnit = 10 ** IERC20(IERC4626(token).asset()).decimals();
 
-        MainnetController(controllerInst.controller).setMaxExchangeRate(
+        IControllerLike(controllerInst.controller).setMaxExchangeRate(
             token,
             IERC4626(token).convertToShares(assetUnit),
             assetUnit * EXCHANGE_RATE_HEADROOM_BPS / 10_000
