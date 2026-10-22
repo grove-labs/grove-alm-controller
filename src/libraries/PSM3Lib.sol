@@ -41,13 +41,15 @@ library PSM3Lib {
 
         ERC20Lib.approve(params.proxy, params.asset, address(params.psm), params.amount);
 
-        shares = abi.decode(
-            params.proxy.doCall(
-                address(params.psm),
-                abi.encodeCall(IPSM3.deposit, (params.asset, address(params.proxy), params.amount))
-            ),
-            (uint256)
+        uint256 startingShares = params.psm.shares(address(params.proxy));
+
+        params.proxy.doCall(
+            address(params.psm),
+            abi.encodeCall(IPSM3.deposit, (params.asset, address(params.proxy), params.amount))
         );
+
+        // Report what the PSM actually credited rather than what it returns.
+        shares = params.psm.shares(address(params.proxy)) - startingShares;
 
         ERC20Lib.approve(params.proxy, params.asset, address(params.psm), 0);
     }
