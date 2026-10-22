@@ -91,7 +91,7 @@ library CentrifugeLib {
 
         ICentrifugeV3VaultLike centrifugeVault = ICentrifugeV3VaultLike(params.token);
 
-        address spoke = IAsyncRedeemManagerLike(centrifugeVault.manager()).spoke();
+        address spoke = IAsyncRedeemManagerLike(centrifugeVault.baseManager()).spoke();
 
         _rateLimited(
             params.rateLimits,

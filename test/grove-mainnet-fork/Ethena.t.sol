@@ -25,11 +25,33 @@ contract MainnetControllerSetDelegatedSignerFailureTests is EthenaTestBase {
         mainnetController.setDelegatedSigner(makeAddr("signer"));
     }
 
+    function test_setDelegatedSigner_ethenaOffboarded() external {
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setRateLimitData(mainnetController.LIMIT_USDE_MINT(), 0, 0);
+        vm.stopPrank();
+
+        vm.prank(relayer);
+        vm.expectRevert("MainnetController/invalid-action");
+        mainnetController.setDelegatedSigner(makeAddr("signer"));
+    }
+
 }
 
 contract MainnetControllerSetDelegatedSignerSuccessTests is EthenaTestBase {
 
     event DelegatedSignerInitiated(address indexed delegateTo, address indexed initiatedBy);
+
+    function setUp() public override {
+        super.setUp();
+
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setRateLimitData(
+            mainnetController.LIMIT_USDE_MINT(),
+            5_000_000e6,
+            uint256(1_000_000e6) / 4 hours
+        );
+        vm.stopPrank();
+    }
 
     function test_setDelegatedSigner() external {
         address signer = makeAddr("signer");
@@ -64,6 +86,18 @@ contract MainnetControllerRemoveDelegatedSignerFailureTests is EthenaTestBase {
 contract MainnetControllerRemoveDelegatedSignerSuccessTests is EthenaTestBase {
 
     event DelegatedSignerRemoved(address indexed removedSigner, address indexed initiatedBy);
+
+    function setUp() public override {
+        super.setUp();
+
+        vm.startPrank(GROVE_PROXY);
+        rateLimits.setRateLimitData(
+            mainnetController.LIMIT_USDE_MINT(),
+            5_000_000e6,
+            uint256(1_000_000e6) / 4 hours
+        );
+        vm.stopPrank();
+    }
 
     function test_removeDelegatedSigner() external {
         address signer = makeAddr("signer");

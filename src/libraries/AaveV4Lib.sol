@@ -50,7 +50,6 @@ library AaveV4Lib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     depositRateLimitId;
         bytes32     withdrawRateLimitId;
         address     spoke;
         uint256     reserveId;
@@ -116,9 +115,7 @@ library AaveV4Lib {
 
     // NOTE: !!! Rate limited at end of function !!!
     function withdraw(WithdrawParams memory params) external returns (uint256 amountWithdrawn) {
-        IAaveV4Spoke.Reserve memory reserve = IAaveV4Spoke(params.spoke).getReserve(params.reserveId);
-
-        address underlying = reserve.underlying;
+        address underlying = IAaveV4Spoke(params.spoke).getReserve(params.reserveId).underlying;
 
         uint256 balanceBefore = IERC20(underlying).balanceOf(address(params.proxy));
 
@@ -136,14 +133,6 @@ library AaveV4Lib {
             RateLimitHelpers.makeAddressUint256Key(params.withdrawRateLimitId, params.spoke, params.reserveId),
             amountWithdrawn
         );
-
-        // Restore deposit capacity by the withdrawn amount; skipped if no deposit limit is set.
-        // A reserve remapped to a different Hub asset resolves to an unconfigured key, so only the
-        // restore is skipped, never the exit itself (the withdraw key omits the reserve's Hub data).
-        bytes32 depositKey = _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve);
-        if (params.rateLimits.getRateLimitData(depositKey).maxAmount != 0) {
-            params.rateLimits.triggerRateLimitIncrease(depositKey, amountWithdrawn);
-        }
     }
 
     function _makeDepositKey(

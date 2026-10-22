@@ -4,8 +4,7 @@ pragma solidity ^0.8.21;
 import { AccessControl }   from "openzeppelin-contracts/contracts/access/AccessControl.sol";
 import { ReentrancyGuard } from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
-import { IERC20 }   from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-import { IERC4626 } from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import { IPSM3 } from "spark-psm/src/interfaces/IPSM3.sol";
 
@@ -142,20 +141,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         pendleRouter             = pendleRouter_;
         uniswapV3Router          = ISwapRouter(uniswapV3Router_);
         uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
-    }
-
-    /**********************************************************************************************/
-    /*** Modifiers                                                                              ***/
-    /**********************************************************************************************/
-
-    modifier rateLimited(bytes32 key, uint256 amount) {
-        rateLimits.triggerRateLimitDecrease(key, amount);
-        _;
-    }
-
-    modifier rateLimitedAsset(bytes32 key, address asset, uint256 amount) {
-        rateLimits.triggerRateLimitDecrease(RateLimitHelpers.makeAssetKey(key, asset), amount);
-        _;
     }
 
     /**********************************************************************************************/
@@ -596,7 +581,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
             proxy               : proxy,
             rateLimits          : rateLimits,
-            depositRateLimitId  : LIMIT_AAVE_V4_DEPOSIT,
             withdrawRateLimitId : LIMIT_AAVE_V4_WITHDRAW,
             spoke               : spoke,
             reserveId           : reserveId,
