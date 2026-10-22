@@ -96,6 +96,8 @@ jobs:
         run: |
           sudo apt update && sudo apt install -y lcov
           lcov --remove lcov.info 'test/*' 'script/*' --output-file lcov.info --rc branch_coverage=1 --ignore-errors inconsistent
+          # The report action runs genhtml itself and accepts no flags, so relax the check globally.
+          printf 'check_data_consistency = 0\n' >> ~/.lcovrc
 
       # This step posts a detailed coverage report as a comment and deletes previous comments on
       # each push. The below step is used to fail coverage if the specified coverage threshold is
