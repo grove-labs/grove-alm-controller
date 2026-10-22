@@ -37,6 +37,14 @@ interface ICurvePoolLike is IERC20 {
 library CurveLib {
 
     /**********************************************************************************************/
+    /*** Constants                                                                              ***/
+    /**********************************************************************************************/
+
+    bytes32 public constant LIMIT_CURVE_DEPOSIT  = keccak256("LIMIT_CURVE_DEPOSIT");
+    bytes32 public constant LIMIT_CURVE_SWAP     = keccak256("LIMIT_CURVE_SWAP");
+    bytes32 public constant LIMIT_CURVE_WITHDRAW = keccak256("LIMIT_CURVE_WITHDRAW");
+
+    /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
 
@@ -44,7 +52,6 @@ library CurveLib {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         address     pool;
-        bytes32     rateLimitId;
         uint256     inputIndex;
         uint256     outputIndex;
         uint256     amountIn;
@@ -56,8 +63,6 @@ library CurveLib {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         address     pool;
-        bytes32     addLiquidityRateLimitId;
-        bytes32     swapRateLimitId;
         uint256     minLpAmount;
         uint256     maxSlippage;
         uint256[]   depositAmounts;
@@ -67,7 +72,6 @@ library CurveLib {
         IALMProxy   proxy;
         IRateLimits rateLimits;
         address     pool;
-        bytes32     rateLimitId;
         uint256     lpBurnAmount;
         uint256[]   minWithdrawAmounts;
         uint256     maxSlippage;
@@ -96,7 +100,7 @@ library CurveLib {
         address tokenOut = curvePool.coins(params.outputIndex);
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, tokenIn, params.pool),
+            RateLimitHelpers.makeAssetDestinationKey(LIMIT_CURVE_SWAP, tokenIn, params.pool),
             params.amountIn
         );
 
@@ -216,13 +220,13 @@ library CurveLib {
             valueWithdrawn     += withdrawn * rates[i];
 
             params.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, tokens[i], params.pool),
+                RateLimitHelpers.makeAssetDestinationKey(LIMIT_CURVE_WITHDRAW, tokens[i], params.pool),
                 withdrawn
             );
         }
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.pool),
+            RateLimitHelpers.makeAssetKey(LIMIT_CURVE_WITHDRAW, params.pool),
             valueWithdrawn / 1e18
         );
     }
@@ -284,11 +288,11 @@ library CurveLib {
             uint256 input     = params.depositAmounts[i];
 
             params.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(params.swapRateLimitId, tokens[i], params.pool),
+                RateLimitHelpers.makeAssetDestinationKey(LIMIT_CURVE_SWAP, tokens[i], params.pool),
                 input > deposited ? input - deposited : 0
             );
             params.rateLimits.triggerRateLimitDecrease(
-                RateLimitHelpers.makeAssetDestinationKey(params.addLiquidityRateLimitId, tokens[i], params.pool),
+                RateLimitHelpers.makeAssetDestinationKey(LIMIT_CURVE_DEPOSIT, tokens[i], params.pool),
                 deposited
             );
 
@@ -296,7 +300,7 @@ library CurveLib {
         }
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.addLiquidityRateLimitId, params.pool),
+            RateLimitHelpers.makeAssetKey(LIMIT_CURVE_DEPOSIT, params.pool),
             valueDeposited / 1e18
         );
     }

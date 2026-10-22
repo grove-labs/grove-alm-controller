@@ -26,6 +26,7 @@ import {RateLimitHelpers} from "../../src/RateLimitHelpers.sol";
 import {ILayerZero} from "../../src/interfaces/ILayerZero.sol";
 
 import "./ForkTestBase.t.sol";
+import { LayerZeroLib } from "../../src/libraries/LayerZeroLib.sol";
 
 contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
     using DomainHelpers for *;
@@ -188,7 +189,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
         );
 
         destinationRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(address(usdt0OftPlasma)).token(),
             address(usdt0OftPlasma),
             ILayerZero(address(usdt0OftPlasma)).peers(sourceEndpointId),
@@ -214,7 +215,7 @@ contract PlasmaChainUSDTToLayerZeroTestBase is ForkTestBase {
 
         vm.startPrank(Ethereum.GROVE_PROXY);
         sourceRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(address(usdtOft)).token(),
             address(usdtOft),
             ILayerZero(address(usdtOft)).peers(destinationEndpointId),

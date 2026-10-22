@@ -7,6 +7,7 @@ import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 import "./ForkTestBase.t.sol";
+import { AaveLib } from "../../src/libraries/AaveLib.sol";
 
 contract AaveV3BaseMarketTestBase is ForkTestBase {
 
@@ -24,13 +25,13 @@ contract AaveV3BaseMarketTestBase is ForkTestBase {
         super.setUp();
 
         depositKey = RateLimitHelpers.makeAddressAddressAddressKey(
-            foreignController.LIMIT_AAVE_DEPOSIT(),
+            AaveLib.LIMIT_AAVE_DEPOSIT,
             Base.USDC,
             POOL,
             ATOKEN_USDC
         );
         withdrawKey = RateLimitHelpers.makeAddressAddressKey(
-            foreignController.LIMIT_AAVE_WITHDRAW(),
+            AaveLib.LIMIT_AAVE_WITHDRAW,
             POOL,
             ATOKEN_USDC
         );
@@ -78,7 +79,7 @@ contract AaveV3BaseMarketDepositFailureTests is AaveV3BaseMarketTestBase {
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(depositKey, 0, 0);
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(foreignController.LIMIT_AAVE_DEPOSIT(), ATOKEN_USDC),
+            RateLimitHelpers.makeAssetKey(AaveLib.LIMIT_AAVE_DEPOSIT, ATOKEN_USDC),
             1_000_000e6,
             uint256(1_000_000e6) / 1 days
         );

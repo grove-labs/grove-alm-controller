@@ -4,6 +4,7 @@ pragma solidity ^0.8.21;
 import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.sol";
 
 import "./ForkTestBase.t.sol";
+import { PendleLib } from "../../src/libraries/PendleLib.sol";
 
 contract PendleTestBase is ForkTestBase {
 
@@ -21,8 +22,8 @@ contract PendleTestBase is ForkTestBase {
 
         (, address pt,) = pendleMarket.readTokens();
 
-        redeemKey       = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_PENDLE_PT_REDEEM(), pt, address(pendleMarket));
-        legacyRedeemKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_PENDLE_PT_REDEEM(), address(pendleMarket));
+        redeemKey       = RateLimitHelpers.makeAssetDestinationKey(PendleLib.LIMIT_PENDLE_PT_REDEEM, pt, address(pendleMarket));
+        legacyRedeemKey = RateLimitHelpers.makeAssetKey(PendleLib.LIMIT_PENDLE_PT_REDEEM, address(pendleMarket));
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(redeemKey, 10_000_000e18, uint256(10_000_000e18) / 1 days);

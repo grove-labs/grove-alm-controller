@@ -14,10 +14,12 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library PSM3Lib {
 
+    bytes32 public constant LIMIT_PSM_DEPOSIT  = keccak256("LIMIT_PSM_DEPOSIT");
+    bytes32 public constant LIMIT_PSM_WITHDRAW = keccak256("LIMIT_PSM_WITHDRAW");
+
     struct DepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         IPSM3       psm;
         address     asset;
         uint256     amount;
@@ -26,7 +28,6 @@ library PSM3Lib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         IPSM3       psm;
         address     asset;
         uint256     maxAmount;
@@ -34,7 +35,7 @@ library PSM3Lib {
 
     function deposit(DepositParams memory params) external returns (uint256 shares) {
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.asset),
+            RateLimitHelpers.makeAssetKey(LIMIT_PSM_DEPOSIT, params.asset),
             params.amount
         );
 
@@ -63,7 +64,7 @@ library PSM3Lib {
         assetsWithdrawn = IERC20(params.asset).balanceOf(address(params.proxy)) - startingAssets;
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.asset),
+            RateLimitHelpers.makeAssetKey(LIMIT_PSM_WITHDRAW, params.asset),
             assetsWithdrawn
         );
     }

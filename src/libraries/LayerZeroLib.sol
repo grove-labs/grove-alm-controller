@@ -16,10 +16,11 @@ library LayerZeroLib {
 
     using OptionsBuilder for bytes;
 
+    bytes32 public constant LIMIT_LAYERZERO_TRANSFER = keccak256("LIMIT_LAYERZERO_TRANSFER");
+
     struct TransferTokenParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     oftAddress;
         uint256     amount;
         uint32      destinationEndpointId;
@@ -47,7 +48,7 @@ library LayerZeroLib {
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-                params.rateLimitId,
+                LIMIT_LAYERZERO_TRANSFER,
                 token,
                 params.oftAddress,
                 ILayerZero(params.oftAddress).peers(params.destinationEndpointId),

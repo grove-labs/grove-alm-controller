@@ -25,6 +25,12 @@ interface IPSMLike {
 library PSMLib {
 
     /**********************************************************************************************/
+    /*** Constants                                                                              ***/
+    /**********************************************************************************************/
+
+    bytes32 public constant LIMIT_USDS_TO_USDC = keccak256("LIMIT_USDS_TO_USDC");
+
+    /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
 
@@ -35,7 +41,6 @@ library PSMLib {
         IPSMLike     psm;
         IERC20       usds;
         IERC20       dai;
-        bytes32      rateLimitId;
         uint256      usdcAmount;
         uint256      psmTo18ConversionFactor;
     }
@@ -47,7 +52,6 @@ library PSMLib {
         IPSMLike     psm;
         IERC20       dai;
         IERC20       usdc;
-        bytes32      rateLimitId;
         uint256      usdcAmount;
         uint256      psmTo18ConversionFactor;
     }
@@ -57,7 +61,7 @@ library PSMLib {
     /**********************************************************************************************/
 
     function swapUSDSToUSDC(SwapUSDSToUSDCParams calldata params) external {
-        _rateLimited(params.rateLimits, params.rateLimitId, params.usdcAmount);
+        _rateLimited(params.rateLimits, LIMIT_USDS_TO_USDC, params.usdcAmount);
 
         uint256 usdsAmount = params.usdcAmount * params.psmTo18ConversionFactor;
 
@@ -85,7 +89,7 @@ library PSMLib {
     }
 
     function swapUSDCToUSDS(SwapUSDCToUSDSParams calldata params) external {
-        _cancelRateLimit(params.rateLimits, params.rateLimitId, params.usdcAmount);
+        _cancelRateLimit(params.rateLimits, LIMIT_USDS_TO_USDC, params.usdcAmount);
 
         // Approve USDC to PSM from the proxy (assumes the proxy has enough USDC)
         ERC20Lib.approve(params.proxy, address(params.usdc), address(params.psm), params.usdcAmount);
