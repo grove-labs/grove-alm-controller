@@ -11,6 +11,7 @@ import { IERC721 }            from "openzeppelin-contracts/contracts/token/ERC72
 
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
+import { UniswapV3OracleLib }                              from "../../src/libraries/uniswap-v3/UniV3OracleLib.sol";
 
 import { ISwapRouter } from "../../src/interfaces/UniswapV3Interfaces.sol";
 
@@ -994,6 +995,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        mainnetController.setUniswapV3PoolMaxTickDelta(UNISWAP_V3_DAI_USDC_POOL, 200);
         vm.stopPrank();
 
         // Mint a USDC-USDT position and transfer it to the relayer
@@ -1098,6 +1100,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        mainnetController.setUniswapV3PoolMaxTickDelta(UNISWAP_V3_DAI_USDC_POOL, 200);
         vm.stopPrank();
 
         vm.startPrank(relayer);
@@ -1128,6 +1131,7 @@ contract MainnetControllerAddLiquidityFailureTests is UniswapV3TestBase {
         mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
         mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        mainnetController.setUniswapV3PoolMaxTickDelta(UNISWAP_V3_DAI_USDC_POOL, 200);
         vm.stopPrank();
 
         vm.startPrank(relayer);
@@ -1206,8 +1210,6 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
     }
 
     // Transaction fails when spot price has been manipulated out of expected range
-    // Even with valid TWAP-based min amounts, Uniswap's own slippage check fails
-    // because spot price requires different token ratios than our mins allow
     function test_addLiquidityUniswapV3_twapProtection_revertsWhenSpotPriceManipulated() public {
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
         _fundProxy(desired.amount0, desired.amount1);
@@ -1223,14 +1225,13 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         _mockSpotTick(tick.upper + 1000);
 
         // Min amounts are valid per TWAP, but spot price is manipulated
-        // Uniswap's mint will fail because actual amounts needed don't match our mins
         UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
             amount0: desired.amount0 * 98 / 100,
             amount1: desired.amount1 * 98 / 100
         });
 
         vm.startPrank(relayer);
-        vm.expectRevert("Price slippage check");
+        vm.expectRevert("UniswapV3Lib/spot-outside-twap-bound");
         mainnetController.addLiquidityUniswapV3(
             _getPool(),
             0,
@@ -1242,6 +1243,111 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         vm.stopPrank();
 
         vm.clearMockedCalls();
+    }
+
+    // A one-sided target drives the TWAP-derived minimums to zero, so the mins below are vacuous.
+    function test_addLiquidityUniswapV3_revertsWhenSpotManipulatedWithVacuousMinimums() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        _mockSpotTick(tick.lower - 1000);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/spot-outside-twap-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            UniswapV3Lib.TokenAmounts({ amount0: desired.amount0, amount1: 0 }),
+            UniswapV3Lib.TokenAmounts({ amount0: 0,               amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    function test_addLiquidityUniswapV3_revertsOneTickBeyondMaxTickDelta() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        (int24 twapTick, ) = UniswapV3OracleLib.consult(_getPool(), 1 days);
+
+        _mockSpotTick(twapTick + 201);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/spot-outside-twap-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    // At the bound the spot check passes, so a different revert proves where the cut sits.
+    function test_addLiquidityUniswapV3_spotAtMaxTickDeltaPassesBound() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 100),
+            upper: _toSpacedTick(initTick + 100)
+        });
+
+        (int24 twapTick, ) = UniswapV3OracleLib.consult(_getPool(), 1 days);
+
+        _mockSpotTick(twapTick + 200);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        vm.clearMockedCalls();
+    }
+
+    function test_addLiquidityUniswapV3_maxTickDeltaNotSet() public {
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(UNISWAP_V3_DAI_USDC_POOL, 0.98e18);
+        mainnetController.setUniswapV3TwapSecondsAgo(UNISWAP_V3_DAI_USDC_POOL, 1 seconds);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(UNISWAP_V3_DAI_USDC_POOL, -100000);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(UNISWAP_V3_DAI_USDC_POOL, 100000);
+        vm.stopPrank();
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/max-tick-delta-not-set");
+        mainnetController.addLiquidityUniswapV3(
+            UNISWAP_V3_DAI_USDC_POOL,
+            0,
+            UniswapV3Lib.Tick({ lower: _toSpacedTick(-10000), upper: _toSpacedTick(10000) }),
+            UniswapV3Lib.TokenAmounts({ amount0: 1, amount1: 1 }),
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
     }
 
     // Expected amount0 is zero above the range, so the pool's slippage check rejects minAmount0.
@@ -1278,6 +1384,39 @@ contract MainnetControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
             block.timestamp + 1 hours
         );
         vm.stopPrank();
+    }
+
+    // The spot bound compares spot to the TWAP, not to the range, so a one-sided add still works.
+    function test_addLiquidityUniswapV3_twapAboveRangeOneSidedAddSucceeds() public {
+        UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
+        _fundProxy(desired.amount0, desired.amount1);
+
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), initTick - 300);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), initTick - 100);
+        vm.stopPrank();
+
+        UniswapV3Lib.Tick memory tick = UniswapV3Lib.Tick({
+            lower: _toSpacedTick(initTick - 200),
+            upper: _toSpacedTick(initTick - 100)
+        });
+
+        uint256 balance0Before = token0.balanceOf(address(almProxy));
+
+        vm.startPrank(relayer);
+        ( , uint128 liquidity, uint256 amount0, ) = mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            tick,
+            desired,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: desired.amount1 * 98 / 100 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+
+        assertGt(liquidity, 0);
+        assertEq(amount0, 0);
+        assertEq(token0.balanceOf(address(almProxy)), balance0Before);
     }
 
     // Expected amount1 is zero below the range, so the pool's slippage check rejects minAmount1.
@@ -2068,15 +2207,15 @@ contract MainnetControllerSwapSandwichAttackTest is UniswapV3TestBase {
 
 // Not INonfungiblePositionManager: implementing its 12-value positions() overflows the stack in
 // the unoptimized build `forge coverage` uses.
-contract OverreportingPositionManager {
+contract MisreportingPositionManager {
 
     INonfungiblePositionManager internal immutable real;
 
-    uint256 internal immutable overreport;
+    int256 internal immutable misreport;
 
-    constructor(address real_, uint256 overreport_) {
-        real       = INonfungiblePositionManager(real_);
-        overreport = overreport_;
+    constructor(address real_, int256 misreport_) {
+        real      = INonfungiblePositionManager(real_);
+        misreport = misreport_;
     }
 
     function mint(INonfungiblePositionManager.MintParams calldata params)
@@ -2091,8 +2230,12 @@ contract OverreportingPositionManager {
         _refund(params.token0, params.amount0Desired - amount0);
         _refund(params.token1, params.amount1Desired - amount1);
 
-        amount0 += overreport;
-        amount1 += overreport;
+        amount0 = _misreported(amount0);
+        amount1 = _misreported(amount1);
+    }
+
+    function _misreported(uint256 amount) internal view returns (uint256) {
+        return misreport >= 0 ? amount + uint256(misreport) : amount - uint256(-misreport);
     }
 
     function _pull(address token, uint256 amount) internal {
@@ -2108,20 +2251,27 @@ contract OverreportingPositionManager {
 
 contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBase {
 
-    uint256 constant OVERREPORT = 1_000e6;
+    uint256 constant MISREPORT = 1_000e6;
 
     // Storage slot of MainnetController.uniswapV3PositionManager, which has no setter.
     uint256 constant POSITION_MANAGER_SLOT = 35;
+
+    struct AddOutcome {
+        uint256 spent0;
+        uint256 spent1;
+        uint256 used0;
+        uint256 used1;
+        uint256 charged0;
+        uint256 charged1;
+    }
 
     function _getPool() internal pure override returns (address) {
         return UNISWAP_V3_USDC_USDT_POOL;
     }
 
-    function setUp() public override {
-        super.setUp();
-
-        OverreportingPositionManager manager =
-            new OverreportingPositionManager(UNISWAP_V3_POSITION_MANAGER, OVERREPORT);
+    function _installManager(int256 misreport) internal {
+        MisreportingPositionManager manager =
+            new MisreportingPositionManager(UNISWAP_V3_POSITION_MANAGER, misreport);
 
         vm.store(
             address(mainnetController),
@@ -2132,7 +2282,7 @@ contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBas
         assertEq(address(mainnetController.uniswapV3PositionManager()), address(manager));
     }
 
-    function test_addLiquidityUniswapV3_metersMeasuredAmountsNotReported() public {
+    function _addAndMeasure() internal returns (AddOutcome memory outcome) {
         uint256 amount0 = 100_000e6;
         uint256 amount1 = 100_000e6;
 
@@ -2156,24 +2306,46 @@ contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBas
             upper : _toSpacedTick(initTick + DEFAULT_TICK_UPPER)
         });
 
-        ( , , uint256 amount0Used, uint256 amount1Used) = _addLiquidity(
+        ( , , outcome.used0, outcome.used1) = _addLiquidity(
             0,
             tick,
             UniswapV3Lib.TokenAmounts({ amount0: amount0, amount1: amount1 }),
             _minLiquidityPosition(amount0, amount1)
         );
 
-        uint256 spent0 = balance0Before - token0.balanceOf(address(almProxy));
-        uint256 spent1 = balance1Before - token1.balanceOf(address(almProxy));
+        outcome.spent0 = balance0Before - token0.balanceOf(address(almProxy));
+        outcome.spent1 = balance1Before - token1.balanceOf(address(almProxy));
 
-        assertGt(spent0, 0);
-        assertGt(spent1, 0);
+        outcome.charged0 = limit0Before - rateLimits.getCurrentRateLimit(key0);
+        outcome.charged1 = limit1Before - rateLimits.getCurrentRateLimit(key1);
+    }
 
-        assertEq(amount0Used, spent0);
-        assertEq(amount1Used, spent1);
+    function test_addLiquidityUniswapV3_metersReportedWhenItExceedsMeasured() public {
+        _installManager(int256(MISREPORT));
 
-        assertEq(limit0Before - rateLimits.getCurrentRateLimit(key0), spent0);
-        assertEq(limit1Before - rateLimits.getCurrentRateLimit(key1), spent1);
+        AddOutcome memory outcome = _addAndMeasure();
+
+        assertGt(outcome.spent0, 0);
+        assertGt(outcome.spent1, 0);
+
+        assertEq(outcome.used0,    outcome.spent0 + MISREPORT);
+        assertEq(outcome.used1,    outcome.spent1 + MISREPORT);
+        assertEq(outcome.charged0, outcome.spent0 + MISREPORT);
+        assertEq(outcome.charged1, outcome.spent1 + MISREPORT);
+    }
+
+    function test_addLiquidityUniswapV3_metersMeasuredWhenItExceedsReported() public {
+        _installManager(-int256(MISREPORT));
+
+        AddOutcome memory outcome = _addAndMeasure();
+
+        assertGt(outcome.spent0, MISREPORT);
+        assertGt(outcome.spent1, MISREPORT);
+
+        assertEq(outcome.used0,    outcome.spent0);
+        assertEq(outcome.used1,    outcome.spent1);
+        assertEq(outcome.charged0, outcome.spent0);
+        assertEq(outcome.charged1, outcome.spent1);
     }
 
 }

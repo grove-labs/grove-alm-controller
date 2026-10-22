@@ -759,7 +759,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 maxSlippage     : maxSlippage,
                 deadline        : deadline,
-                twapSecondsAgo  : poolParams.twapSecondsAgo
+                twapSecondsAgo  : poolParams.twapSecondsAgo,
+                maxTickDelta    : poolParams.swapMaxTickDelta
             })
         );
     }

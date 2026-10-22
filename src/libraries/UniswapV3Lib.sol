@@ -68,6 +68,7 @@ library UniswapV3Lib {
         uint256                     maxSlippage;
         uint256                     deadline;
         uint32                      twapSecondsAgo;
+        uint24                      maxTickDelta; // The furthest spot may sit from the TWAP when liquidity is added
     }
 
     struct RemoveLiquidityParams {
@@ -121,6 +122,7 @@ library UniswapV3Lib {
 
         require(params.maxSlippage > 0,     "UniswapV3Lib/max-slippage-not-set");
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
+        require(params.maxTickDelta != 0,   "UniswapV3Lib/max-tick-delta-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
@@ -130,15 +132,18 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
-        _validateAddLiquidityMinAmounts(context, params);
+        _validateAddLiquidityBounds(context, params);
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
 
+        uint256 reported0;
+        uint256 reported1;
+
         if (params.tokenId == 0) {
-            (tokenId, liquidity,,) = _mintLiquidity(context, params);
+            (tokenId, liquidity, reported0, reported1) = _mintLiquidity(context, params);
         } else {
-            (tokenId, liquidity,,) = _addLiquidityToExistingPosition(context, params);
+            (tokenId, liquidity, reported0, reported1) = _addLiquidityToExistingPosition(context, params);
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
@@ -149,6 +154,10 @@ library UniswapV3Lib {
 
         amount0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
         amount1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
+
+        // An inflow mid-call shrinks the measured spend, so never charge less than was reported.
+        if (reported0 > amount0) amount0 = reported0;
+        if (reported1 > amount1) amount1 = reported1;
 
         _decreaseRateLimits(context, token0, token1, amount0, amount1);
     }
@@ -379,9 +388,17 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+    function _validateAddLiquidityBounds(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
         // Fetch twap tick
         (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
+
+        (, int24 spotTick, , , , , ) = IUniswapV3PoolLike(context.pool).slot0();
+
+        // Minting far from the TWAP lets a relayer stack the position and trade back through it.
+        require(
+            uint24(spotTick > twapTick ? spotTick - twapTick : twapTick - spotTick) <= params.maxTickDelta,
+            "UniswapV3Lib/spot-outside-twap-bound"
+        );
 
         uint160 sqrtTwapPriceX96   = TickMath.getSqrtRatioAtTick(twapTick);
         uint160 sqrtRatioLowerX96  = TickMath.getSqrtRatioAtTick(params.tick.lower);

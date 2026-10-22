@@ -647,6 +647,7 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         foreignController.setUniswapV3TwapSecondsAgo(usdsAusdPool, 1 seconds);
         foreignController.setUniswapV3AddLiquidityLowerTickBound(usdsAusdPool, -100000);
         foreignController.setUniswapV3AddLiquidityUpperTickBound(usdsAusdPool, 100000);
+        foreignController.setUniswapV3PoolMaxTickDelta(usdsAusdPool, 200);
         vm.stopPrank();
 
         // Mint a USDS-USDC position and transfer it to the relayer
@@ -858,14 +859,13 @@ contract ForeignControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         _mockSpotTick(tick.upper + 1000);
 
         // Min amounts are valid per TWAP, but spot price is manipulated
-        // Uniswap's mint will fail because actual amounts needed don't match our mins
         UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
             amount0: desired.amount0 * 98 / 100,
             amount1: desired.amount1 * 98 / 100
         });
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("Price slippage check");
+        vm.expectRevert("UniswapV3Lib/spot-outside-twap-bound");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
