@@ -78,6 +78,9 @@ contract FullStagingDeploy is Script {
     address constant MORPHO_BASE            = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
     address constant MORPHO_VAULT_USDC_BASE = 0x305E03Ed9ADaAB22F4A58c24515D79f2B1E2FD5D;
 
+    uint256 constant AAVE_MAX_SLIPPAGE          = 1e18 - 1e4;  // Rounding slippage only
+    uint256 constant EXCHANGE_RATE_HEADROOM_BPS = 12_000;
+
     /**********************************************************************************************/
     /*** Mainnet existing/mock deployments                                                      ***/
     /**********************************************************************************************/
@@ -484,8 +487,8 @@ contract FullStagingDeploy is Script {
 
         _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
-        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
-        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
+        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount18, slope18);
+        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6,  slope6);
     }
 
     /**********************************************************************************************/
@@ -524,6 +527,9 @@ contract FullStagingDeploy is Script {
             0
         );
 
+        // AaveLib.deposit reverts unless this is set, so onboarding is incomplete without it
+        MainnetController(controllerInst.controller).setMaxSlippage(aToken, AAVE_MAX_SLIPPAGE);
+
         vm.stopBroadcast();
     }
 
@@ -547,6 +553,15 @@ contract FullStagingDeploy is Script {
 
         rateLimits.setRateLimitData(RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token), maxAmount,         slope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token),                                  type(uint256).max, 0);
+
+        // ERC4626Lib.deposit compares against this, so an unset rate rejects every deposit
+        uint256 assetUnit = 10 ** IERC20(IERC4626(token).asset()).decimals();
+
+        MainnetController(controllerInst.controller).setMaxExchangeRate(
+            token,
+            IERC4626(token).convertToShares(assetUnit),
+            assetUnit * EXCHANGE_RATE_HEADROOM_BPS / 10_000
+        );
 
         vm.stopBroadcast();
     }
@@ -581,6 +596,10 @@ contract FullStagingDeploy is Script {
             forkId : vm.createFork(getChain("base").rpcUrl),
             admin  : deployer
         });
+
+        ilk = ScriptTools.stringToBytes32(mainnet.input.readString(".ilk"));
+
+        require(ilk != bytes32(0), "FullStagingDeploy/ilk-not-set");
 
         // Ballpark sizing of rate limits, tokens in PSMs, etc
         // Ballpark sizing of USDS to put in the join contracts, PSMs, etc

@@ -93,24 +93,27 @@ contract DeployMainnetController is Script {
 
 contract ForeignScript is Script {
 
+    function _setChainIfConfigured(
+        string memory key,
+        string memory name,
+        string memory rpcUrlEnvVar,
+        uint256 chainId
+    ) private {
+        string memory rpcUrl = vm.envOr(rpcUrlEnvVar, string(""));
+
+        if (bytes(rpcUrl).length == 0) return;
+
+        setChain(key, ChainData({
+            name    : name,
+            rpcUrl  : rpcUrl,
+            chainId : chainId
+        }));
+    }
+
     function setUpNonStandardChains() internal {
-        setChain("monad", ChainData({
-            name    : "Monad",
-            rpcUrl  : vm.envString("MONAD_RPC_URL"),
-            chainId : 143
-        }));
-
-        setChain("plume", ChainData({
-            name    : "Plume",
-            rpcUrl  : vm.envString("PLUME_RPC_URL"),
-            chainId : 98866
-        }));
-
-        setChain("plasma", ChainData({
-            name    : "Plasma",
-            rpcUrl  : vm.envString("PLASMA_RPC_URL"),
-            chainId : 9745
-        }));
+        _setChainIfConfigured("monad",  "Monad",  "MONAD_RPC_URL",  143);
+        _setChainIfConfigured("plume",  "Plume",  "PLUME_RPC_URL",  98866);
+        _setChainIfConfigured("plasma", "Plasma", "PLASMA_RPC_URL", 9745);
 
         string memory customChain     = vm.envOr("CHAIN",             string(""));
         string memory customName      = vm.envOr("CUSTOM_CHAIN_NAME", string(""));
