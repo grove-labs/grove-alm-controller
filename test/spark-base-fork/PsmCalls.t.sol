@@ -107,6 +107,24 @@ contract ForeignControllerDepositPSMTests is ForeignControllerPSMSuccessTestBase
         assertEq(usdsBase.allowance(address(almProxy), address(psmBase)), 0);
     }
 
+    function test_depositPSM_reportsSharesCreditedWhenPsmOverreports() external {
+        deal(address(usdsBase), address(almProxy), 100e18);
+
+        vm.mockCall(
+            address(psmBase),
+            abi.encodeCall(IPSM3.deposit, (address(usdsBase), address(almProxy), 100e18)),
+            abi.encode(uint256(100e18))
+        );
+
+        uint256 startingShares = psmBase.shares(address(almProxy));
+
+        vm.prank(relayer);
+        uint256 shares = foreignController.depositPSM(address(usdsBase), 100e18);
+
+        assertEq(psmBase.shares(address(almProxy)) - startingShares, 0);
+        assertEq(shares,                                             0);
+    }
+
     function test_depositPSM_depositUsds() external {
         bytes32 key = foreignController.LIMIT_PSM_DEPOSIT();
 
