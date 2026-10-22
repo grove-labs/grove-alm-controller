@@ -135,11 +135,10 @@ library CurveLib {
             ERC20Lib.approve(params.proxy, tokens[i], params.pool, params.depositAmounts[i]);
             valueDeposited += params.depositAmounts[i] * rates[i];
         }
-        valueDeposited /= 1e18;
 
         // Ensure minimum LP amount expected is greater than max slippage amount.
         require(
-            params.minLpAmount >= valueDeposited * params.maxSlippage / virtualPrice,
+            params.minLpAmount * virtualPrice * 1e18 >= valueDeposited * params.maxSlippage,
             "CurveLib/min-amount-not-met"
         );
 
@@ -190,10 +189,9 @@ library CurveLib {
 
         // Check that the aggregated minimums are greater than the max slippage amount
         require(
-            valueMinWithdrawn >= params.lpBurnAmount
+            valueMinWithdrawn * 1e36 >= params.lpBurnAmount
                 * curvePool.get_virtual_price()
-                * params.maxSlippage
-                / 1e36,
+                * params.maxSlippage,
             "CurveLib/min-amount-not-met"
         );
 
@@ -234,19 +232,13 @@ library CurveLib {
     /**********************************************************************************************/
 
     function _validateSwapMinAmountOut(SwapCurveParams calldata params, uint256[] memory rates) internal pure {
-        // Below code is simplified from the following logic.
-        // `maxSlippage` was multiplied first to avoid precision loss.
+        // Cross-multiplied from the following logic so no division floors the bound.
         //   valueIn   = amountIn * rates[inputIndex] / 1e18  // 18 decimal precision, USD
         //   tokensOut = valueIn * 1e18 / rates[outputIndex]  // Token precision, token amount
         //   result    = tokensOut * maxSlippage / 1e18
-        uint256 minimumMinAmountOut = params.amountIn
-            * rates[params.inputIndex]
-            * params.maxSlippage
-            / rates[params.outputIndex]
-            / 1e18;
-
         require(
-            params.minAmountOut >= minimumMinAmountOut,
+            params.minAmountOut * rates[params.outputIndex] * 1e18
+                >= params.amountIn * rates[params.inputIndex] * params.maxSlippage,
             "CurveLib/min-amount-not-met"
         );
     }
