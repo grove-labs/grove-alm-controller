@@ -113,7 +113,6 @@ contract ForeignScript is Script {
     function setUpNonStandardChains() internal {
         _setChainIfConfigured("monad",  "Monad",  "MONAD_RPC_URL",  143);
         _setChainIfConfigured("plume",  "Plume",  "PLUME_RPC_URL",  98866);
-        _setChainIfConfigured("plasma", "Plasma", "PLASMA_RPC_URL", 9745);
 
         string memory customChain     = vm.envOr("CHAIN",             string(""));
         string memory customName      = vm.envOr("CUSTOM_CHAIN_NAME", string(""));
