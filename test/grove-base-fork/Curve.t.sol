@@ -134,7 +134,7 @@ contract CurveTestBase is ForkTestBase {
         uint256 virtualPrice = curvePool.get_virtual_price();
 
         // Calculate the minimum required total value based on slippage
-        // This matches CurveLib: valueMinWithdrawn >= lpBurnAmount * virtualPrice * maxSlippage / 1e36
+        // This matches CurveLib: valueMinWithdrawn * 1e36 >= lpBurnAmount * virtualPrice * maxSlippage
         // After the /1e18 normalization in CurveLib, this gives us the min value in 18 decimals
         uint256 minRequiredValue = lpBurnAmount * virtualPrice * maxSlippage / 1e36; // in 18 decimal precision
 
@@ -254,7 +254,9 @@ contract ForeignControllerAddLiquidityCurveFailureTests is CurveTestBase {
         amounts[0] = 1_000_000e6;
         amounts[1] = 1_000_000e6;
 
-        uint256 boundaryAmount = 2_000_000e18 * 0.98e18 / curvePool.get_virtual_price();
+        uint256 virtualPrice = curvePool.get_virtual_price();
+
+        uint256 boundaryAmount = (2_000_000e18 * 0.98e18 + virtualPrice - 1) / virtualPrice;
 
         assertApproxEqAbs(boundaryAmount, 1_950_000e18, 50_000e18);  // Sanity check on precision
 
@@ -624,22 +626,26 @@ contract ForeignControllerRemoveLiquidityCurveFailureTests is CurveTestBase {
     function test_removeLiquidityCurve_underAllowableSlippageBoundary() public {
         uint256 lpTokensReceived = _addLiquidity(1_000_000e6, 1_000_000e6);
 
-        uint256 minTotalReturned = lpTokensReceived * curvePool.get_virtual_price() * 98/100 / 1e18;
+        uint256[] memory minWithdrawAmounts = _calcMinWithdrawAmounts(lpTokensReceived * 80 / 100);
 
-        assertApproxEqAbs(minTotalReturned, 1_960_000e18, 50_000e18);  // Sanity check on precision
+        // Both tokens are 6 decimals at a 1e30 rate
+        uint256 minWithdrawValue = (minWithdrawAmounts[0] + minWithdrawAmounts[1]) * 1e12;
 
-        // Get boundary amounts, then subtract to go below boundary (should fail)
-        uint256[] memory minWithdrawAmounts = _calcMinWithdrawAmounts(lpTokensReceived);
-        minWithdrawAmounts[0] -= 100;
+        // Smallest burn whose bound sits less than 1 wei above minWithdrawValue
+        uint256 denominator  = curvePool.get_virtual_price() * maxSlippage;
+        uint256 lpBurnAmount = minWithdrawValue * 1e36 / denominator + 1;
+
+        assertLe(lpBurnAmount, lpTokensReceived);
+        assertLt(minWithdrawValue * 1e36,    lpBurnAmount * denominator);
+        assertLt(lpBurnAmount * denominator, (minWithdrawValue + 1) * 1e36);
 
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        foreignController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+        foreignController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
 
-        // Add back to get to the boundary (should succeed)
-        minWithdrawAmounts[0] += 100;
+        minWithdrawAmounts[0] += 1;
 
-        foreignController.removeLiquidityCurve(CURVE_POOL, lpTokensReceived, minWithdrawAmounts);
+        foreignController.removeLiquidityCurve(CURVE_POOL, lpBurnAmount, minWithdrawAmounts);
     }
 
     function _assertRemoveLiquidityZeroMaxAmount(bytes32 key) internal {
@@ -849,11 +855,14 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(usdcBase), address(almProxy), 1_000_000e6);
 
+        uint256 amountIn       = 999_999e6 + 1;
+        uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
+
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        foreignController.swapCurve(CURVE_POOL, 0, 1, 1_000_000e6, 980_000e6 - 1);
+        foreignController.swapCurve(CURVE_POOL, 0, 1, amountIn, boundaryAmount - 1);
 
-        foreignController.swapCurve(CURVE_POOL, 0, 1, 1_000_000e6, 980_000e6);
+        foreignController.swapCurve(CURVE_POOL, 0, 1, amountIn, boundaryAmount);
     }
 
     function test_swapCurve_underAllowableSlippageBoundaryAsset1To0() public {
@@ -862,11 +871,14 @@ contract ForeignControllerSwapCurveFailureTests is CurveTestBase {
 
         deal(address(cgUSD), address(almProxy), 1_000_000e6);
 
+        uint256 amountIn       = 999_999e6 + 1;
+        uint256 boundaryAmount = (amountIn * 0.98e18 + 1e18 - 1) / 1e18;
+
         vm.startPrank(ALM_RELAYER);
         vm.expectRevert("CurveLib/min-amount-not-met");
-        foreignController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6 - 1);
+        foreignController.swapCurve(CURVE_POOL, 1, 0, amountIn, boundaryAmount - 1);
 
-        foreignController.swapCurve(CURVE_POOL, 1, 0, 1_000_000e6, 980_000e6);
+        foreignController.swapCurve(CURVE_POOL, 1, 0, amountIn, boundaryAmount);
     }
 
     function test_swapCurve_zeroMaxAmount() public {

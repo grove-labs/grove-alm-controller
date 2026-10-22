@@ -70,7 +70,7 @@ contract CentrifugeTestBase is ForkTestBase {
 
         vaultToken     = ICentrifugeV3ShareLike(centrifugeV3Vault.share());
         vaultTokenHook = IFreelyTransferableHookLike(vaultToken.hook());
-        manager        = IAsyncRedeemManagerLike(centrifugeV3Vault.manager());
+        manager        = IAsyncRedeemManagerLike(centrifugeV3Vault.baseManager());
         balanceSheet   = IBalanceSheetLike(manager.balanceSheet());
         spoke          = ISpokeLike(manager.spoke());
 

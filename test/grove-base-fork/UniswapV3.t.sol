@@ -879,9 +879,8 @@ contract ForeignControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         vm.clearMockedCalls();
     }
 
-    // When TWAP tick is above tick.upper, expectedAmount0 = 0
-    // So minAmount0 must be 0, otherwise revert
-    function test_addLiquidityUniswapV3_twapProtection_revertsWhenTwapAboveRangeAndMinAmount0NonZero() public {
+    // Expected amount0 is zero above the range, so the pool's slippage check rejects minAmount0.
+    function test_addLiquidityUniswapV3_twapProtection_twapAboveRangeAndMinAmount0NonZeroEnforcedByPool() public {
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
         _fundProxy(desired.amount0, desired.amount1);
 
@@ -898,14 +897,13 @@ contract ForeignControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
             upper: initTick - 100
         });
 
-        // Incorrectly provide non-zero minAmount0 when TWAP expects only token1
         UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
-            amount0: 1, // Should be 0 when twapTick >= tick.upper
+            amount0: 1,
             amount1: desired.amount1 * 98 / 100
         });
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        vm.expectRevert("Price slippage check");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
@@ -917,9 +915,8 @@ contract ForeignControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
-    // When TWAP tick is below tick.lower, expectedAmount1 = 0
-    // So minAmount1 must be 0, otherwise revert
-    function test_addLiquidityUniswapV3_twapProtection_revertsWhenTwapBelowRangeAndMinAmount1NonZero() public {
+    // Expected amount1 is zero below the range, so the pool's slippage check rejects minAmount1.
+    function test_addLiquidityUniswapV3_twapProtection_twapBelowRangeAndMinAmount1NonZeroEnforcedByPool() public {
         UniswapV3Lib.TokenAmounts memory desired = _defaultDesiredPosition();
         _fundProxy(desired.amount0, desired.amount1);
 
@@ -936,14 +933,13 @@ contract ForeignControllerAddLiquidityTwapProtectionTests is UniswapV3TestBase {
             upper: initTick + 200
         });
 
-        // Incorrectly provide non-zero minAmount1 when TWAP expects only token0
         UniswapV3Lib.TokenAmounts memory minAmounts = UniswapV3Lib.TokenAmounts({
             amount0: desired.amount0 * 98 / 100,
-            amount1: 1 // Should be 0 when twapTick <= tick.lower
+            amount1: 1
         });
 
         vm.startPrank(ALM_RELAYER);
-        vm.expectRevert("UniswapV3Lib/min-amount-below-bound");
+        vm.expectRevert("Price slippage check");
         foreignController.addLiquidityUniswapV3(
             _getPool(),
             0,
