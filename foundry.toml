@@ -9,7 +9,8 @@ fs_permissions = [
     { access = "read", path = "./script/input/"},
     { access = "read-write", path = "./script/output/"}
 ]
-evm_version = 'cancun'
+# Midnight's health check uses CLZ, so the test EVM must support it; our own bytecode is unchanged.
+evm_version = 'osaka'
 remappings = [
     '@layerzerolabs/oft-evm/=lib/devtools/packages/oft-evm/',
     'layerzerolabs/oapp-evm/=lib/devtools/packages/oapp-evm/',

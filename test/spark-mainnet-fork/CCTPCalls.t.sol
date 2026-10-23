@@ -245,7 +245,8 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
             cctp                     : CCTP_MESSENGER_BASE,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
-            uniswapV3PositionManager : address(0xdeadbeef)
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : address(0)
         });
 
         foreignAlmProxy   = ALMProxy(payable(controllerInst.almProxy));
@@ -268,7 +269,8 @@ contract BaseChainUSDCToCCTPTestBase is ForkTestBase {
             usdc                     : address(usdcBase),
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : address(0xdeadbeef),
-            uniswapV3PositionManager : address(0xdeadbeef)
+            uniswapV3PositionManager : address(0xdeadbeef),
+            midnight                 : address(0)
         });
 
         ForeignControllerInit.MintRecipient[] memory mintRecipients = new ForeignControllerInit.MintRecipient[](1);
