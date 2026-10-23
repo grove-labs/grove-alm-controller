@@ -160,7 +160,8 @@ contract DeployForeignFull is ForeignScript {
             cctp                     : config.readAddress(".cctpTokenMessenger"),
             pendleRouter             : config.readAddress(".pendleRouter"),
             uniswapV3Router          : config.readAddress(".uniswapV3Router"),
-            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager")
+            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager"),
+            midnight                 : config.readAddress(".midnight")
         });
 
         vm.stopBroadcast();
@@ -206,7 +207,8 @@ contract DeployForeignController is ForeignScript {
             cctp                     : config.readAddress(".cctpTokenMessenger"),
             pendleRouter             : config.readAddress(".pendleRouter"),
             uniswapV3Router          : config.readAddress(".uniswapV3Router"),
-            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager")
+            uniswapV3PositionManager : config.readAddress(".uniswapV3PositionManager"),
+            midnight                 : config.readAddress(".midnight")
         });
 
         vm.stopBroadcast();

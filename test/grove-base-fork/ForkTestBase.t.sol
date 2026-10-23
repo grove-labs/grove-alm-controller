@@ -59,6 +59,7 @@ contract ForkTestBase is Test {
     address constant PENDLE_ROUTER_BASE          = Base.PENDLE_ROUTER;
     address constant UNISWAP_V3_ROUTER           = 0x2626664c2603336E57B271c5C0b26F421741e481;
     address constant UNISWAP_V3_POSITION_MANAGER = 0x03a520b32C04BF3bEEf7BEb72E919cf822Ed34f1;
+    address constant MIDNIGHT_BASE               = 0xAdedD8ab6dE832766Fedf0FaC4992E5C4D3EA18A;
 
     address relayer = Base.ALM_RELAYER;
 
@@ -120,7 +121,8 @@ contract ForkTestBase is Test {
             cctp                     : CCTP_TOKEN_MESSENGER,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : UNISWAP_V3_ROUTER, 
-            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER  
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER,
+            midnight                 : _midnight()
         });
 
         almProxy          = ALMProxy(payable(controllerInst.almProxy));
@@ -149,7 +151,8 @@ contract ForkTestBase is Test {
             usdc                     : USDC_BASE,
             pendleRouter             : PENDLE_ROUTER_BASE,
             uniswapV3Router          : UNISWAP_V3_ROUTER,
-            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER
+            uniswapV3PositionManager : UNISWAP_V3_POSITION_MANAGER,
+            midnight                 : _midnight()
         });
 
         Init.MintRecipient[] memory mintRecipients = new Init.MintRecipient[](1);
@@ -180,6 +183,11 @@ contract ForkTestBase is Test {
     // Default configuration for the fork, can be overridden in inheriting tests
     function _getBlock() internal virtual pure returns (uint256) {
         return 37589683; //  November 1, 2025
+    }
+
+    // Midnight is not deployed at the default fork block; suites that need it override both.
+    function _midnight() internal virtual pure returns (address) {
+        return address(0);
     }
 
     function _absSubtraction(uint256 a, uint256 b) internal pure returns (uint256) {
