@@ -34,10 +34,12 @@ interface IAaveV4Hub {
 
 library AaveV4Lib {
 
+    bytes32 public constant LIMIT_AAVE_V4_DEPOSIT  = keccak256("LIMIT_AAVE_V4_DEPOSIT");
+    bytes32 public constant LIMIT_AAVE_V4_WITHDRAW = keccak256("LIMIT_AAVE_V4_WITHDRAW");
+
     struct DepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     depositRateLimitId;
         address     spoke;
         uint256     reserveId;
         uint256     amount;
@@ -50,7 +52,6 @@ library AaveV4Lib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     withdrawRateLimitId;
         address     spoke;
         uint256     reserveId;
         uint256     amount;
@@ -84,7 +85,7 @@ library AaveV4Lib {
         );
 
         params.rateLimits.triggerRateLimitDecrease(
-            _makeDepositKey(params.depositRateLimitId, params.spoke, params.reserveId, reserve),
+            _makeDepositKey(LIMIT_AAVE_V4_DEPOSIT, params.spoke, params.reserveId, reserve),
             params.amount
         );
 
@@ -130,7 +131,7 @@ library AaveV4Lib {
         amountWithdrawn = IERC20(underlying).balanceOf(address(params.proxy)) - balanceBefore;
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAddressUint256Key(params.withdrawRateLimitId, params.spoke, params.reserveId),
+            RateLimitHelpers.makeAddressUint256Key(LIMIT_AAVE_V4_WITHDRAW, params.spoke, params.reserveId),
             amountWithdrawn
         );
     }

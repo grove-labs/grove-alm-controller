@@ -6,6 +6,7 @@ import { IERC4626 } from "forge-std/interfaces/IERC4626.sol";
 import "./ForkTestBase.t.sol";
 
 import { ICurvePoolLike } from "../../src/libraries/CurveLib.sol";
+import { CurveLib } from "../../src/libraries/CurveLib.sol";
 
 contract CurveTestBase is ForkTestBase {
 
@@ -30,17 +31,17 @@ contract CurveTestBase is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
-        curveUsdcSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdc), CURVE_POOL);
-        curveUsdtSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdt), CURVE_POOL);
-        curveUsdcDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdc), CURVE_POOL);
-        curveUsdtDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdt), CURVE_POOL);
-        curveUsdcWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdc), CURVE_POOL);
-        curveUsdtWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdt), CURVE_POOL);
+        curveUsdcSwapKey     = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     address(usdc), CURVE_POOL);
+        curveUsdtSwapKey     = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     address(usdt), CURVE_POOL);
+        curveUsdcDepositKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  address(usdc), CURVE_POOL);
+        curveUsdtDepositKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  address(usdt), CURVE_POOL);
+        curveUsdcWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, address(usdc), CURVE_POOL);
+        curveUsdtWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, address(usdt), CURVE_POOL);
 
-        curveLegacySwapKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_SWAP(), CURVE_POOL);
+        curveLegacySwapKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_SWAP, CURVE_POOL);
 
         // Skewed pool: a balanced 1m/1m deposit is worth slightly more than 2m pro-rata, hence the headroom.
         vm.startPrank(GROVE_PROXY);
@@ -1009,17 +1010,17 @@ contract MainnetController3PoolSwapRateLimitTest is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  5_000_000e18, uint256(5_000_000e18) / 1 days);
         rateLimits.setRateLimitData(curveWithdrawKey, 5_000_000e18, uint256(5_000_000e18) / 1 days);
 
         for (uint256 i = 0; i < 3; i++) {
-            curveSwapKeys[i]     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     tokens[i], CURVE_POOL);
-            curveDepositKeys[i]  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  tokens[i], CURVE_POOL);
-            curveWithdrawKeys[i] = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), tokens[i], CURVE_POOL);
+            curveSwapKeys[i]     = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     tokens[i], CURVE_POOL);
+            curveDepositKeys[i]  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  tokens[i], CURVE_POOL);
+            curveWithdrawKeys[i] = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, tokens[i], CURVE_POOL);
 
             rateLimits.setRateLimitData(curveSwapKeys[i],     5_000e8, uint256(5_000e8) / 1 days);
             rateLimits.setRateLimitData(curveDepositKeys[i],  5_000e8, uint256(5_000e8) / 1 days);
@@ -1112,15 +1113,15 @@ contract MainnetControllerSUsdsUsdtSwapRateLimitTest is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
-        curveSUsdsSwapKey     = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(susds), CURVE_POOL);
-        curveUsdtSwapKey      = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_SWAP(),     address(usdt),  CURVE_POOL);
-        curveSUsdsDepositKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(susds), CURVE_POOL);
-        curveUsdtDepositKey   = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  address(usdt),  CURVE_POOL);
-        curveSUsdsWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(susds), CURVE_POOL);
-        curveUsdtWithdrawKey  = RateLimitHelpers.makeAssetDestinationKey(mainnetController.LIMIT_CURVE_WITHDRAW(), address(usdt),  CURVE_POOL);
+        curveSUsdsSwapKey     = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     address(susds), CURVE_POOL);
+        curveUsdtSwapKey      = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     address(usdt),  CURVE_POOL);
+        curveSUsdsDepositKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  address(susds), CURVE_POOL);
+        curveUsdtDepositKey   = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  address(usdt),  CURVE_POOL);
+        curveSUsdsWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, address(susds), CURVE_POOL);
+        curveUsdtWithdrawKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, address(usdt),  CURVE_POOL);
 
         vm.startPrank(GROVE_PROXY);
         rateLimits.setRateLimitData(curveDepositKey,  5_000_000e18, uint256(5_000_000e18) / 1 days);
@@ -1338,12 +1339,12 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
     function setUp() public virtual override  {
         super.setUp();
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
-        bytes32 swapId     = mainnetController.LIMIT_CURVE_SWAP();
-        bytes32 depositId  = mainnetController.LIMIT_CURVE_DEPOSIT();
-        bytes32 withdrawId = mainnetController.LIMIT_CURVE_WITHDRAW();
+        bytes32 swapId     = CurveLib.LIMIT_CURVE_SWAP;
+        bytes32 depositId  = CurveLib.LIMIT_CURVE_DEPOSIT;
+        bytes32 withdrawId = CurveLib.LIMIT_CURVE_WITHDRAW;
 
         // Skewed pool: a balancing deposit is worth more than the value put in, hence the headroom.
         vm.startPrank(GROVE_PROXY);

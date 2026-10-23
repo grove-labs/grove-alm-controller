@@ -27,6 +27,7 @@ import { RateLimitHelpers }        from "../../src/RateLimitHelpers.sol";
 import "src/interfaces/ILayerZero.sol";
 
 import { CCTPv2Forwarder as CCTPForwarder } from "xchain-helpers/forwarders/CCTPv2Forwarder.sol";
+import { LayerZeroLib } from "../../src/libraries/LayerZeroLib.sol";
 
 contract MainnetControllerLayerZeroTestBase is ForkTestBase {
 
@@ -43,7 +44,7 @@ contract MainnetControllerLayerZeroTestBase is ForkTestBase {
         super.setUp();
 
         key = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(USDT_OFT).token(),
             USDT_OFT,
             ILayerZero(USDT_OFT).peers(destinationEndpointId),
@@ -158,7 +159,7 @@ contract MainnetControllerTransferLayerZeroFailureTests is MainnetControllerLaye
         _configure(0);
 
         bytes32 legacyKey =
-            keccak256(abi.encode(mainnetController.LIMIT_LAYERZERO_TRANSFER(), USDT_OFT, destinationEndpointId));
+            keccak256(abi.encode(LayerZeroLib.LIMIT_LAYERZERO_TRANSFER, USDT_OFT, destinationEndpointId));
 
         vm.prank(SPARK_PROXY);
         rateLimits.setRateLimitData(legacyKey, 10_000_000e6, 0);
@@ -448,7 +449,7 @@ contract ForeignControllerLayerZeroTestBase is ArbitrumChainLayerZeroTestBase {
         destination.selectFork();
 
         key = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(USDT_OFT).token(),
             USDT_OFT,
             ILayerZero(USDT_OFT).peers(destinationEndpointId),
@@ -559,7 +560,7 @@ contract ForeignControllerTransferLayerZeroFailureTests is ForeignControllerLaye
         _configure(0);
 
         bytes32 legacyKey =
-            keccak256(abi.encode(foreignController.LIMIT_LAYERZERO_TRANSFER(), USDT_OFT, destinationEndpointId));
+            keccak256(abi.encode(LayerZeroLib.LIMIT_LAYERZERO_TRANSFER, USDT_OFT, destinationEndpointId));
 
         vm.prank(SPARK_EXECUTOR);
         foreignRateLimits.setRateLimitData(legacyKey, 10_000_000e6, 0);

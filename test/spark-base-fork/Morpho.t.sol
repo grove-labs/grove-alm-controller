@@ -10,6 +10,7 @@ import { IMorpho, MarketParams } from "morpho-blue/src/interfaces/IMorpho.sol";
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 import "./ForkTestBase.t.sol";
+import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
 
 contract MorphoBaseTest is ForkTestBase {
 
@@ -70,8 +71,8 @@ contract MorphoBaseTest is ForkTestBase {
         supplyQueueUSDC[0] = MarketParamsLib.id(usdcParams);
         IMetaMorpho(MORPHO_VAULT_USDC).setSupplyQueue(supplyQueueUSDC);
 
-        usdsDepositKey  = RateLimitHelpers.makeAddressAddressKey(foreignController.LIMIT_4626_DEPOSIT(), Base.USDS, MORPHO_VAULT_USDS);
-        usdsWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_WITHDRAW(), MORPHO_VAULT_USDS);
+        usdsDepositKey  = RateLimitHelpers.makeAddressAddressKey(ERC4626Lib.LIMIT_4626_DEPOSIT, Base.USDS, MORPHO_VAULT_USDS);
+        usdsWithdrawKey = RateLimitHelpers.makeAssetKey(ERC4626Lib.LIMIT_4626_WITHDRAW, MORPHO_VAULT_USDS);
 
         rateLimits.setRateLimitData(
             usdsDepositKey,
@@ -80,7 +81,7 @@ contract MorphoBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAddressAddressKey(
-                foreignController.LIMIT_4626_DEPOSIT(),
+                ERC4626Lib.LIMIT_4626_DEPOSIT,
                 Base.USDC,
                 MORPHO_VAULT_USDC
             ),
@@ -94,7 +95,7 @@ contract MorphoBaseTest is ForkTestBase {
         );
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetKey(
-                foreignController.LIMIT_4626_WITHDRAW(),
+                ERC4626Lib.LIMIT_4626_WITHDRAW,
                 MORPHO_VAULT_USDC
             ),
             10_000_000e6,
@@ -140,7 +141,7 @@ contract MorphoDepositFailureTests is MorphoBaseTest {
         vm.startPrank(Base.SPARK_EXECUTOR);
         rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(foreignController.LIMIT_4626_DEPOSIT(), MORPHO_VAULT_USDS),
+            RateLimitHelpers.makeAssetKey(ERC4626Lib.LIMIT_4626_DEPOSIT, MORPHO_VAULT_USDS),
             25_000_000e18,
             uint256(5_000_000e18) / 1 days
         );

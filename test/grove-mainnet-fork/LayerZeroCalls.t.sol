@@ -30,6 +30,7 @@ import {MyOFT} from "lib/devtools/examples/oft/contracts/MyOFT.sol";
 import {MyOFTAdapter} from "lib/devtools/examples/oft-adapter/contracts/MyOFTAdapter.sol";
 
 import "./ForkTestBase.t.sol";
+import { LayerZeroLib } from "../../src/libraries/LayerZeroLib.sol";
 
 /**********************************************************************************************/
 /*** Abstract base: shared setUp for all LayerZero call tests                               ***/
@@ -213,7 +214,7 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
         address sourceOft = _getSourceOftAddress();
 
         sourceRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            mainnetController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(sourceOft).token(),
             sourceOft,
             ILayerZero(sourceOft).peers(destinationEndpointId),
@@ -239,7 +240,7 @@ abstract contract LayerZeroCallsTestBase is ForkTestBase {
         address destinationOft = _getDestinationOftAddress();
 
         destinationRateLimitKey = RateLimitHelpers.makeAddressAddressBytes32Uint32Key(
-            foreignController.LIMIT_LAYERZERO_TRANSFER(),
+            LayerZeroLib.LIMIT_LAYERZERO_TRANSFER,
             ILayerZero(destinationOft).token(),
             destinationOft,
             ILayerZero(destinationOft).peers(sourceEndpointId),

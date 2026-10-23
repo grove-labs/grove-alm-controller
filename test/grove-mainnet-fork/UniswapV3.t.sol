@@ -2398,7 +2398,7 @@ contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBas
     uint256 constant MISREPORT = 1_000e6;
 
     // Storage slot of MainnetController.uniswapV3PositionManager, which has no setter.
-    uint256 constant POSITION_MANAGER_SLOT = 32;
+    uint256 constant POSITION_MANAGER_SLOT = 14;
 
     struct AddOutcome {
         uint256 spent0;

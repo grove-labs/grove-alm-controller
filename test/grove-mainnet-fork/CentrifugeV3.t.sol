@@ -8,6 +8,7 @@ import { ICentrifugeV3VaultLike, IAsyncRedeemManagerLike } from "../../src/inter
 import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 
 import "./ForkTestBase.t.sol";
+import { CentrifugeLib } from "../../src/libraries/CentrifugeLib.sol";
 
 contract CentrifugeTestBase is ForkTestBase {
 
@@ -40,7 +41,7 @@ contract CentrifugeTestBase is ForkTestBase {
         scId   = centrifugeVault.scId();
 
         transferKey = RateLimitHelpers.makeAddressUint16AddressKey(
-            mainnetController.LIMIT_CENTRIFUGE_TRANSFER(),
+            CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER,
             CENTRIFUGE_VAULT,
             DESTINATION_CENTRIFUGE_ID,
             spoke
@@ -77,7 +78,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(GROVE_PROXY);
         mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(mainnetController.LIMIT_CENTRIFUGE_TRANSFER(), CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
+            keccak256(abi.encode(CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER, CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
             10_000_000e6,
             0
         );

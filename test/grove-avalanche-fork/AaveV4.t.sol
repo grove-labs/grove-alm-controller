@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import { IAaveV4Spoke } from "../../src/libraries/AaveV4Lib.sol";
 
 import "./ForkTestBase.t.sol";
+import { AaveV4Lib } from "../../src/libraries/AaveV4Lib.sol";
 
 interface IAaveV4Hub {
     function getAssetLiquidity(uint256 assetId) external view returns (uint256);
@@ -55,9 +56,9 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
         super.setUp();
 
         usdcDepositKey   = _depositKey(USDC_RESERVE_ID,  USDC_ASSET_ID,  address(usdcAvalanche));
-        usdcWithdrawKey  = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID);
+        usdcWithdrawKey  = RateLimitHelpers.makeAddressUint256Key(AaveV4Lib.LIMIT_AAVE_V4_WITHDRAW, MAIN_SPOKE, USDC_RESERVE_ID);
         wavaxDepositKey  = _depositKey(WAVAX_RESERVE_ID, WAVAX_ASSET_ID, WAVAX);
-        wavaxWithdrawKey = RateLimitHelpers.makeAddressUint256Key(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, WAVAX_RESERVE_ID);
+        wavaxWithdrawKey = RateLimitHelpers.makeAddressUint256Key(AaveV4Lib.LIMIT_AAVE_V4_WITHDRAW, MAIN_SPOKE, WAVAX_RESERVE_ID);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(usdcDepositKey,  USDC_DEPOSIT_LIMIT,  USDC_DEPOSIT_LIMIT  / 1 days);
@@ -104,7 +105,7 @@ contract AaveV4MainSpokeBaseTest is ForkTestBase {
         internal view returns (bytes32)
     {
         return RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
-            foreignController.LIMIT_AAVE_V4_DEPOSIT(),
+            AaveV4Lib.LIMIT_AAVE_V4_DEPOSIT,
             MAIN_SPOKE,
             reserveId,
             CORE_HUB,
@@ -144,7 +145,7 @@ contract AaveV4MainSpokeDepositFailureTests is AaveV4MainSpokeBaseTest {
     // other Hub asset is unreachable even for the right (spoke, reserveId).
     function test_depositAaveV4_depositKeyBindsHubAndAsset() external {
         bytes32 wrongHubKey = RateLimitHelpers.makeAddressUint256AddressUint16AddressKey(
-            foreignController.LIMIT_AAVE_V4_DEPOSIT(),
+            AaveV4Lib.LIMIT_AAVE_V4_DEPOSIT,
             MAIN_SPOKE,
             USDC_RESERVE_ID,
             makeAddr("otherHub"),
@@ -486,7 +487,7 @@ contract AaveV4MainSpokeDepositSuccessTests is AaveV4MainSpokeBaseTest {
         // The withdraw key deliberately omits the reserve's Hub data.
         assertEq(
             usdcWithdrawKey,
-            keccak256(abi.encode(foreignController.LIMIT_AAVE_V4_WITHDRAW(), MAIN_SPOKE, USDC_RESERVE_ID))
+            keccak256(abi.encode(AaveV4Lib.LIMIT_AAVE_V4_WITHDRAW, MAIN_SPOKE, USDC_RESERVE_ID))
         );
     }
 
