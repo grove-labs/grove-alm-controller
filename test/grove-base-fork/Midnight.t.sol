@@ -200,9 +200,9 @@ contract MidnightTestBase is ForkTestBase {
     }
 
     function _wireRateLimitsAndConfig() internal {
-        buyKey    = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_BUY(),    marketId);
-        sellKey   = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_SELL(),   marketId);
-        redeemKey = RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_REDEEM(), marketId);
+        buyKey    = RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_BUY,    marketId);
+        sellKey   = RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_SELL,   marketId);
+        redeemKey = RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_REDEEM, marketId);
 
         vm.startPrank(GROVE_EXECUTOR);
 
@@ -587,7 +587,7 @@ contract ForeignControllerMidnightBuyFailureTests is MidnightTestBase {
         harness.supplyCollateral(untouched, 0, 1_000_000e18, maker);
 
         bytes32 untouchedBuyKey =
-            RateLimitHelpers.makeBytes32Key(foreignController.LIMIT_MIDNIGHT_BUY(), untouchedId);
+            RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_BUY, untouchedId);
 
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(untouchedBuyKey, 5_000_000e18, 0);

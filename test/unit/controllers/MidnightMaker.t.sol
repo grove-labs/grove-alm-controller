@@ -172,11 +172,11 @@ contract MidnightMakerTestBase is UnitTestBase {
     }
 
     function _buyKey() internal view returns (bytes32) {
-        return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_BUY(), marketId);
+        return RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_BUY, marketId);
     }
 
     function _sellKey() internal view returns (bytes32) {
-        return RateLimitHelpers.makeBytes32Key(controller.LIMIT_MIDNIGHT_SELL(), marketId);
+        return RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_SELL, marketId);
     }
 
     function _setLimits(uint256 maxAmount) internal {

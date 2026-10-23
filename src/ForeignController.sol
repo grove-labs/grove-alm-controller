@@ -13,9 +13,8 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { MessagingFee }  from "./interfaces/ILayerZero.sol";
-import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 
-import { IMidnight } from "./interfaces/MidnightInterfaces.sol";
+import { IMidnight, Offer } from "./interfaces/MidnightInterfaces.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -42,13 +41,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /*** Events                                                                                 ***/
     /**********************************************************************************************/
 
-    // NOTE: This is used to track individual transfers for offchain processing of CCTP transactions
-    event CCTPTransferInitiated(
-        uint64  indexed nonce,
-        uint32  indexed destinationDomain,
-        bytes32 indexed mintRecipient,
-        uint256 usdcAmount
-    );
     event CentrifugeRecipientSet(uint16 indexed destinationCentrifugeId, bytes32 recipient);
     event LayerZeroRecipientSet(uint32 indexed destinationEndpointId, bytes32 layerZeroRecipient);
     event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
@@ -108,9 +100,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
-    bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
-    bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -182,20 +171,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uniswapV3Router          = ISwapRouter(uniswapV3Router_);
         uniswapV3PositionManager = INonfungiblePositionManager(uniswapV3PositionManager_);
         midnight                 = midnight_;
-    }
-
-    /**********************************************************************************************/
-    /*** Modifiers                                                                              ***/
-    /**********************************************************************************************/
-
-    modifier rateLimited(bytes32 key, uint256 amount) {
-        rateLimits.triggerRateLimitDecrease(key, amount);
-        _;
-    }
-
-    modifier rateLimitedAsset(bytes32 key, address asset, uint256 amount) {
-        rateLimits.triggerRateLimitDecrease(RateLimitHelpers.makeAssetKey(key, asset), amount);
-        _;
     }
 
     /**********************************************************************************************/
@@ -720,7 +695,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
             proxy               : proxy,
             rateLimits          : rateLimits,
-            depositRateLimitId  : LIMIT_AAVE_V4_DEPOSIT,
             withdrawRateLimitId : LIMIT_AAVE_V4_WITHDRAW,
             spoke               : spoke,
             reserveId           : reserveId,
@@ -853,14 +827,13 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _checkRole(RELAYER);
 
         assetsWithdrawn = MidnightLib.redeem(MidnightLib.RedeemParams({
-            proxy             : proxy,
-            rateLimits        : rateLimits,
-            midnight          : midnight,
-            redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
-            marketId          : marketId,
-            config            : _midnightMarketConfigs[marketId],
-            units             : units,
-            minAssetsOut      : minAssetsOut
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : _midnightMarketConfigs[marketId],
+            units        : units,
+            minAssetsOut : minAssetsOut
         }));
     }
 
@@ -891,19 +864,17 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         external nonReentrant
     {
         MidnightLib.fundFill(MidnightLib.FundFillParams({
-            proxy           : proxy,
-            rateLimits      : rateLimits,
-            midnight        : midnight,
-            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
-            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
-            marketId        : marketId,
-            config          : _midnightMarketConfigs[marketId],
-            strategy        : msg.sender,
-            allowed         : _midnightStrategies[marketId][msg.sender],
-            buy             : buy,
-            assets          : assets,
-            units           : units,
-            pendingFee      : pendingFee
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : _midnightMarketConfigs[marketId],
+            strategy     : msg.sender,
+            allowed      : _midnightStrategies[marketId][msg.sender],
+            buy          : buy,
+            assets       : assets,
+            units        : units,
+            pendingFee   : pendingFee
         }));
 
         emit MidnightFillFunded(marketId, msg.sender, buy, assets, units);
@@ -1069,17 +1040,15 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         internal view returns (MidnightLib.TakeParams memory)
     {
         return MidnightLib.TakeParams({
-            proxy           : proxy,
-            rateLimits      : rateLimits,
-            midnight        : midnight,
-            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
-            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
-            marketId        : marketId,
-            config          : _midnightMarketConfigs[marketId],
-            offer           : offer,
-            ratifierData    : ratifierData,
-            units           : units,
-            assetsBound     : assetsBound
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : _midnightMarketConfigs[marketId],
+            offer        : offer,
+            ratifierData : ratifierData,
+            units        : units,
+            assetsBound  : assetsBound
         });
     }
 
