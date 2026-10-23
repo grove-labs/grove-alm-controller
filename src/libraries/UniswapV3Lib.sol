@@ -2,6 +2,7 @@
 pragma solidity ^0.8.21;
 
 import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import { IERC20Metadata } from "openzeppelin-contracts/contracts/interfaces/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
@@ -17,6 +18,10 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
+
+    bytes32 public constant LIMIT_UNISWAP_V3_DEPOSIT  = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public constant LIMIT_UNISWAP_V3_SWAP     = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public constant LIMIT_UNISWAP_V3_WITHDRAW = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     /**********************************************************************************************/
     /*** Structs                                                                                ***/
@@ -40,7 +45,6 @@ library UniswapV3Lib {
     struct UniV3Context {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     pool;
     }
 
@@ -68,6 +72,7 @@ library UniswapV3Lib {
         uint256                     maxSlippage;
         uint256                     deadline;
         uint32                      twapSecondsAgo;
+        uint24                      maxTickDelta; // The furthest spot may sit from the TWAP when liquidity is added
     }
 
     struct RemoveLiquidityParams {
@@ -105,7 +110,7 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
 
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
+            RateLimitHelpers.makeAssetDestinationKey(LIMIT_UNISWAP_V3_SWAP, params.tokenIn, context.pool),
             startingBalanceIn - IERC20(params.tokenIn).balanceOf(address(context.proxy))
         );
     }
@@ -121,6 +126,7 @@ library UniswapV3Lib {
 
         require(params.maxSlippage > 0,     "UniswapV3Lib/max-slippage-not-set");
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
+        require(params.maxTickDelta != 0,   "UniswapV3Lib/max-tick-delta-not-set");
 
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
@@ -130,12 +136,18 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
-        _validateAddLiquidityMinAmounts(context, params);
+        _validateAddLiquidityBounds(context, params);
+
+        uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
+        uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
+
+        uint256 reported0;
+        uint256 reported1;
 
         if (params.tokenId == 0) {
-            (tokenId, liquidity, amount0, amount1) = _mintLiquidity(context, params);
+            (tokenId, liquidity, reported0, reported1) = _mintLiquidity(context, params);
         } else {
-            (tokenId, liquidity, amount0, amount1) = _addLiquidityToExistingPosition(context, params);
+            (tokenId, liquidity, reported0, reported1) = _addLiquidityToExistingPosition(context, params);
         }
 
         require(liquidity != 0, "UniswapV3Lib/no-liquidity-increased");
@@ -144,7 +156,14 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), 0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), 0);
 
-        _decreaseRateLimits(context, token0, token1, amount0, amount1);
+        amount0 = startingBalance0 - IERC20(token0).balanceOf(address(context.proxy));
+        amount1 = startingBalance1 - IERC20(token1).balanceOf(address(context.proxy));
+
+        // An inflow mid-call shrinks the measured spend, so never charge less than was reported.
+        if (reported0 > amount0) amount0 = reported0;
+        if (reported1 > amount1) amount1 = reported1;
+
+        _decreaseRateLimits(context, LIMIT_UNISWAP_V3_DEPOSIT, token0, token1, amount0, amount1);
     }
 
     function removeLiquidity(UniV3Context calldata context, RemoveLiquidityParams calldata params)
@@ -180,7 +199,7 @@ library UniswapV3Lib {
         _validateMinAmount(params.min.amount0, amount0, params.maxSlippage);
         _validateMinAmount(params.min.amount1, amount1, params.maxSlippage);
 
-        _decreaseRateLimits(context, token0, token1, amount0, amount1);
+        _decreaseRateLimits(context, LIMIT_UNISWAP_V3_WITHDRAW, token0, token1, amount0, amount1);
     }
 
     /**********************************************************************************************/
@@ -371,9 +390,17 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateAddLiquidityMinAmounts(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+    function _validateAddLiquidityBounds(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
         // Fetch twap tick
         (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
+
+        (, int24 spotTick, , , , , ) = IUniswapV3PoolLike(context.pool).slot0();
+
+        // Minting far from the TWAP lets a relayer stack the position and trade back through it.
+        require(
+            uint24(spotTick > twapTick ? spotTick - twapTick : twapTick - spotTick) <= params.maxTickDelta,
+            "UniswapV3Lib/spot-outside-twap-bound"
+        );
 
         uint160 sqrtTwapPriceX96   = TickMath.getSqrtRatioAtTick(twapTick);
         uint160 sqrtRatioLowerX96  = TickMath.getSqrtRatioAtTick(params.tick.lower);
@@ -491,6 +518,7 @@ library UniswapV3Lib {
 
     function _decreaseRateLimits(
         UniV3Context calldata context,
+        bytes32 rateLimitId,
         address token0,
         address token1,
         uint256 amount0,
@@ -498,13 +526,22 @@ library UniswapV3Lib {
     )
         internal
     {
+        // Summing both legs at 1:1 assumes the pool is a pegged pair.
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+            RateLimitHelpers.makeAssetKey(rateLimitId, context.pool),
+            _toNormalizedAmount(token0, amount0) + _toNormalizedAmount(token1, amount1)
+        );
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(rateLimitId, token0, context.pool),
             amount0
         );
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+            RateLimitHelpers.makeAssetDestinationKey(rateLimitId, token1, context.pool),
             amount1
         );
+    }
+
+    function _toNormalizedAmount(address token, uint256 amount) internal view returns (uint256) {
+        return amount * 1e18 / 10 ** IERC20Metadata(token).decimals();
     }
 }
