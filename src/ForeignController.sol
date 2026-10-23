@@ -60,10 +60,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
 
-    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT  = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public LIMIT_UNISWAP_V3_SWAP     = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
-
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
     // @dev https://github.com/uniswap/v4-core/blob/80311e34080fee64b6fc6c916e9a51a437d0e482/src/libraries/TickMath.sol#L20-L23
@@ -668,10 +664,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.SwapParams({
                 router       : uniswapV3Router,
@@ -704,10 +699,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
         (tokenId_, liquidity_, amount0_, amount1_) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.AddLiquidityParams({
                 positionManager : uniswapV3PositionManager,
@@ -718,7 +712,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 maxSlippage     : maxSlippage,
                 deadline        : deadline,
-                twapSecondsAgo  : poolParams.twapSecondsAgo
+                twapSecondsAgo  : poolParams.twapSecondsAgo,
+                maxTickDelta    : poolParams.swapMaxTickDelta
             })
         );
     }
@@ -737,10 +732,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     {
         return UniswapV3Lib.removeLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({
                 positionManager : uniswapV3PositionManager,
