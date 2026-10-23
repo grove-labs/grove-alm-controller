@@ -26,6 +26,7 @@ import { PendleLib }     from "./libraries/PendleLib.sol";
 import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
 import { ERC20Lib }      from "./libraries/common/ERC20Lib.sol";
+import { RateLimitIds }  from "./libraries/common/RateLimitIds.sol";
 import { UniswapV3Lib }  from "./libraries/UniswapV3Lib.sol";
 
 import { ISwapRouter, INonfungiblePositionManager } from "./interfaces/UniswapV3Interfaces.sol";
@@ -58,24 +59,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
-
-    bytes32 public LIMIT_4626_DEPOSIT        = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public LIMIT_4626_WITHDRAW       = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_AAVE_DEPOSIT        = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public LIMIT_AAVE_WITHDRAW       = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public LIMIT_AAVE_V4_DEPOSIT     = keccak256("LIMIT_AAVE_V4_DEPOSIT");
-    bytes32 public LIMIT_AAVE_V4_WITHDRAW    = keccak256("LIMIT_AAVE_V4_WITHDRAW");
-    bytes32 public LIMIT_ASSET_TRANSFER      = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public LIMIT_CENTRIFUGE_TRANSFER = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
-    bytes32 public LIMIT_CURVE_DEPOSIT       = keccak256("LIMIT_CURVE_DEPOSIT");
-    bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
-    bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
-    bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
-    bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
-    bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
-    bytes32 public LIMIT_USDC_TO_CCTP        = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public LIMIT_USDC_TO_DOMAIN      = keccak256("LIMIT_USDC_TO_DOMAIN");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -258,7 +241,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return PSM3Lib.deposit(PSM3Lib.DepositParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_PSM_DEPOSIT,
             psm         : psm,
             asset       : asset,
             amount      : amount
@@ -270,7 +252,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return PSM3Lib.withdraw(PSM3Lib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_PSM_WITHDRAW,
             psm         : psm,
             asset       : asset,
             maxAmount   : maxAmount
@@ -289,8 +270,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             rateLimits        : rateLimits,
             cctp              : cctp,
             usdc              : usdc,
-            domainRateLimitId : LIMIT_USDC_TO_DOMAIN,
-            cctpRateLimitId   : LIMIT_USDC_TO_CCTP,
             mintRecipient     : mintRecipients[destinationDomain],
             destinationDomain : destinationDomain,
             usdcAmount        : usdcAmount
@@ -309,7 +288,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
             proxy                 : proxy,
             rateLimits            : rateLimits,
-            rateLimitId           : LIMIT_LAYERZERO_TRANSFER,
             oftAddress            : oftAddress,
             amount                : amount,
             destinationEndpointId : destinationEndpointId,
@@ -340,7 +318,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function transferAsset(address asset, address destination, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(
-            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
+            RateLimitHelpers.makeAssetDestinationKey(RateLimitIds.LIMIT_ASSET_TRANSFER, asset, destination),
             amount
         );
 
@@ -360,7 +338,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.deposit(ERC4626Lib.DepositParams({
             proxy           : proxy,
             rateLimits      : rateLimits,
-            rateLimitId     : LIMIT_4626_DEPOSIT,
             token           : token,
             amount          : amount,
             minSharesOut    : minSharesOut,
@@ -377,7 +354,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_4626_WITHDRAW,
             token       : token,
             amount      : amount,
             maxSharesIn : maxSharesIn
@@ -393,7 +369,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_4626_WITHDRAW,
             token        : token,
             shares       : shares,
             minAssetsOut : minAssetsOut
@@ -503,8 +478,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             token                   : token,
             destinationCentrifugeId : destinationCentrifugeId,
             amount                  : amount,
-            recipient               : centrifugeRecipients[destinationCentrifugeId],
-            rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+            recipient               : centrifugeRecipients[destinationCentrifugeId]
         }));
     }
 
@@ -517,7 +491,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         AaveLib.deposit(AaveLib.DepositParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_AAVE_DEPOSIT,
             aToken      : aToken,
             amount      : amount,
             maxSlippage : maxSlippages[aToken]
@@ -533,7 +506,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return AaveLib.withdraw(AaveLib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_AAVE_WITHDRAW,
             aToken      : aToken,
             amount      : amount
         }));
@@ -551,7 +523,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         AaveV4Lib.deposit(AaveV4Lib.DepositParams({
             proxy              : proxy,
             rateLimits         : rateLimits,
-            depositRateLimitId : LIMIT_AAVE_V4_DEPOSIT,
             spoke              : spoke,
             reserveId          : reserveId,
             amount             : amount,
@@ -571,7 +542,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         amountWithdrawn = AaveV4Lib.withdraw(AaveV4Lib.WithdrawParams({
             proxy               : proxy,
             rateLimits          : rateLimits,
-            withdrawRateLimitId : LIMIT_AAVE_V4_WITHDRAW,
             spoke               : spoke,
             reserveId           : reserveId,
             amount              : amount
@@ -597,7 +567,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             pool         : pool,
-            rateLimitId  : LIMIT_CURVE_SWAP,
             inputIndex   : inputIndex,
             outputIndex  : outputIndex,
             amountIn     : amountIn,
@@ -619,8 +588,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy                   : proxy,
             rateLimits              : rateLimits,
             pool                    : pool,
-            addLiquidityRateLimitId : LIMIT_CURVE_DEPOSIT,
-            swapRateLimitId         : LIMIT_CURVE_SWAP,
             minLpAmount             : minLpAmount,
             maxSlippage             : maxSlippages[pool],
             depositAmounts          : depositAmounts
@@ -640,7 +607,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy              : proxy,
             rateLimits         : rateLimits,
             pool               : pool,
-            rateLimitId        : LIMIT_CURVE_WITHDRAW,
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
@@ -675,7 +641,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
             pendleMarket : IPendleMarket(pendleMarket),
             pendleRouter : pendleRouter,
             pyAmountIn   : pyAmountIn,

@@ -6,6 +6,7 @@ import { MockERC20Decimals } from "../unit/mocks/MockTokens.sol";
 import { ICurvePoolLike as ICurvePoolLikeLib } from "../../src/libraries/CurveLib.sol";
 
 import "./ForkTestBase.t.sol";
+import { CurveLib } from "../../src/libraries/CurveLib.sol";
 
 interface ICurvePoolLike is ICurvePoolLikeLib {
     function calc_token_amount(uint256[] memory amounts, bool is_deposit) external view returns (uint256);
@@ -64,17 +65,17 @@ contract CurveTestBase is ForkTestBase {
             ICurvePoolLike(CURVE_POOL).add_liquidity(amounts, 1e18, address(this));
         }
 
-        curveDepositKey  = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_DEPOSIT(),  CURVE_POOL);
-        curveWithdrawKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_WITHDRAW(), CURVE_POOL);
+        curveDepositKey  = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CURVE_POOL);
+        curveWithdrawKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_WITHDRAW, CURVE_POOL);
 
-        curveUsdcSwapKey      = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_SWAP(),     address(usdcBase), CURVE_POOL);
-        curveCgUsdSwapKey     = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_SWAP(),     CGUSD,             CURVE_POOL);
-        curveUsdcDepositKey   = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_DEPOSIT(),  address(usdcBase), CURVE_POOL);
-        curveCgUsdDepositKey  = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_DEPOSIT(),  CGUSD,             CURVE_POOL);
-        curveUsdcWithdrawKey  = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_WITHDRAW(), address(usdcBase), CURVE_POOL);
-        curveCgUsdWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_CURVE_WITHDRAW(), CGUSD,             CURVE_POOL);
+        curveUsdcSwapKey      = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     address(usdcBase), CURVE_POOL);
+        curveCgUsdSwapKey     = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_SWAP,     CGUSD,             CURVE_POOL);
+        curveUsdcDepositKey   = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  address(usdcBase), CURVE_POOL);
+        curveCgUsdDepositKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_DEPOSIT,  CGUSD,             CURVE_POOL);
+        curveUsdcWithdrawKey  = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, address(usdcBase), CURVE_POOL);
+        curveCgUsdWithdrawKey = RateLimitHelpers.makeAssetDestinationKey(CurveLib.LIMIT_CURVE_WITHDRAW, CGUSD,             CURVE_POOL);
 
-        curveLegacySwapKey = RateLimitHelpers.makeAssetKey(foreignController.LIMIT_CURVE_SWAP(), CURVE_POOL);
+        curveLegacySwapKey = RateLimitHelpers.makeAssetKey(CurveLib.LIMIT_CURVE_SWAP, CURVE_POOL);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(curveDepositKey,  2_000_000e18, uint256(2_000_000e18) / 1 days);

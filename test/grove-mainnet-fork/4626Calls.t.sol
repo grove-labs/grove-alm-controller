@@ -2,6 +2,8 @@
 pragma solidity >=0.8.0;
 
 import "./ForkTestBase.t.sol";
+import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
+import { RateLimitIds } from "../../src/libraries/common/RateLimitIds.sol";
 
 contract SUSDSTestBase is ForkTestBase {
 
@@ -19,11 +21,11 @@ contract SUSDSTestBase is ForkTestBase {
     function setUp() override public {
         super.setUp();
 
-        depositKey  = RateLimitHelpers.makeAddressAddressKey(mainnetController.LIMIT_4626_DEPOSIT(), Ethereum.USDS, Ethereum.SUSDS);
-        withdrawKey = RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_WITHDRAW(), Ethereum.SUSDS);
+        depositKey  = RateLimitHelpers.makeAddressAddressKey(ERC4626Lib.LIMIT_4626_DEPOSIT, Ethereum.USDS, Ethereum.SUSDS);
+        withdrawKey = RateLimitHelpers.makeAssetKey(ERC4626Lib.LIMIT_4626_WITHDRAW, Ethereum.SUSDS);
 
         vm.startPrank(Ethereum.GROVE_PROXY);
-        rateLimits.setRateLimitData(mainnetController.LIMIT_USDS_MINT(), 10_000_000e18, uint256(10_000_000e18) / 4 hours);
+        rateLimits.setRateLimitData(RateLimitIds.LIMIT_USDS_MINT, 10_000_000e18, uint256(10_000_000e18) / 4 hours);
         rateLimits.setRateLimitData(depositKey,  5_000_000e18, uint256(1_000_000e18) / 4 hours);
         rateLimits.setRateLimitData(withdrawKey, 5_000_000e18, uint256(1_000_000e18) / 4 hours);
         mainnetController.setMaxExchangeRate(address(susds), susds.convertToShares(1e18), 1.2e18);
@@ -72,7 +74,7 @@ contract MainnetControllerDepositERC4626FailureTests is SUSDSTestBase {
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(depositKey, 0, 0);
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_4626_DEPOSIT(), Ethereum.SUSDS),
+            RateLimitHelpers.makeAssetKey(ERC4626Lib.LIMIT_4626_DEPOSIT, Ethereum.SUSDS),
             5_000_000e18,
             uint256(1_000_000e18) / 4 hours
         );

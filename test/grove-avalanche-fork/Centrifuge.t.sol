@@ -98,7 +98,7 @@ contract CentrifugeTestBase is ForkTestBase {
         claimCancelRedeemKey  = RateLimitHelpers.makeAssetKey(CentrifugeLib.LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM,  address(centrifugeV3Vault));
 
         transferKey = RateLimitHelpers.makeAddressUint16AddressKey(
-            foreignController.LIMIT_CENTRIFUGE_TRANSFER(),
+            CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER,
             address(centrifugeV3Vault),
             DESTINATION_CENTRIFUGE_ID,
             address(spoke)
@@ -1114,7 +1114,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
         rateLimits.setRateLimitData(
-            keccak256(abi.encode(foreignController.LIMIT_CENTRIFUGE_TRANSFER(), CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
+            keccak256(abi.encode(CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER, CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
             10_000_000e6,
             0
         );

@@ -14,6 +14,13 @@ import { ERC20Lib } from "./common/ERC20Lib.sol";
 library CCTPLib {
 
     /**********************************************************************************************/
+    /*** Constants                                                                              ***/
+    /**********************************************************************************************/
+
+    bytes32 public constant LIMIT_USDC_TO_CCTP   = keccak256("LIMIT_USDC_TO_CCTP");
+    bytes32 public constant LIMIT_USDC_TO_DOMAIN = keccak256("LIMIT_USDC_TO_DOMAIN");
+
+    /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
 
@@ -22,8 +29,6 @@ library CCTPLib {
         IRateLimits rateLimits;
         ICCTPLike   cctp;
         IERC20      usdc;
-        bytes32     domainRateLimitId;
-        bytes32     cctpRateLimitId;
         bytes32     mintRecipient;
         uint32      destinationDomain;
         uint256     usdcAmount;
@@ -45,10 +50,10 @@ library CCTPLib {
     /**********************************************************************************************/
 
     function transferUSDCToCCTP(TransferUSDCToCCTPParams calldata params) external {
-        _rateLimited(params.rateLimits, params.cctpRateLimitId, params.usdcAmount);
+        _rateLimited(params.rateLimits, LIMIT_USDC_TO_CCTP, params.usdcAmount);
         _rateLimited(
             params.rateLimits,
-            RateLimitHelpers.makeDomainKey(params.domainRateLimitId, params.destinationDomain),
+            RateLimitHelpers.makeDomainKey(LIMIT_USDC_TO_DOMAIN, params.destinationDomain),
             params.usdcAmount
         );
 

@@ -19,10 +19,12 @@ interface IATokenWithPool is IAToken {
 
 library AaveLib {
 
+    bytes32 public constant LIMIT_AAVE_DEPOSIT  = keccak256("LIMIT_AAVE_DEPOSIT");
+    bytes32 public constant LIMIT_AAVE_WITHDRAW = keccak256("LIMIT_AAVE_WITHDRAW");
+
     struct DepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     aToken;
         uint256     amount;
         uint256     maxSlippage;
@@ -31,7 +33,6 @@ library AaveLib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     aToken;
         uint256     amount;
     }
@@ -42,7 +43,7 @@ library AaveLib {
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAddressAddressAddressKey(
-                params.rateLimitId, underlying, address(pool), params.aToken
+                LIMIT_AAVE_DEPOSIT, underlying, address(pool), params.aToken
             ),
             params.amount
         );
@@ -82,7 +83,7 @@ library AaveLib {
         amountWithdrawn = underlying.balanceOf(address(params.proxy)) - underlyingBalance;
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, address(pool), params.aToken),
+            RateLimitHelpers.makeAddressAddressKey(LIMIT_AAVE_WITHDRAW, address(pool), params.aToken),
             amountWithdrawn
         );
     }

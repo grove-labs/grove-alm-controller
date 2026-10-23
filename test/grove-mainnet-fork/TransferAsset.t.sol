@@ -6,6 +6,7 @@ import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 import { MockTokenReentrant, MockTokenReturnFalse } from "../unit/mocks/MockTokens.sol";
 
 import "./ForkTestBase.t.sol";
+import { RateLimitIds } from "../../src/libraries/common/RateLimitIds.sol";
 
 contract TransferAssetBaseTest is ForkTestBase {
 
@@ -17,7 +18,7 @@ contract TransferAssetBaseTest is ForkTestBase {
         vm.startPrank(Ethereum.GROVE_PROXY);
 
         bytes32 key = RateLimitHelpers.makeAssetDestinationKey(
-            mainnetController.LIMIT_ASSET_TRANSFER(),
+            RateLimitIds.LIMIT_ASSET_TRANSFER,
             address(usdc),
             receiver
         );
@@ -66,7 +67,7 @@ contract MainnetControllerTransferAssetFailureTests is TransferAssetBaseTest {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                mainnetController.LIMIT_ASSET_TRANSFER(),
+                RateLimitIds.LIMIT_ASSET_TRANSFER,
                 address(token),
                 receiver
             ),
@@ -90,7 +91,7 @@ contract MainnetControllerTransferAssetFailureTests is TransferAssetBaseTest {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                mainnetController.LIMIT_ASSET_TRANSFER(),
+                RateLimitIds.LIMIT_ASSET_TRANSFER,
                 address(token),
                 receiver
             ),
@@ -133,7 +134,7 @@ contract MainnetControllerTransferAssetSuccessTests is TransferAssetBaseTest {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                mainnetController.LIMIT_ASSET_TRANSFER(),
+                RateLimitIds.LIMIT_ASSET_TRANSFER,
                 address(usdt),
                 receiver
             ),

@@ -18,6 +18,7 @@ library CentrifugeLib {
     bytes32 public constant LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT = keccak256("LIMIT_CENTRIFUGE_CLAIM_CANCEL_DEPOSIT");
     bytes32 public constant LIMIT_CENTRIFUGE_CANCEL_REDEEM        = keccak256("LIMIT_CENTRIFUGE_CANCEL_REDEEM");
     bytes32 public constant LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM  = keccak256("LIMIT_CENTRIFUGE_CLAIM_CANCEL_REDEEM");
+    bytes32 public constant LIMIT_CENTRIFUGE_TRANSFER             = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
 
     struct CentrifugeRequestParams {
         IALMProxy   proxy;
@@ -33,7 +34,6 @@ library CentrifugeLib {
         uint16      destinationCentrifugeId;
         uint128     amount;
         bytes32     recipient;
-        bytes32     rateLimitId;
     }
 
     function cancelCentrifugeDepositRequest(CentrifugeRequestParams memory params) external {
@@ -96,7 +96,7 @@ library CentrifugeLib {
         _rateLimited(
             params.rateLimits,
             RateLimitHelpers.makeAddressUint16AddressKey(
-                params.rateLimitId,
+                LIMIT_CENTRIFUGE_TRANSFER,
                 params.token,
                 params.destinationCentrifugeId,
                 spoke
