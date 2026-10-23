@@ -235,10 +235,10 @@ library UniswapV3Lib {
         return cache;
     }
 
-    function _callSwap(UniV3Context calldata context, SwapParams calldata params, SwapCache memory cache) internal returns (uint256 amountOut) {
+    function _callSwap(UniV3Context calldata context, SwapParams calldata params, SwapCache memory cache) internal {
         IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
 
-        bytes memory result = context.proxy.doCall(
+        context.proxy.doCall(
             address(params.router),
             abi.encodeWithSelector(
                 ISwapRouter.exactInputSingle.selector,
@@ -253,8 +253,6 @@ library UniswapV3Lib {
                 })
             )
         );
-
-        amountOut = abi.decode(result, (uint256));
     }
 
     //-- Add liquidity functions
