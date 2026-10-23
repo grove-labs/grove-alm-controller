@@ -2,6 +2,7 @@
 pragma solidity ^0.8.21;
 
 import { IERC20 }         from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
+import { IERC20Metadata } from "openzeppelin-contracts/contracts/interfaces/IERC20Metadata.sol";
 
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
@@ -17,6 +18,10 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library UniswapV3Lib {
     uint24 public constant MAX_TICK_DELTA = 887272; // From https://github.com/sky-ecosystem/dss-allocator/blob/dev/src/funnels/uniV3/TickMath.sol#L15
+
+    bytes32 public constant LIMIT_UNISWAP_V3_DEPOSIT  = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
+    bytes32 public constant LIMIT_UNISWAP_V3_SWAP     = keccak256("LIMIT_UNISWAP_V3_SWAP");
+    bytes32 public constant LIMIT_UNISWAP_V3_WITHDRAW = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     /**********************************************************************************************/
     /*** Structs                                                                                ***/
@@ -40,7 +45,6 @@ library UniswapV3Lib {
     struct UniV3Context {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     pool;
     }
 
@@ -106,7 +110,7 @@ library UniswapV3Lib {
         ERC20Lib.approve(context.proxy, params.tokenIn, address(params.router), 0);
 
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, params.tokenIn, context.pool),
+            RateLimitHelpers.makeAssetDestinationKey(LIMIT_UNISWAP_V3_SWAP, params.tokenIn, context.pool),
             startingBalanceIn - IERC20(params.tokenIn).balanceOf(address(context.proxy))
         );
     }
@@ -159,7 +163,7 @@ library UniswapV3Lib {
         if (reported0 > amount0) amount0 = reported0;
         if (reported1 > amount1) amount1 = reported1;
 
-        _decreaseRateLimits(context, token0, token1, amount0, amount1);
+        _decreaseRateLimits(context, LIMIT_UNISWAP_V3_DEPOSIT, token0, token1, amount0, amount1);
     }
 
     function removeLiquidity(UniV3Context calldata context, RemoveLiquidityParams calldata params)
@@ -195,7 +199,7 @@ library UniswapV3Lib {
         _validateMinAmount(params.min.amount0, amount0, params.maxSlippage);
         _validateMinAmount(params.min.amount1, amount1, params.maxSlippage);
 
-        _decreaseRateLimits(context, token0, token1, amount0, amount1);
+        _decreaseRateLimits(context, LIMIT_UNISWAP_V3_WITHDRAW, token0, token1, amount0, amount1);
     }
 
     /**********************************************************************************************/
@@ -516,6 +520,7 @@ library UniswapV3Lib {
 
     function _decreaseRateLimits(
         UniV3Context calldata context,
+        bytes32 rateLimitId,
         address token0,
         address token1,
         uint256 amount0,
@@ -523,13 +528,22 @@ library UniswapV3Lib {
     )
         internal
     {
+        // Summing both legs at 1:1 assumes the pool is a pegged pair.
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token0, context.pool),
+            RateLimitHelpers.makeAssetKey(rateLimitId, context.pool),
+            _toNormalizedAmount(token0, amount0) + _toNormalizedAmount(token1, amount1)
+        );
+        context.rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAssetDestinationKey(rateLimitId, token0, context.pool),
             amount0
         );
         context.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(context.rateLimitId, token1, context.pool),
+            RateLimitHelpers.makeAssetDestinationKey(rateLimitId, token1, context.pool),
             amount1
         );
+    }
+
+    function _toNormalizedAmount(address token, uint256 amount) internal view returns (uint256) {
+        return amount * 1e18 / 10 ** IERC20Metadata(token).decimals();
     }
 }

@@ -52,6 +52,8 @@ contract UniswapV3TestBase is ForkTestBase {
     bytes32 uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey;
     bytes32 uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey;
     bytes32 uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey;
+    bytes32 uniswapV3_UsdsUsdcPool_AddLiquidityAggregateKey;
+    bytes32 uniswapV3_UsdsUsdcPool_RemoveLiquidityAggregateKey;
 
     bytes32 uniswapV3_AusdUsdsPool_AusdSwapKey;
     bytes32 uniswapV3_AusdUsdsPool_UsdsSwapKey;
@@ -59,6 +61,8 @@ contract UniswapV3TestBase is ForkTestBase {
     bytes32 uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey;
     bytes32 uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey;
     bytes32 uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey;
+    bytes32 uniswapV3_AusdUsdsPool_AddLiquidityAggregateKey;
+    bytes32 uniswapV3_AusdUsdsPool_RemoveLiquidityAggregateKey;
 
     IERC20  internal token0;
     IERC20  internal token1;
@@ -81,19 +85,24 @@ contract UniswapV3TestBase is ForkTestBase {
 
         vm.warp(block.timestamp + 2 hours); // Advance sufficient time for twap
 
-        uniswapV3_UsdsUsdcPool_UsdsSwapKey            = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(usdsBase), usdsUsdcPool);
-        uniswapV3_UsdsUsdcPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(usdcBase), usdsUsdcPool);
-        uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdsBase), usdsUsdcPool);
-        uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdcBase), usdsUsdcPool);
-        uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdsBase), usdsUsdcPool);
-        uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdcBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdsSwapKey            = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_SWAP,     address(usdsBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdcSwapKey            = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_SWAP,     address(usdcBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdsBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdcBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdsBase), usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdcBase), usdsUsdcPool);
 
-        uniswapV3_AusdUsdsPool_AusdSwapKey            = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(ausdBase), usdsAusdPool);
-        uniswapV3_AusdUsdsPool_UsdsSwapKey            = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(),     address(usdsBase), usdsAusdPool);
-        uniswapV3_AusdUsdsPool_AusdAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(ausdBase), usdsAusdPool);
-        uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_DEPOSIT(),  address(usdsBase), usdsAusdPool);
-        uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_WITHDRAW(), address(ausdBase), usdsAusdPool);
-        uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_WITHDRAW(), address(usdsBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_AusdSwapKey            = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_SWAP,     address(ausdBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_UsdsSwapKey            = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_SWAP,     address(usdsBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_AusdAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  address(ausdBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_UsdsAddLiquidityKey    = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  address(usdsBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, address(ausdBase), usdsAusdPool);
+        uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey = RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, address(usdsBase), usdsAusdPool);
+
+        uniswapV3_UsdsUsdcPool_AddLiquidityAggregateKey    = RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  usdsUsdcPool);
+        uniswapV3_UsdsUsdcPool_RemoveLiquidityAggregateKey = RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, usdsUsdcPool);
+        uniswapV3_AusdUsdsPool_AddLiquidityAggregateKey    = RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT,  usdsAusdPool);
+        uniswapV3_AusdUsdsPool_RemoveLiquidityAggregateKey = RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, usdsAusdPool);
 
         vm.startPrank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdsSwapKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
@@ -108,6 +117,11 @@ contract UniswapV3TestBase is ForkTestBase {
         rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_AusdRemoveLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
         rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_UsdsRemoveLiquidityKey, 1_000_000e18, uint256(1_000_000e18) / 1 days);
+
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_AddLiquidityAggregateKey,    2_000_000e18, uint256(2_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_UsdsUsdcPool_RemoveLiquidityAggregateKey, 2_000_000e18, uint256(2_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_AddLiquidityAggregateKey,    2_000_000e18, uint256(2_000_000e18) / 1 days);
+        rateLimits.setRateLimitData(uniswapV3_AusdUsdsPool_RemoveLiquidityAggregateKey, 2_000_000e18, uint256(2_000_000e18) / 1 days);
 
         foreignController.setMaxSlippage(_getPool(), 0.98e18);
         foreignController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
@@ -159,7 +173,19 @@ contract UniswapV3TestBase is ForkTestBase {
 
 
     function _getSwapKey(address tokenIn) internal view returns (bytes32) {
-        return RateLimitHelpers.makeAssetDestinationKey(foreignController.LIMIT_UNISWAP_V3_SWAP(), tokenIn, _getPool());
+        return RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_SWAP, tokenIn, _getPool());
+    }
+
+    function _getAddLiquidityAggregateKey() internal view returns (bytes32) {
+        return RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT, _getPool());
+    }
+
+    function _getRemoveLiquidityAggregateKey() internal view returns (bytes32) {
+        return RateLimitHelpers.makeAssetKey(UniswapV3Lib.LIMIT_UNISWAP_V3_WITHDRAW, _getPool());
+    }
+
+    function _toNormalizedAmount(address token, uint256 amount) internal view returns (uint256) {
+        return amount * 1e18 / 10 ** IERC20Metadata(token).decimals();
     }
 
     function _generateFees(uint256 amount) internal {
@@ -640,6 +666,72 @@ contract ForeignControllerAddLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
+    function test_addLiquidityUniswapV3_aggregateRateLimitExceeded() public {
+        uint256 amount0 = 100_000 * 10 ** uint256(IERC20Metadata(address(token0)).decimals());
+        uint256 amount1 = 100_000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+
+        _fundProxy(amount0, amount1);
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(uniswapV3_UsdsUsdcPool_UsdsAddLiquidityKey);
+        rateLimits.setUnlimitedRateLimitData(uniswapV3_UsdsUsdcPool_UsdcAddLiquidityKey);
+        rateLimits.setRateLimitData(_getAddLiquidityAggregateKey(), 1_000e18, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            UniswapV3Lib.Tick({
+                lower: initTick - 100,
+                upper: initTick + 100
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0,
+                amount1: amount1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0 * 98 / 100,
+                amount1: amount1 * 98 / 100
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_addLiquidityUniswapV3_aggregateRateLimitNotSet() public {
+        uint256 amount0 = 100_000 * 10 ** uint256(IERC20Metadata(address(token0)).decimals());
+        uint256 amount1 = 100_000 * 10 ** uint256(IERC20Metadata(address(token1)).decimals());
+
+        _fundProxy(amount0, amount1);
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(_getAddLiquidityAggregateKey(), 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.addLiquidityUniswapV3(
+            _getPool(),
+            0,
+            UniswapV3Lib.Tick({
+                lower: initTick - 100,
+                upper: initTick + 100
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0,
+                amount1: amount1
+            }),
+            UniswapV3Lib.TokenAmounts({
+                amount0: amount0 * 98 / 100,
+                amount1: amount1 * 98 / 100
+            }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
     function test_addLiquidityUniswapV3_invalidPoolForPosition() public {
         // Set arbitrary values
         vm.startPrank(GROVE_EXECUTOR);
@@ -1049,8 +1141,9 @@ contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         internal
         returns (uint256 tokenId, uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
-        uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(token0RateLimitKey);
-        uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(token1RateLimitKey);
+        uint256 token0RateLimitBefore    = rateLimits.getCurrentRateLimit(token0RateLimitKey);
+        uint256 token1RateLimitBefore    = rateLimits.getCurrentRateLimit(token1RateLimitKey);
+        uint256 aggregateRateLimitBefore = rateLimits.getCurrentRateLimit(_getAddLiquidityAggregateKey());
 
         (tokenId, liquidity, amount0Used, amount1Used) = _addLiquidity(
             currentTokenId,
@@ -1059,11 +1152,18 @@ contract ForeignControllerAddLiquidityE2EUniswapV3Test is UniswapV3TestBase {
             _minLiquidityPosition(amount0, amount1)
         );
 
-        uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(token0RateLimitKey);
-        uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(token1RateLimitKey);
+        uint256 token0RateLimitAfter    = rateLimits.getCurrentRateLimit(token0RateLimitKey);
+        uint256 token1RateLimitAfter    = rateLimits.getCurrentRateLimit(token1RateLimitKey);
+        uint256 aggregateRateLimitAfter = rateLimits.getCurrentRateLimit(_getAddLiquidityAggregateKey());
 
         assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0Used, "token0 rate limit delta mismatch");
         assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1Used, "token1 rate limit delta mismatch");
+
+        assertEq(
+            aggregateRateLimitBefore - aggregateRateLimitAfter,
+            _toNormalizedAmount(address(token0), amount0Used) + _toNormalizedAmount(address(token1), amount1Used),
+            "aggregate rate limit delta mismatch"
+        );
     }
 
     function _e2e_addLiquidityUniswapV3(uint256 addAmount0, uint256 addAmount1, int24 lowerTickDelta, int24 upperTickDelta, bytes32 token0RateLimitKey, bytes32 token1RateLimitKey) internal {
@@ -1387,6 +1487,42 @@ contract ForeignControllerRemoveLiquidityFailureTests is UniswapV3TestBase {
         vm.stopPrank();
     }
 
+    function test_removeLiquidityUniswapV3_aggregateRateLimitExceeded() public {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(uniswapV3_UsdsUsdcPool_UsdsRemoveLiquidityKey);
+        rateLimits.setUnlimitedRateLimitData(uniswapV3_UsdsUsdcPool_UsdcRemoveLiquidityKey);
+        rateLimits.setRateLimitData(_getRemoveLiquidityAggregateKey(), 1, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+    function test_removeLiquidityUniswapV3_aggregateRateLimitNotSet() public {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(_getRemoveLiquidityAggregateKey(), 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(ALM_RELAYER);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.removeLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            liquidity,
+            UniswapV3Lib.TokenAmounts({ amount0: defaultMinAmount0, amount1: defaultMinAmount1 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
     function test_removeLiquidityUniswapV3_maxSlippageNotSet() public {
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMaxSlippage(_getPool(), 0);
@@ -1466,8 +1602,9 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
     }
 
     function _removeLiquidity(uint256 _tokenId, uint128 _liquidity, uint256 _minAmount0, uint256 _minAmount1, bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
-        uint256 token0RateLimitBefore = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
-        uint256 token1RateLimitBefore = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
+        uint256 token0RateLimitBefore    = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
+        uint256 token1RateLimitBefore    = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
+        uint256 aggregateRateLimitBefore = rateLimits.getCurrentRateLimit(_getRemoveLiquidityAggregateKey());
 
         vm.startPrank(ALM_RELAYER);
         (amount0Used, amount1Used) = foreignController.removeLiquidityUniswapV3(
@@ -1482,11 +1619,18 @@ contract ForeignControllerRemoveLiquidityE2EUniswapV3Test is UniswapV3TestBase {
         assertGe(amount0Used, _minAmount0, "amount0Used should be greater than or equal to minAmount0");
         assertGe(amount1Used, _minAmount1, "amount1Used should be greater than or equal to minAmount1");
 
-        uint256 token0RateLimitAfter = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
-        uint256 token1RateLimitAfter = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
+        uint256 token0RateLimitAfter    = rateLimits.getCurrentRateLimit(_token0RateLimitKey);
+        uint256 token1RateLimitAfter    = rateLimits.getCurrentRateLimit(_token1RateLimitKey);
+        uint256 aggregateRateLimitAfter = rateLimits.getCurrentRateLimit(_getRemoveLiquidityAggregateKey());
 
         assertEq(token0RateLimitBefore - token0RateLimitAfter, amount0Used, "token0 rate limit delta mismatch");
         assertEq(token1RateLimitBefore - token1RateLimitAfter, amount1Used, "token1 rate limit delta mismatch");
+
+        assertEq(
+            aggregateRateLimitBefore - aggregateRateLimitAfter,
+            _toNormalizedAmount(address(token0), amount0Used) + _toNormalizedAmount(address(token1), amount1Used),
+            "aggregate rate limit delta mismatch"
+        );
     }
 
     function _removeLiquidityAndValidate(uint256 _tokenId, uint128 _liquidity, uint256 _minAmount0, uint256 _minAmount1, bytes32 _token0RateLimitKey, bytes32 _token1RateLimitKey) internal returns (uint256 amount0Used, uint256 amount1Used) {
