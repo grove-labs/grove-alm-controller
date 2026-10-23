@@ -134,7 +134,7 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, params.assetsBound);
 
-        ( uint256 buyerAssets, ) = _take(params, ctx);
+        uint256 buyerAssets = _take(params, ctx);
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
@@ -250,7 +250,7 @@ library MidnightLib {
     /**********************************************************************************************/
 
     function _take(TakeParams memory params, TakeContext memory ctx)
-        internal returns (uint256 buyerAssets, uint256 sellerAssets)
+        internal returns (uint256 buyerAssets)
     {
         Offer memory offer = params.offer;
 
@@ -303,7 +303,7 @@ library MidnightLib {
             )
         );
 
-        ( buyerAssets, sellerAssets ) = abi.decode(result, (uint256, uint256));
+        ( buyerAssets, ) = abi.decode(result, (uint256, uint256));
     }
 
     function _continuousFeePerSecond(uint256 cbpsPerYear) internal pure returns (uint256) {
