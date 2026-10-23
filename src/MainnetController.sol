@@ -90,9 +90,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
     bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
     bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
     bytes32 public LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
-    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -573,10 +570,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.SwapParams({
                 router       : uniswapV3Router,
@@ -608,10 +604,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
         (tokenId_, liquidity_, amount0_, amount1_) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.AddLiquidityParams({
                 positionManager : uniswapV3PositionManager,
@@ -642,10 +637,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
     {
         return UniswapV3Lib.removeLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({
                 positionManager : uniswapV3PositionManager,
