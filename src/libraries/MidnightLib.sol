@@ -19,6 +19,10 @@ library MidnightLib {
     /*** Constants                                                                              ***/
     /**********************************************************************************************/
 
+    bytes32 public constant LIMIT_MIDNIGHT_BUY    = keccak256("LIMIT_MIDNIGHT_BUY");
+    bytes32 public constant LIMIT_MIDNIGHT_REDEEM = keccak256("LIMIT_MIDNIGHT_REDEEM");
+    bytes32 public constant LIMIT_MIDNIGHT_SELL   = keccak256("LIMIT_MIDNIGHT_SELL");
+
     uint32 public constant MAX_CONTINUOUS_FEE = uint32(uint256(0.01e18) / uint256(365 days));
 
     uint256 internal constant WAD           = 1e18;
@@ -43,8 +47,6 @@ library MidnightLib {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
         address      midnight;
-        bytes32      buyRateLimitId;
-        bytes32      sellRateLimitId;
         bytes32      marketId;
         MarketConfig config;
         Offer        offer;
@@ -64,7 +66,6 @@ library MidnightLib {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
         address      midnight;
-        bytes32      redeemRateLimitId;
         bytes32      marketId;
         MarketConfig config;
         uint256      units;
@@ -151,7 +152,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, params.marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeBytes32Key(params.buyRateLimitId, params.marketId),
+            RateLimitHelpers.makeBytes32Key(LIMIT_MIDNIGHT_BUY, params.marketId),
             assetsSpent
         );
     }
@@ -200,7 +201,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, params.marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeBytes32Key(params.sellRateLimitId, params.marketId),
+            RateLimitHelpers.makeBytes32Key(LIMIT_MIDNIGHT_SELL, params.marketId),
             assetsReceived
         );
     }
@@ -239,7 +240,7 @@ library MidnightLib {
         _requireDebtFree(market.midnight, marketId, address(params.proxy));
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeBytes32Key(params.redeemRateLimitId, marketId),
+            RateLimitHelpers.makeBytes32Key(LIMIT_MIDNIGHT_REDEEM, marketId),
             assetsWithdrawn
         );
     }

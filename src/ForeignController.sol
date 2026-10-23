@@ -82,9 +82,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     bytes32 public LIMIT_CURVE_SWAP          = keccak256("LIMIT_CURVE_SWAP");
     bytes32 public LIMIT_CURVE_WITHDRAW      = keccak256("LIMIT_CURVE_WITHDRAW");
     bytes32 public LIMIT_LAYERZERO_TRANSFER  = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_MIDNIGHT_BUY        = keccak256("LIMIT_MIDNIGHT_BUY");
-    bytes32 public LIMIT_MIDNIGHT_REDEEM     = keccak256("LIMIT_MIDNIGHT_REDEEM");
-    bytes32 public LIMIT_MIDNIGHT_SELL       = keccak256("LIMIT_MIDNIGHT_SELL");
     bytes32 public LIMIT_PENDLE_PT_REDEEM    = keccak256("LIMIT_PENDLE_PT_REDEEM");
     bytes32 public LIMIT_PSM_DEPOSIT         = keccak256("LIMIT_PSM_DEPOSIT");
     bytes32 public LIMIT_PSM_WITHDRAW        = keccak256("LIMIT_PSM_WITHDRAW");
@@ -762,14 +759,13 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _checkRole(RELAYER);
 
         assetsWithdrawn = MidnightLib.redeem(MidnightLib.RedeemParams({
-            proxy             : proxy,
-            rateLimits        : rateLimits,
-            midnight          : midnight,
-            redeemRateLimitId : LIMIT_MIDNIGHT_REDEEM,
-            marketId          : marketId,
-            config            : midnightMarketConfigs[marketId],
-            units             : units,
-            minAssetsOut      : minAssetsOut
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : midnightMarketConfigs[marketId],
+            units        : units,
+            minAssetsOut : minAssetsOut
         }));
     }
 
@@ -915,17 +911,15 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         internal view returns (MidnightLib.TakeParams memory)
     {
         return MidnightLib.TakeParams({
-            proxy           : proxy,
-            rateLimits      : rateLimits,
-            midnight        : midnight,
-            buyRateLimitId  : LIMIT_MIDNIGHT_BUY,
-            sellRateLimitId : LIMIT_MIDNIGHT_SELL,
-            marketId        : marketId,
-            config          : midnightMarketConfigs[marketId],
-            offer           : offer,
-            ratifierData    : ratifierData,
-            units           : units,
-            assetsBound     : assetsBound
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : midnightMarketConfigs[marketId],
+            offer        : offer,
+            ratifierData : ratifierData,
+            units        : units,
+            assetsBound  : assetsBound
         });
     }
 
