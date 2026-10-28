@@ -186,9 +186,23 @@ contract MidnightMakerTestBase is UnitTestBase {
         vm.stopPrank();
     }
 
-    function _allowStrategy(bool allowed) internal {
-        vm.prank(admin);
-        controller.setMidnightStrategy(marketId, strategy, allowed);
+    function _strategyBuyKey(address strategy_) internal view returns (bytes32) {
+        return RateLimitHelpers.makeAddressBytes32Key(
+            MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, strategy_, marketId
+        );
+    }
+
+    function _strategySellKey(address strategy_) internal view returns (bytes32) {
+        return RateLimitHelpers.makeAddressBytes32Key(
+            MidnightLib.LIMIT_MIDNIGHT_STRATEGY_SELL, strategy_, marketId
+        );
+    }
+
+    function _onboardStrategy(uint256 maxAmount) internal {
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(strategy),  maxAmount, 0);
+        rateLimits.setRateLimitData(_strategySellKey(strategy), maxAmount, 0);
+        vm.stopPrank();
     }
 
     // Exactly what Midnight pays on a maker buy: floor(units * tickToPrice(tick) / WAD).
@@ -500,54 +514,36 @@ contract CancelMidnightOfferGroupTests is MidnightMakerTestBase {
 
 }
 
-contract SetMidnightStrategyTests is MidnightMakerTestBase {
+contract SetMidnightMakeConfigFreezerTests is MidnightMakerTestBase {
 
-    event MidnightStrategySet(bytes32 indexed marketId, address indexed strategy, bool allowed);
-
-    function test_setMidnightStrategy_unauthorizedAccount() public {
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            DEFAULT_ADMIN_ROLE
-        ));
-        controller.setMidnightStrategy(marketId, strategy, true);
+    function setUp() public override {
+        super.setUp();
+        _onboardTake();
     }
 
-    function test_setMidnightStrategy_relayerCannotCall() public {
-        vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            relayer,
-            DEFAULT_ADMIN_ROLE
-        ));
-        controller.setMidnightStrategy(marketId, strategy, true);
+    function test_setMidnightMakeConfig_freezerCanDisableMake() public {
+        _enableMake();
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
+
+        vm.prank(freezer);
+        controller.setMidnightMakeConfig(marketId, 0);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
     }
 
-    function test_setMidnightStrategy_freezerCannotAllow() public {
+    function test_setMidnightMakeConfig_freezerCannotEnableMake() public {
         vm.prank(freezer);
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
             freezer,
             DEFAULT_ADMIN_ROLE
         ));
-        controller.setMidnightStrategy(marketId, strategy, true);
+        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
     }
 
-    function test_setMidnightStrategy_freezerCanRemove() public {
-        _allowStrategy(true);
-
-        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy));
-
-        vm.prank(freezer);
-        vm.expectEmit(address(controller));
-        emit MidnightStrategySet(marketId, strategy, false);
-        controller.setMidnightStrategy(marketId, strategy, false);
-
-        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
-    }
-
-    function test_setMidnightStrategy_relayerCannotRemove() public {
-        _allowStrategy(true);
+    function test_setMidnightMakeConfig_relayerCannotDisableMake() public {
+        _enableMake();
 
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSignature(
@@ -555,48 +551,29 @@ contract SetMidnightStrategyTests is MidnightMakerTestBase {
             relayer,
             DEFAULT_ADMIN_ROLE
         ));
-        controller.setMidnightStrategy(marketId, strategy, false);
+        controller.setMidnightMakeConfig(marketId, 0);
     }
 
-    function test_setMidnightStrategy_adminCanStillRemove() public {
-        _allowStrategy(true);
-
-        _allowStrategy(false);
-
-        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
-    }
-
-    function test_setMidnightStrategy_zeroAddress() public {
-        vm.prank(admin);
-        vm.expectRevert("FC/invalid-strategy");
-        controller.setMidnightStrategy(marketId, address(0), true);
-    }
-
-    function test_setMidnightStrategy_setsAndClears() public {
-        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
-
-        _allowStrategy(true);
-
-        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy));
-
-        _allowStrategy(false);
-
-        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy));
-    }
-
-    function test_setMidnightStrategy_isPairScoped() public {
-        _allowStrategy(true);
-
-        assertFalse(controller.midnight_isCallbackAllowed(marketId, makeAddr("other")));
-        assertFalse(controller.midnight_isCallbackAllowed(keccak256("otherMarket"), strategy));
-    }
-
-    function test_setMidnightStrategy_emitsSet() public {
-        vm.expectEmit(address(controller));
-        emit MidnightStrategySet(marketId, strategy, true);
+    function test_setMidnightMakeConfig_adminCanStillDisableMake() public {
+        _enableMake();
 
         vm.prank(admin);
-        controller.setMidnightStrategy(marketId, strategy, true);
+        controller.setMidnightMakeConfig(marketId, 0);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
+    }
+
+    function test_setMidnightMakeConfig_disabledMakeBlocksFundFill() public {
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        vm.prank(freezer);
+        controller.setMidnightMakeConfig(marketId, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/make-not-enabled");
+        controller.midnight_fundFill(marketId, true, 1e18, 1e18, 0);
     }
 
 }
@@ -612,7 +589,7 @@ contract MidnightPeripheryViewTests is MidnightMakerTestBase {
         );
 
         ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
-            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (unknown, strategy))
+            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (unknown, strategy, true))
         );
 
         assertTrue(groupsOk);
@@ -628,17 +605,20 @@ contract MidnightPeripheryViewTests is MidnightMakerTestBase {
     }
 
     function test_midnightViews_areStaticcallSafeOnConfiguredMarkets() public {
-        vm.startPrank(admin);
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        vm.prank(admin);
         controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
-        controller.setMidnightStrategy(marketId, strategy, true);
-        vm.stopPrank();
 
         ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
             abi.encodeCall(ForeignController.midnight_getDesignatedGroups, (marketId))
         );
 
         ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
-            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (marketId, strategy))
+            abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (marketId, strategy, true))
         );
 
         assertTrue(groupsOk);
@@ -653,6 +633,70 @@ contract MidnightPeripheryViewTests is MidnightMakerTestBase {
         assertTrue(abi.decode(allowedOut, (bool)));
     }
 
+    function test_midnightIsCallbackAllowed_rejectsZeroCallback() public {
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(address(0)),  MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_strategySellKey(address(0)), MAX_OFFER_SIZE, 0);
+        vm.stopPrank();
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, address(0), true));
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, address(0), false));
+    }
+
+    function test_midnightIsCallbackAllowed_requiresMakeEnabled() public {
+        _onboardTake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+
+        _enableMake();
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+    }
+
+    function test_midnightIsCallbackAllowed_requiresMarketKey() public {
+        _onboardTake();
+        _enableMake();
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+
+        _setLimits(MAX_OFFER_SIZE);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+    }
+
+    function test_midnightIsCallbackAllowed_isDirectionScoped() public {
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(strategy), MAX_OFFER_SIZE, 0);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+    }
+
+    function test_midnightIsCallbackAllowed_isStrategyAndMarketScoped() public {
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, makeAddr("other"), true));
+        assertFalse(
+            controller.midnight_isCallbackAllowed(keccak256("otherMarket"), strategy, true)
+        );
+    }
+
 }
 
 contract MidnightFundFillTests is MidnightMakerTestBase {
@@ -664,7 +708,9 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
 
         _onboardTake();
         _enableMake();
-        _allowStrategy(true);
+
+        // Unlimited, so the per-market keys are what the market-limit tests exercise.
+        _onboardStrategy(type(uint256).max);
 
         loanToken.mint(address(proxy), 10_000_000e18);
     }
@@ -768,37 +814,77 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
-    function test_midnight_fundFill_strategyNotAllowed() public {
+    function test_midnight_fundFill_unsetStrategyKeyReverts() public {
         _setLimits(MAX_OFFER_SIZE);
-        _allowStrategy(false);
+        _onboardStrategy(0);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        vm.expectRevert("RateLimits/zero-maxAmount");
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
     }
 
-    function test_midnight_fundFill_whitelistIsPairScoped() public {
+    function test_midnight_fundFill_strategyKeyIsMarketScoped() public {
         _setLimits(MAX_OFFER_SIZE);
-        _allowStrategy(false);
+        _onboardStrategy(0);
 
         vm.prank(admin);
-        controller.setMidnightStrategy(keccak256("otherMarket"), strategy, true);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressBytes32Key(
+                MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, strategy, keccak256("otherMarket")
+            ),
+            MAX_OFFER_SIZE,
+            0
+        );
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        vm.expectRevert("RateLimits/zero-maxAmount");
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
-    function test_midnight_fundFill_revokedStrategyIsRejected() public {
+    function test_midnight_fundFill_buyKeyDoesNotAuthorizeSell() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(0);
+
+        vm.prank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(strategy), MAX_OFFER_SIZE, 0);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
+    }
+
+    function test_midnight_fundFill_decreasesStrategyAndMarketKeys() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),                  MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_strategyBuyKey(strategy)),  MAX_OFFER_SIZE - assets);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()),                 MAX_OFFER_SIZE);
+        assertEq(rateLimits.getCurrentRateLimit(_strategySellKey(strategy)), MAX_OFFER_SIZE);
+    }
+
+    function test_midnight_fundFill_offboardedStrategyIsRejected() public {
         _setLimits(MAX_OFFER_SIZE);
 
         vm.prank(strategy);
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
 
-        _allowStrategy(false);
+        _onboardStrategy(0);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        vm.expectRevert("RateLimits/zero-maxAmount");
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
@@ -1011,8 +1097,10 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
 
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightStrategy(marketId, allowed, true);
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(allowed),  MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_strategySellKey(allowed), MAX_OFFER_SIZE, 0);
+        vm.stopPrank();
 
         assertFalse(controller.hasRole(RELAYER, allowed));
 

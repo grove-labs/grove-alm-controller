@@ -142,7 +142,8 @@ contract MidnightMakerTestBase is MidnightTestBase {
         foreignController.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
         foreignController.setMidnightGroups(marketId, BUY_GROUP, SELL_GROUP);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
-        foreignController.setMidnightStrategy(marketId, address(strategy), true);
+        rateLimits.setRateLimitData(_strategyBuyKey(address(strategy)),  5_000_000e18, 0);
+        rateLimits.setRateLimitData(_strategySellKey(address(strategy)), 5_000_000e18, 0);
         vm.stopPrank();
 
         // Selling units into our buy offer puts the taker short, which Midnight collateralises.
@@ -208,9 +209,23 @@ contract MidnightMakerTestBase is MidnightTestBase {
         foreignController.setMidnightMakeConfig(marketId, maxOfferSize);
     }
 
-    function _allowStrategy(address strategy_, bool allowed) internal {
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightStrategy(marketId, strategy_, allowed);
+    function _strategyBuyKey(address strategy_) internal view returns (bytes32) {
+        return RateLimitHelpers.makeAddressBytes32Key(
+            MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, strategy_, marketId
+        );
+    }
+
+    function _strategySellKey(address strategy_) internal view returns (bytes32) {
+        return RateLimitHelpers.makeAddressBytes32Key(
+            MidnightLib.LIMIT_MIDNIGHT_STRATEGY_SELL, strategy_, marketId
+        );
+    }
+
+    function _onboardStrategy(address strategy_, uint256 maxAmount) internal {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(_strategyBuyKey(strategy_),  maxAmount, 0);
+        rateLimits.setRateLimitData(_strategySellKey(strategy_), maxAmount, 0);
+        vm.stopPrank();
     }
 
 }
@@ -222,7 +237,7 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
         assertEq(_makerBuyerAssets(1, MAKER_BUY_TICK), 0);
 
         _enableMake(0);
-        _allowStrategy(address(strategy), false);
+        _onboardStrategy(address(strategy), 0);
 
         Offer memory offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
 
@@ -434,12 +449,12 @@ contract MidnightMakerRetroactivityTests is MidnightMakerTestBase {
         _expectTakeRevert(offer, PROBE_UNITS, "MidnightLib/fill-price-too-high");
     }
 
-    function test_retroactivity_revokingTheStrategy() public {
+    function test_retroactivity_offboardingTheStrategy() public {
         Offer memory offer = _restingBuyOffer();
 
-        _allowStrategy(address(strategy), false);
+        _onboardStrategy(address(strategy), 0);
 
-        _expectTakeRevert(offer, PROBE_UNITS, "MidnightLib/strategy-not-allowed");
+        _expectTakeRevert(offer, PROBE_UNITS, "RateLimits/zero-maxAmount");
     }
 
     function test_retroactivity_disablingMake() public {
@@ -500,10 +515,10 @@ contract MidnightMakerKillSwitchTests is MidnightMakerTestBase {
         _expectFreshOfferRejected(abi.encodeWithSignature("ConsumedUnits()"));
     }
 
-    function test_killSwitch_strategyRevocation() public {
-        _allowStrategy(address(strategy), false);
+    function test_killSwitch_strategyOffboarding() public {
+        _onboardStrategy(address(strategy), 0);
 
-        _expectFreshOfferRejected("MidnightLib/strategy-not-allowed");
+        _expectFreshOfferRejected("RateLimits/zero-maxAmount");
     }
 
     function test_killSwitch_makeDisable() public {
@@ -585,13 +600,13 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
         midnight.take(offer, "", 1_000e18, taker, taker, address(0), "");
     }
 
-    function test_attack_directFundFillFromANonWhitelistedAddress() public {
+    function test_attack_directFundFillFromAnUnfundedAddress() public {
         vm.prank(attacker);
-        vm.expectRevert("MidnightLib/strategy-not-allowed");
+        vm.expectRevert("RateLimits/zero-maxAmount");
         foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
     }
 
-    function test_attack_directFundFillFromTheWhitelistedStrategy() public {
+    function test_attack_directFundFillFromTheOnboardedStrategy() public {
         uint256 proxyBalanceBefore = loanToken.balanceOf(address(almProxy));
 
         vm.prank(address(strategy));
@@ -797,8 +812,8 @@ contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
 
         _enableMake(MAX_OFFER_SIZE);
 
-        // Whitelisted like a real strategy, so only the reentrancy guard is left to stop it.
-        _allowStrategy(address(reenterer), true);
+        // Onboarded like a real strategy, so only the reentrancy guard is left to stop it.
+        _onboardStrategy(address(reenterer), 5_000_000e18);
     }
 
     function _assertGuardBlockedTheFill() internal view {
@@ -854,12 +869,12 @@ contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
         );
     }
 
-    function test_midnight_fundFill_nonWhitelistedCallerIsRejectedOutrightAnyway() public {
+    function test_midnight_fundFill_unfundedCallerIsRejectedOutrightAnyway() public {
         address stranger = makeAddr("stranger");
 
         vm.prank(stranger);
-        vm.expectRevert("MidnightLib/strategy-not-allowed");
-        foreignController.midnight_fundFill(marketId, true, 1, 1, 0);
+        vm.expectRevert("RateLimits/zero-maxAmount");
+        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
     }
 
 }

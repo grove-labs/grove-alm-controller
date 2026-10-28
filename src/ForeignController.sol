@@ -74,7 +74,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     );
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
-    event MidnightStrategySet(bytes32 indexed marketId, address indexed strategy, bool allowed);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -112,8 +111,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
     mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
     mapping(bytes32 marketId => MidnightLib.OfferGroups groups) internal _midnightOfferGroups;
-
-    mapping(bytes32 marketId => mapping(address strategy => bool allowed)) internal _midnightStrategies;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -285,7 +282,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function setMidnightMakeConfig(bytes32 marketId, uint256 maxOfferSize) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
+        // Disabling make is a safety action the freezer may take; enabling stays with governance.
+        if (maxOfferSize != 0 || !hasRole(FREEZER, msg.sender)) _checkRole(DEFAULT_ADMIN_ROLE);
 
         ( address loanToken, uint256 maturity ) = MidnightLib.setMakeConfig(
             _midnightMarketConfigs[marketId], midnight, marketId, maxOfferSize
@@ -320,18 +318,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         );
 
         emit MidnightRatifierAuthorizationSet(ratifier, authorized);
-    }
-
-    function setMidnightStrategy(bytes32 marketId, address strategy, bool allowed) external {
-        // Offboarding is a safety action the freezer may take; onboarding stays with governance.
-        if (allowed || !hasRole(FREEZER, msg.sender)) _checkRole(DEFAULT_ADMIN_ROLE);
-
-        // Allowing the zero address would let an offer with no callback settle unmetered.
-        require(strategy != address(0), "FC/invalid-strategy");
-
-        _midnightStrategies[marketId][strategy] = allowed;
-
-        emit MidnightStrategySet(marketId, strategy, allowed);
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -817,7 +803,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /*** Midnight maker funding                                                                 ***/
     /**********************************************************************************************/
 
-    // Deliberately roleless: a whitelisted (market, strategy) pair is the authorization.
+    // Deliberately roleless: a funded (market, strategy) rate limit is the authorization.
     function midnight_fundFill(
         bytes32 marketId,
         bool    buy,
@@ -834,7 +820,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             marketId     : marketId,
             config       : _midnightMarketConfigs[marketId],
             strategy     : msg.sender,
-            allowed      : _midnightStrategies[marketId][msg.sender],
             buy          : buy,
             assets       : assets,
             units        : units,
@@ -856,10 +841,26 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         return _midnightOfferGroups[marketId];
     }
 
-    function midnight_isCallbackAllowed(bytes32 marketId, address callback)
+    function midnight_isCallbackAllowed(bytes32 marketId, address callback, bool buy)
         external view returns (bool)
     {
-        return _midnightStrategies[marketId][callback];
+        // Hard-coded, so a key funded for the zero address by mistake cannot ratify an unmetered offer.
+        if (callback == address(0))                                 return false;
+        if (_midnightMarketConfigs[marketId].maxOfferSize == 0)     return false;
+
+        bytes32 strategyKey = RateLimitHelpers.makeAddressBytes32Key(
+            buy ? MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY : MidnightLib.LIMIT_MIDNIGHT_STRATEGY_SELL,
+            callback,
+            marketId
+        );
+
+        bytes32 marketKey = RateLimitHelpers.makeBytes32Key(
+            buy ? MidnightLib.LIMIT_MIDNIGHT_BUY : MidnightLib.LIMIT_MIDNIGHT_SELL,
+            marketId
+        );
+
+        return rateLimits.getRateLimitData(strategyKey).maxAmount != 0
+            && rateLimits.getRateLimitData(marketKey).maxAmount   != 0;
     }
 
     /**********************************************************************************************/

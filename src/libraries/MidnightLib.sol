@@ -19,9 +19,11 @@ library MidnightLib {
     /*** Constants                                                                              ***/
     /**********************************************************************************************/
 
-    bytes32 public constant LIMIT_MIDNIGHT_BUY    = keccak256("LIMIT_MIDNIGHT_BUY");
-    bytes32 public constant LIMIT_MIDNIGHT_REDEEM = keccak256("LIMIT_MIDNIGHT_REDEEM");
-    bytes32 public constant LIMIT_MIDNIGHT_SELL   = keccak256("LIMIT_MIDNIGHT_SELL");
+    bytes32 public constant LIMIT_MIDNIGHT_BUY           = keccak256("LIMIT_MIDNIGHT_BUY");
+    bytes32 public constant LIMIT_MIDNIGHT_REDEEM        = keccak256("LIMIT_MIDNIGHT_REDEEM");
+    bytes32 public constant LIMIT_MIDNIGHT_SELL          = keccak256("LIMIT_MIDNIGHT_SELL");
+    bytes32 public constant LIMIT_MIDNIGHT_STRATEGY_BUY  = keccak256("LIMIT_MIDNIGHT_STRATEGY_BUY");
+    bytes32 public constant LIMIT_MIDNIGHT_STRATEGY_SELL = keccak256("LIMIT_MIDNIGHT_STRATEGY_SELL");
 
     uint32 public constant MAX_CONTINUOUS_FEE = uint32(uint256(0.01e18) / uint256(365 days));
 
@@ -77,7 +79,6 @@ library MidnightLib {
         bytes32      marketId;
         MarketConfig config;
         address      strategy;
-        bool         allowed;
         bool         buy;
         uint256      assets;
         uint256      units;
@@ -322,7 +323,6 @@ library MidnightLib {
 
         bytes32 marketId = params.marketId;
 
-        require(params.allowed,           "MidnightLib/strategy-not-allowed");
         require(config.maxOfferSize != 0, "MidnightLib/make-not-enabled");
         require(params.assets != 0,       "MidnightLib/zero-assets");
         require(params.units  != 0,       "MidnightLib/zero-units");
@@ -355,6 +355,10 @@ library MidnightLib {
 
             require(params.assets <= params.units * bound / WAD, "MidnightLib/fill-price-too-high");
 
+            _decreaseStrategyLimit(
+                params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_BUY, params.strategy, marketId, params.assets
+            );
+
             _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_BUY, marketId, params.assets);
 
             ERC20Lib.transfer(params.proxy, config.loanToken, params.strategy, params.assets);
@@ -372,6 +376,10 @@ library MidnightLib {
         require(params.assets * WAD >= params.units * floor, "MidnightLib/fill-price-too-low");
 
         _requireDebtFree(params.midnight, marketId, address(params.proxy));
+
+        _decreaseStrategyLimit(
+            params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_SELL, params.strategy, marketId, params.assets
+        );
 
         _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_SELL, marketId, params.assets);
     }
@@ -512,6 +520,22 @@ library MidnightLib {
     {
         rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeBytes32Key(rateLimitId, marketId),
+            amount
+        );
+    }
+
+    // An unset key reverts, so funding a (strategy, market) key is what onboards a strategy.
+    function _decreaseStrategyLimit(
+        IRateLimits rateLimits,
+        bytes32     rateLimitId,
+        address     strategy,
+        bytes32     marketId,
+        uint256     amount
+    )
+        internal
+    {
+        rateLimits.triggerRateLimitDecrease(
+            RateLimitHelpers.makeAddressBytes32Key(rateLimitId, strategy, marketId),
             amount
         );
     }
