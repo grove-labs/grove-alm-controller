@@ -20,12 +20,13 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 library PendleLib {
 
+    bytes32 public constant LIMIT_PENDLE_PT_REDEEM = keccak256("LIMIT_PENDLE_PT_REDEEM");
+
     struct RedeemPendlePTParams {
         IALMProxy     proxy;
         IRateLimits   rateLimits;
         IPendleMarket pendleMarket;
         address       pendleRouter;
-        bytes32       rateLimitId;
         uint256       pyAmountIn;
         uint256       minAmountOut;
     }
@@ -77,7 +78,7 @@ library PendleLib {
         require(totalTokenOutAmount >= params.minAmountOut, "PendleLib/min-amount-not-met");
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetDestinationKey(params.rateLimitId, pt, address(params.pendleMarket)),
+            RateLimitHelpers.makeAssetDestinationKey(LIMIT_PENDLE_PT_REDEEM, pt, address(params.pendleMarket)),
             totalTokenOutAmount
         );
 

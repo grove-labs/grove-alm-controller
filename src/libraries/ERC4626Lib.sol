@@ -15,10 +15,12 @@ library ERC4626Lib {
 
     uint256 public constant EXCHANGE_RATE_PRECISION = 1e36;
 
+    bytes32 public constant LIMIT_4626_DEPOSIT  = keccak256("LIMIT_4626_DEPOSIT");
+    bytes32 public constant LIMIT_4626_WITHDRAW = keccak256("LIMIT_4626_WITHDRAW");
+
     struct DepositParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
         uint256     amount;
         uint256     minSharesOut;
@@ -28,7 +30,6 @@ library ERC4626Lib {
     struct WithdrawParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
         uint256     amount;
         uint256     maxSharesIn;
@@ -37,7 +38,6 @@ library ERC4626Lib {
     struct RedeemParams {
         IALMProxy   proxy;
         IRateLimits rateLimits;
-        bytes32     rateLimitId;
         address     token;
         uint256     shares;
         uint256     minAssetsOut;
@@ -47,7 +47,7 @@ library ERC4626Lib {
         address asset = IERC4626(params.token).asset();
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAddressAddressKey(params.rateLimitId, asset, params.token),
+            RateLimitHelpers.makeAddressAddressKey(LIMIT_4626_DEPOSIT, asset, params.token),
             params.amount
         );
 
@@ -95,7 +95,7 @@ library ERC4626Lib {
         require(shares <= params.maxSharesIn, "ERC4626Lib/shares-burned-too-high");
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, params.token),
             assets
         );
     }
@@ -119,7 +119,7 @@ library ERC4626Lib {
         require(assets >= params.minAssetsOut, "ERC4626Lib/min-assets-out-not-met");
 
         params.rateLimits.triggerRateLimitDecrease(
-            RateLimitHelpers.makeAssetKey(params.rateLimitId, params.token),
+            RateLimitHelpers.makeAssetKey(LIMIT_4626_WITHDRAW, params.token),
             assets
         );
     }

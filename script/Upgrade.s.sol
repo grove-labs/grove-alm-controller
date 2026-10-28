@@ -11,6 +11,8 @@ import { ControllerInstance }                   from "../deploy/ControllerInstan
 import { ForeignControllerInit as ForeignInit } from "../deploy/ForeignControllerInit.sol";
 import { MainnetControllerInit as MainnetInit } from "../deploy/MainnetControllerInit.sol";
 
+import { ForeignScript } from "./Deploy.s.sol";
+
 contract UpgradeMainnetController is Script {
 
     using stdJson     for string;
@@ -88,12 +90,14 @@ contract UpgradeMainnetController is Script {
 
 }
 
-contract UpgradeForeignController is Script {
+contract UpgradeForeignController is ForeignScript {
 
     using stdJson     for string;
     using ScriptTools for string;
 
     function run() external {
+        setUpNonStandardChains();
+
         vm.setEnv("FOUNDRY_ROOT_CHAINID",             "1");
         vm.setEnv("FOUNDRY_EXPORTS_OVERWRITE_LATEST", "true");
 

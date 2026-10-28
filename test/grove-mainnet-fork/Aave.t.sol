@@ -4,6 +4,7 @@ pragma solidity >=0.8.0;
 import { IAToken } from "aave-v3-origin/src/core/contracts/interfaces/IAToken.sol";
 
 import "./ForkTestBase.t.sol";
+import { AaveLib } from "../../src/libraries/AaveLib.sol";
 
 contract AaveV3MainMarketBaseTest is ForkTestBase {
 
@@ -26,24 +27,24 @@ contract AaveV3MainMarketBaseTest is ForkTestBase {
         super.setUp();
 
         usdsDepositKey = RateLimitHelpers.makeAddressAddressAddressKey(
-            mainnetController.LIMIT_AAVE_DEPOSIT(),
+            AaveLib.LIMIT_AAVE_DEPOSIT,
             Ethereum.USDS,
             POOL,
             ATOKEN_USDS
         );
         usdcDepositKey = RateLimitHelpers.makeAddressAddressAddressKey(
-            mainnetController.LIMIT_AAVE_DEPOSIT(),
+            AaveLib.LIMIT_AAVE_DEPOSIT,
             Ethereum.USDC,
             POOL,
             ATOKEN_USDC
         );
         usdsWithdrawKey = RateLimitHelpers.makeAddressAddressKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            AaveLib.LIMIT_AAVE_WITHDRAW,
             POOL,
             ATOKEN_USDS
         );
         usdcWithdrawKey = RateLimitHelpers.makeAddressAddressKey(
-            mainnetController.LIMIT_AAVE_WITHDRAW(),
+            AaveLib.LIMIT_AAVE_WITHDRAW,
             POOL,
             ATOKEN_USDC
         );
@@ -96,7 +97,7 @@ contract AaveV3MainMarketDepositFailureTests is AaveV3MainMarketBaseTest {
         vm.startPrank(Ethereum.GROVE_PROXY);
         rateLimits.setRateLimitData(usdsDepositKey, 0, 0);
         rateLimits.setRateLimitData(
-            RateLimitHelpers.makeAssetKey(mainnetController.LIMIT_AAVE_DEPOSIT(), ATOKEN_USDS),
+            RateLimitHelpers.makeAssetKey(AaveLib.LIMIT_AAVE_DEPOSIT, ATOKEN_USDS),
             25_000_000e18,
             uint256(5_000_000e18) / 1 days
         );

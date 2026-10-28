@@ -27,6 +27,7 @@ import { MerklLib }                       from "./libraries/MerklLib.sol";
 import { IDaiUsdsLike, IPSMLike, PSMLib } from "./libraries/PSMLib.sol";
 import { PendleLib }                      from "./libraries/PendleLib.sol";
 import { ERC20Lib }                       from "./libraries/common/ERC20Lib.sol";
+import { RateLimitIds }                   from "./libraries/common/RateLimitIds.sol";
 import { UniswapV3Lib }                   from "./libraries/UniswapV3Lib.sol";
 
 import { RateLimitHelpers } from "./RateLimitHelpers.sol";
@@ -71,28 +72,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     bytes32 public FREEZER = keccak256("FREEZER");
     bytes32 public RELAYER = keccak256("RELAYER");
-
-    bytes32 public LIMIT_4626_DEPOSIT         = keccak256("LIMIT_4626_DEPOSIT");
-    bytes32 public LIMIT_4626_WITHDRAW        = keccak256("LIMIT_4626_WITHDRAW");
-    bytes32 public LIMIT_AAVE_DEPOSIT         = keccak256("LIMIT_AAVE_DEPOSIT");
-    bytes32 public LIMIT_AAVE_WITHDRAW        = keccak256("LIMIT_AAVE_WITHDRAW");
-    bytes32 public LIMIT_ASSET_TRANSFER       = keccak256("LIMIT_ASSET_TRANSFER");
-    bytes32 public LIMIT_CENTRIFUGE_TRANSFER  = keccak256("LIMIT_CENTRIFUGE_TRANSFER");
-    bytes32 public LIMIT_CURVE_DEPOSIT        = keccak256("LIMIT_CURVE_DEPOSIT");
-    bytes32 public LIMIT_CURVE_SWAP           = keccak256("LIMIT_CURVE_SWAP");
-    bytes32 public LIMIT_CURVE_WITHDRAW       = keccak256("LIMIT_CURVE_WITHDRAW");
-    bytes32 public LIMIT_LAYERZERO_TRANSFER   = keccak256("LIMIT_LAYERZERO_TRANSFER");
-    bytes32 public LIMIT_PENDLE_PT_REDEEM     = keccak256("LIMIT_PENDLE_PT_REDEEM");
-    bytes32 public LIMIT_SUSDE_COOLDOWN       = keccak256("LIMIT_SUSDE_COOLDOWN");
-    bytes32 public LIMIT_USDC_TO_CCTP         = keccak256("LIMIT_USDC_TO_CCTP");
-    bytes32 public LIMIT_USDC_TO_DOMAIN       = keccak256("LIMIT_USDC_TO_DOMAIN");
-    bytes32 public LIMIT_USDE_BURN            = keccak256("LIMIT_USDE_BURN");
-    bytes32 public LIMIT_USDE_MINT            = keccak256("LIMIT_USDE_MINT");
-    bytes32 public LIMIT_USDS_MINT            = keccak256("LIMIT_USDS_MINT");
-    bytes32 public LIMIT_USDS_TO_USDC         = keccak256("LIMIT_USDS_TO_USDC");
-    bytes32 public LIMIT_UNISWAP_V3_DEPOSIT   = keccak256("LIMIT_UNISWAP_V3_DEPOSIT");
-    bytes32 public LIMIT_UNISWAP_V3_SWAP      = keccak256("LIMIT_UNISWAP_V3_SWAP");
-    bytes32 public LIMIT_UNISWAP_V3_WITHDRAW  = keccak256("LIMIT_UNISWAP_V3_WITHDRAW");
 
     uint256 internal CENTRIFUGE_REQUEST_ID = 0;
 
@@ -271,7 +250,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function mintUSDS(uint256 usdsAmount) external nonReentrant {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDS_MINT, usdsAmount);
+        _rateLimited(RateLimitIds.LIMIT_USDS_MINT, usdsAmount);
 
         // Mint USDS into the buffer
         proxy.doCall(
@@ -288,7 +267,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function burnUSDS(uint256 usdsAmount) external nonReentrant {
         _checkRole(RELAYER);
-        _cancelRateLimit(LIMIT_USDS_MINT, usdsAmount);
+        _cancelRateLimit(RateLimitIds.LIMIT_USDS_MINT, usdsAmount);
 
         // Transfer USDS from the proxy to the buffer
         ERC20Lib.transfer(proxy, address(usds), buffer, usdsAmount);
@@ -307,7 +286,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
     function transferAsset(address asset, address destination, uint256 amount) external nonReentrant {
         _checkRole(RELAYER);
         _rateLimited(
-            RateLimitHelpers.makeAssetDestinationKey(LIMIT_ASSET_TRANSFER, asset, destination),
+            RateLimitHelpers.makeAssetDestinationKey(RateLimitIds.LIMIT_ASSET_TRANSFER, asset, destination),
             amount
         );
 
@@ -327,7 +306,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.deposit(ERC4626Lib.DepositParams({
             proxy           : proxy,
             rateLimits      : rateLimits,
-            rateLimitId     : LIMIT_4626_DEPOSIT,
             token           : token,
             amount          : amount,
             minSharesOut    : minSharesOut,
@@ -344,7 +322,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.withdraw(ERC4626Lib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_4626_WITHDRAW,
             token       : token,
             amount      : amount,
             maxSharesIn : maxSharesIn
@@ -360,7 +337,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         return ERC4626Lib.redeem(ERC4626Lib.RedeemParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_4626_WITHDRAW,
             token        : token,
             shares       : shares,
             minAssetsOut : minAssetsOut
@@ -451,8 +427,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
                 token                   : token,
                 amount                  : amount,
                 recipient               : centrifugeRecipients[destinationCentrifugeId],
-                destinationCentrifugeId : destinationCentrifugeId,
-                rateLimitId             : LIMIT_CENTRIFUGE_TRANSFER
+                destinationCentrifugeId : destinationCentrifugeId
             })
         );
     }
@@ -466,7 +441,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         AaveLib.deposit(AaveLib.DepositParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_AAVE_DEPOSIT,
             aToken      : aToken,
             amount      : amount,
             maxSlippage : maxSlippages[aToken]
@@ -482,7 +456,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         return AaveLib.withdraw(AaveLib.WithdrawParams({
             proxy       : proxy,
             rateLimits  : rateLimits,
-            rateLimitId : LIMIT_AAVE_WITHDRAW,
             aToken      : aToken,
             amount      : amount
         }));
@@ -507,7 +480,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             pool         : pool,
-            rateLimitId  : LIMIT_CURVE_SWAP,
             inputIndex   : inputIndex,
             outputIndex  : outputIndex,
             amountIn     : amountIn,
@@ -529,8 +501,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             proxy                   : proxy,
             rateLimits              : rateLimits,
             pool                    : pool,
-            addLiquidityRateLimitId : LIMIT_CURVE_DEPOSIT,
-            swapRateLimitId         : LIMIT_CURVE_SWAP,
             minLpAmount             : minLpAmount,
             maxSlippage             : maxSlippages[pool],
             depositAmounts          : depositAmounts
@@ -550,7 +520,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             proxy              : proxy,
             rateLimits         : rateLimits,
             pool               : pool,
-            rateLimitId        : LIMIT_CURVE_WITHDRAW,
             lpBurnAmount       : lpBurnAmount,
             minWithdrawAmounts : minWithdrawAmounts,
             maxSlippage        : maxSlippages[pool]
@@ -573,10 +542,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
         amountOut = UniswapV3Lib.swap(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_SWAP,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.SwapParams({
                 router       : uniswapV3Router,
@@ -608,10 +576,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
         (tokenId_, liquidity_, amount0_, amount1_) = UniswapV3Lib.addLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_DEPOSIT,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.AddLiquidityParams({
                 positionManager : uniswapV3PositionManager,
@@ -622,7 +589,8 @@ contract MainnetController is AccessControl, ReentrancyGuard {
                 tickBounds      : poolParams.addLiquidityTickBounds,
                 maxSlippage     : maxSlippage,
                 deadline        : deadline,
-                twapSecondsAgo  : poolParams.twapSecondsAgo
+                twapSecondsAgo  : poolParams.twapSecondsAgo,
+                maxTickDelta    : poolParams.swapMaxTickDelta
             })
         );
     }
@@ -641,10 +609,9 @@ contract MainnetController is AccessControl, ReentrancyGuard {
     {
         return UniswapV3Lib.removeLiquidity(
             UniswapV3Lib.UniV3Context({
-                proxy       : proxy,
-                rateLimits  : rateLimits,
-                rateLimitId : LIMIT_UNISWAP_V3_WITHDRAW,
-                pool        : pool
+                proxy      : proxy,
+                rateLimits : rateLimits,
+                pool       : pool
             }),
             UniswapV3Lib.RemoveLiquidityParams({
                 positionManager : uniswapV3PositionManager,
@@ -664,7 +631,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function setDelegatedSigner(address delegatedSigner) external nonReentrant {
         _checkRole(RELAYER);
-        _rateLimitExists(LIMIT_USDE_MINT);
+        _rateLimitExists(RateLimitIds.LIMIT_USDE_MINT);
 
         proxy.doCall(
             address(ethenaMinter),
@@ -684,19 +651,19 @@ contract MainnetController is AccessControl, ReentrancyGuard {
     // Note that Ethena's mint/redeem per-block limits include other users
     function prepareUSDeMint(uint256 usdcAmount) external nonReentrant {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDE_MINT, usdcAmount);
+        _rateLimited(RateLimitIds.LIMIT_USDE_MINT, usdcAmount);
         ERC20Lib.approve(proxy, address(usdc), address(ethenaMinter), usdcAmount);
     }
 
     function prepareUSDeBurn(uint256 usdeAmount) external nonReentrant {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_USDE_BURN, usdeAmount);
+        _rateLimited(RateLimitIds.LIMIT_USDE_BURN, usdeAmount);
         ERC20Lib.approve(proxy, address(usde), address(ethenaMinter), usdeAmount);
     }
 
     function cooldownAssetsSUSDe(uint256 usdeAmount) external nonReentrant {
         _checkRole(RELAYER);
-        _rateLimited(LIMIT_SUSDE_COOLDOWN, usdeAmount);
+        _rateLimited(RateLimitIds.LIMIT_SUSDE_COOLDOWN, usdeAmount);
 
         proxy.doCall(
             address(susde),
@@ -720,7 +687,7 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             (uint256)
         );
 
-        rateLimits.triggerRateLimitDecrease(LIMIT_SUSDE_COOLDOWN, cooldownAmount);
+        rateLimits.triggerRateLimitDecrease(RateLimitIds.LIMIT_SUSDE_COOLDOWN, cooldownAmount);
     }
 
     function unstakeSUSDe() external nonReentrant {
@@ -749,7 +716,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         PendleLib.redeemPendlePT(PendleLib.RedeemPendlePTParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
-            rateLimitId  : LIMIT_PENDLE_PT_REDEEM,
             pendleMarket : IPendleMarket(pendleMarket),
             pendleRouter : Ethereum.PENDLE_ROUTER,
             pyAmountIn   : pyAmountIn,
@@ -811,7 +777,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             psm                     : psm,
             usds                    : usds,
             dai                     : dai,
-            rateLimitId             : LIMIT_USDS_TO_USDC,
             usdcAmount              : usdcAmount,
             psmTo18ConversionFactor : psmTo18ConversionFactor
         }));
@@ -827,7 +792,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             psm                     : psm,
             dai                     : dai,
             usdc                    : usdc,
-            rateLimitId             : LIMIT_USDS_TO_USDC,
             usdcAmount              : usdcAmount,
             psmTo18ConversionFactor : psmTo18ConversionFactor
         }));
@@ -845,7 +809,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
         LayerZeroLib.transferTokenLayerZero(LayerZeroLib.TransferTokenParams({
             proxy                 : proxy,
             rateLimits            : rateLimits,
-            rateLimitId           : LIMIT_LAYERZERO_TRANSFER,
             oftAddress            : oftAddress,
             amount                : amount,
             destinationEndpointId : destinationEndpointId,
@@ -895,8 +858,6 @@ contract MainnetController is AccessControl, ReentrancyGuard {
             rateLimits        : rateLimits,
             cctp              : cctp,
             usdc              : usdc,
-            domainRateLimitId : LIMIT_USDC_TO_DOMAIN,
-            cctpRateLimitId   : LIMIT_USDC_TO_CCTP,
             mintRecipient     : mintRecipients[destinationDomain],
             destinationDomain : destinationDomain,
             usdcAmount        : usdcAmount

@@ -5,7 +5,8 @@ import { MockERC20 } from "erc20-helpers/MockERC20.sol";
 
 import { CollateralParams, IMidnight, Market, Offer } from "../../src/interfaces/MidnightInterfaces.sol";
 
-import { MidnightLib } from "../../src/libraries/MidnightLib.sol";
+import { MidnightLib }  from "../../src/libraries/MidnightLib.sol";
+import { RateLimitIds } from "../../src/libraries/common/RateLimitIds.sol";
 
 import { MidnightIdLib }             from "../../src/libraries/midnight/MidnightIdLib.sol";
 import { MidnightTickLib, MAX_TICK } from "../../src/libraries/midnight/MidnightTickLib.sol";
@@ -1845,7 +1846,7 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                foreignController.LIMIT_ASSET_TRANSFER(),
+                RateLimitIds.LIMIT_ASSET_TRANSFER,
                 address(loanToken),
                 destination
             ),
@@ -1882,7 +1883,7 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
 
         rateLimits.setRateLimitData(
             RateLimitHelpers.makeAssetDestinationKey(
-                foreignController.LIMIT_ASSET_TRANSFER(),
+                RateLimitIds.LIMIT_ASSET_TRANSFER,
                 address(loanToken),
                 destination
             ),

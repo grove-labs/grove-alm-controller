@@ -38,6 +38,7 @@ import { MainnetController } from "../../../src/MainnetController.sol";
 import { RateLimits }        from "../../../src/RateLimits.sol";
 
 import { RateLimitHelpers }  from "../../../src/RateLimitHelpers.sol";
+import { RateLimitIds } from "../../../src/libraries/common/RateLimitIds.sol";
 
 interface IVatLike {
     function can(address, address) external view returns (uint256);
@@ -245,7 +246,7 @@ contract MainnetStagingDeploymentTests is MainnetStagingDeploymentTestBase {
         mainnetController.unstakeSUSDe();
 
         // Handle situation where usde balance of ALM Proxy is higher than max rate limit
-        uint256 maxBurnAmount = rateLimits.getCurrentRateLimit(mainnetController.LIMIT_USDE_BURN());
+        uint256 maxBurnAmount = rateLimits.getCurrentRateLimit(RateLimitIds.LIMIT_USDE_BURN);
         uint256 burnAmount    = usdeAmount > maxBurnAmount ? maxBurnAmount : usdeAmount;
         mainnetController.prepareUSDeBurn(burnAmount);
 

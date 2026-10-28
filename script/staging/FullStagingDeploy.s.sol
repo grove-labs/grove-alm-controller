@@ -50,6 +50,17 @@ import { MockJug }          from "./mocks/MockJug.sol";
 import { MockUsdsJoin }     from "./mocks/MockUsdsJoin.sol";
 import { MockVat }          from "./mocks/MockVat.sol";
 import { PSMWrapper }       from "./mocks/PSMWrapper.sol";
+import { AaveLib } from "../../src/libraries/AaveLib.sol";
+import { CCTPLib } from "../../src/libraries/CCTPLib.sol";
+import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
+import { PSM3Lib } from "../../src/libraries/PSM3Lib.sol";
+import { PSMLib } from "../../src/libraries/PSMLib.sol";
+import { RateLimitIds } from "../../src/libraries/common/RateLimitIds.sol";
+
+interface IControllerLike {
+    function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external;
+    function setMaxSlippage(address pool, uint256 maxSlippage) external;
+}
 
 struct Domain {
     string  input;
@@ -77,6 +88,9 @@ contract FullStagingDeploy is Script {
     address constant AUSDC_BASE             = 0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB;
     address constant MORPHO_BASE            = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
     address constant MORPHO_VAULT_USDC_BASE = 0x305E03Ed9ADaAB22F4A58c24515D79f2B1E2FD5D;
+
+    uint256 constant AAVE_MAX_SLIPPAGE          = 1e18 - 1e4;  // Rounding slippage only
+    uint256 constant EXCHANGE_RATE_HEADROOM_BPS = 12_000;
 
     /**********************************************************************************************/
     /*** Mainnet existing/mock deployments                                                      ***/
@@ -419,23 +433,23 @@ contract FullStagingDeploy is Script {
 
         vm.startBroadcast();
 
-        bytes32 susdeDepositKey = RateLimitHelpers.makeAddressAddressKey(controller.LIMIT_4626_DEPOSIT(), address(controller.usde()), address(controller.susde()));
+        bytes32 susdeDepositKey = RateLimitHelpers.makeAddressAddressKey(ERC4626Lib.LIMIT_4626_DEPOSIT, address(controller.usde()), address(controller.susde()));
 
-        bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
-        bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(controller.LIMIT_USDC_TO_DOMAIN(), CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
+        bytes32 domainKeyArbitrum = RateLimitHelpers.makeDomainKey(CCTPLib.LIMIT_USDC_TO_DOMAIN, CCTPForwarder.DOMAIN_ID_CIRCLE_ARBITRUM_ONE);
+        bytes32 domainKeyBase     = RateLimitHelpers.makeDomainKey(CCTPLib.LIMIT_USDC_TO_DOMAIN, CCTPForwarder.DOMAIN_ID_CIRCLE_BASE);
 
         // USDS mint/burn and cross-chain transfer rate limits
         rateLimits.setRateLimitData(domainKeyBase,                   maxAmount6,  slope6);
         rateLimits.setRateLimitData(domainKeyArbitrum,               maxAmount6,  slope6);
-        rateLimits.setRateLimitData(controller.LIMIT_USDS_MINT(),    maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDS_TO_USDC(), maxAmount6,  slope6);
+        rateLimits.setRateLimitData(RateLimitIds.LIMIT_USDS_MINT,    maxAmount18, slope18);
+        rateLimits.setRateLimitData(PSMLib.LIMIT_USDS_TO_USDC, maxAmount6,  slope6);
 
-        rateLimits.setUnlimitedRateLimitData(controller.LIMIT_USDC_TO_CCTP());
+        rateLimits.setUnlimitedRateLimitData(CCTPLib.LIMIT_USDC_TO_CCTP);
 
         // Ethena-specific rate limits
-        rateLimits.setRateLimitData(controller.LIMIT_SUSDE_COOLDOWN(), maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDE_BURN(),      maxAmount18, slope18);
-        rateLimits.setRateLimitData(controller.LIMIT_USDE_MINT(),      maxAmount6,  slope6);
+        rateLimits.setRateLimitData(RateLimitIds.LIMIT_SUSDE_COOLDOWN, maxAmount18, slope18);
+        rateLimits.setRateLimitData(RateLimitIds.LIMIT_USDE_BURN,      maxAmount18, slope18);
+        rateLimits.setRateLimitData(RateLimitIds.LIMIT_USDE_MINT,      maxAmount6,  slope6);
         rateLimits.setRateLimitData(susdeDepositKey,                   maxAmount18, slope18);
 
         vm.stopBroadcast();
@@ -449,11 +463,11 @@ contract FullStagingDeploy is Script {
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
-        bytes32 psmDepositKey  = foreignController.LIMIT_PSM_DEPOSIT();
-        bytes32 psmWithdrawKey = foreignController.LIMIT_PSM_WITHDRAW();
+        bytes32 psmDepositKey  = PSM3Lib.LIMIT_PSM_DEPOSIT;
+        bytes32 psmWithdrawKey = PSM3Lib.LIMIT_PSM_WITHDRAW;
 
         bytes32 domainKeyEthereum = RateLimitHelpers.makeDomainKey(
-            foreignController.LIMIT_USDC_TO_DOMAIN(),
+            CCTPLib.LIMIT_USDC_TO_DOMAIN,
             CCTPForwarder.DOMAIN_ID_CIRCLE_ETHEREUM
         );
 
@@ -472,7 +486,7 @@ contract FullStagingDeploy is Script {
 
         // CCTP rate limits
         rateLimits.setRateLimitData(domainKeyEthereum, maxAmount6, slope6);
-        rateLimits.setUnlimitedRateLimitData(foreignController.LIMIT_USDC_TO_CCTP());
+        rateLimits.setUnlimitedRateLimitData(CCTPLib.LIMIT_USDC_TO_CCTP);
 
         vm.stopBroadcast();
     }
@@ -486,8 +500,8 @@ contract FullStagingDeploy is Script {
 
         _onboardAAVEToken(base, baseInst, AUSDC_BASE, maxAmount6, slope6);
 
-        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount6, slope6);
-        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6, slope6);
+        _onboardERC4626Token(base, baseInst, FLUID_SUSDS_VAULT_BASE,  maxAmount18, slope18);
+        _onboardERC4626Token(base, baseInst, Base.MORPHO_VAULT_SUSDC, maxAmount6,  slope6);
     }
 
     /**********************************************************************************************/
@@ -506,9 +520,8 @@ contract FullStagingDeploy is Script {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
-        bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_AAVE_DEPOSIT();
-        bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_AAVE_WITHDRAW();
+        bytes32 depositKey  = AaveLib.LIMIT_AAVE_DEPOSIT;
+        bytes32 withdrawKey = AaveLib.LIMIT_AAVE_WITHDRAW;
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
@@ -526,6 +539,8 @@ contract FullStagingDeploy is Script {
             0
         );
 
+        IControllerLike(controllerInst.controller).setMaxSlippage(aToken, AAVE_MAX_SLIPPAGE);
+
         vm.stopBroadcast();
     }
 
@@ -541,14 +556,21 @@ contract FullStagingDeploy is Script {
         vm.selectFork(domain.forkId);
         vm.startBroadcast();
 
-        // NOTE: MainnetController and ForeignController both have the same LIMIT constants for this
-        bytes32 depositKey  = MainnetController(controllerInst.controller).LIMIT_4626_DEPOSIT();
-        bytes32 withdrawKey = MainnetController(controllerInst.controller).LIMIT_4626_WITHDRAW();
+        bytes32 depositKey  = ERC4626Lib.LIMIT_4626_DEPOSIT;
+        bytes32 withdrawKey = ERC4626Lib.LIMIT_4626_WITHDRAW;
 
         IRateLimits rateLimits = IRateLimits(controllerInst.rateLimits);
 
         rateLimits.setRateLimitData(RateLimitHelpers.makeAddressAddressKey(depositKey, IERC4626(token).asset(), token), maxAmount,         slope);
         rateLimits.setRateLimitData(RateLimitHelpers.makeAssetKey(withdrawKey, token),                                  type(uint256).max, 0);
+
+        uint256 assetUnit = 10 ** IERC20(IERC4626(token).asset()).decimals();
+
+        IControllerLike(controllerInst.controller).setMaxExchangeRate(
+            token,
+            IERC4626(token).convertToShares(assetUnit),
+            assetUnit * EXCHANGE_RATE_HEADROOM_BPS / 10_000
+        );
 
         vm.stopBroadcast();
     }
@@ -583,6 +605,10 @@ contract FullStagingDeploy is Script {
             forkId : vm.createFork(getChain("base").rpcUrl),
             admin  : deployer
         });
+
+        ilk = ScriptTools.stringToBytes32(mainnet.input.readString(".ilk"));
+
+        require(ilk != bytes32(0), "FullStagingDeploy/ilk-not-set");
 
         // Ballpark sizing of rate limits, tokens in PSMs, etc
         // Ballpark sizing of USDS to put in the join contracts, PSMs, etc
