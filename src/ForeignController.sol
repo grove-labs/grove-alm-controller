@@ -311,6 +311,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function setMidnightRatifierAuthorization(address ratifier, bool authorized) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
+        require(ratifier != address(0), "FC/ratifier-zero-address");
+
         proxy.doCall(
             midnight,
             abi.encodeCall(IMidnight.setIsAuthorized, (ratifier, authorized, address(proxy)))

@@ -453,6 +453,18 @@ contract SetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
         controller.setMidnightRatifierAuthorization(ratifier, true);
     }
 
+    function test_setMidnightRatifierAuthorization_zeroRatifier() public {
+        vm.startPrank(admin);
+        vm.expectRevert("FC/ratifier-zero-address");
+        controller.setMidnightRatifierAuthorization(address(0), true);
+
+        vm.expectRevert("FC/ratifier-zero-address");
+        controller.setMidnightRatifierAuthorization(address(0), false);
+        vm.stopPrank();
+
+        assertEq(venue.authorizeCalls(), 0);
+    }
+
     function test_setMidnightRatifierAuthorization() public {
         assertEq(venue.authorizeCalls(), 0);
 
