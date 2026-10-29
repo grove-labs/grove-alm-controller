@@ -1162,3 +1162,264 @@ contract MidnightMakerNestedFillTests is MidnightMakerSellFeeTestBase {
     }
 
 }
+
+contract MidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS        = 400_000e18;
+    uint256 constant SEEDED_UNITS = 1_000_000e18;
+
+    struct Limits {
+        uint256 buy;
+        uint256 sell;
+        uint256 redeem;
+        uint256 strategyBuy;
+        uint256 strategySell;
+    }
+
+    function _limits(address strategy_) internal view returns (Limits memory) {
+        return Limits({
+            buy          : rateLimits.getCurrentRateLimit(buyKey),
+            sell         : rateLimits.getCurrentRateLimit(sellKey),
+            redeem       : rateLimits.getCurrentRateLimit(redeemKey),
+            strategyBuy  : rateLimits.getCurrentRateLimit(_strategyBuyKey(strategy_)),
+            strategySell : rateLimits.getCurrentRateLimit(_strategySellKey(strategy_))
+        });
+    }
+
+    function _assertLimits(Limits memory actual, Limits memory expected) internal pure {
+        assertEq(actual.buy,          expected.buy,          "buy");
+        assertEq(actual.sell,         expected.sell,         "sell");
+        assertEq(actual.redeem,       expected.redeem,       "redeem");
+        assertEq(actual.strategyBuy,  expected.strategyBuy,  "strategyBuy");
+        assertEq(actual.strategySell, expected.strategySell, "strategySell");
+    }
+
+    function _bid(uint256 maxUnits) internal view returns (Offer memory) {
+        return _makerOffer(true, MAKER_BUY_TICK, uint128(maxUnits));
+    }
+
+    function _ask(uint256 maxUnits) internal view returns (Offer memory) {
+        return _makerOffer(false, TICK_98, uint128(maxUnits));
+    }
+
+    function _setStrategyKeys(address strategy_, uint256 buyMax, uint256 sellMax) internal {
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(_strategyBuyKey(strategy_),  buyMax,  0);
+        rateLimits.setRateLimitData(_strategySellKey(strategy_), sellMax, 0);
+        vm.stopPrank();
+    }
+
+    function _onboardSecondMarket() internal returns (Market memory marketB, bytes32 idB) {
+        marketB = market;
+        marketB.maturity = market.maturity + 1 days;
+
+        idB = harness.touchMarket(marketB);
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_BUY, idB), 5_000_000e18, 0
+        );
+        foreignController.setMidnightMarketConfig(
+            idB, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+        );
+        foreignController.setMidnightMakeConfig(idB, MAX_OFFER_SIZE);
+        vm.stopPrank();
+
+        vm.prank(taker);
+        harness.supplyCollateral(marketB, 0, 10_000_000 * collateralUnit, taker);
+    }
+
+    function test_keys_encodingsAreTheSpecifiedHashes() public view {
+        assertEq(buyKey,    keccak256(abi.encode(keccak256("LIMIT_MIDNIGHT_BUY"),    marketId)));
+        assertEq(sellKey,   keccak256(abi.encode(keccak256("LIMIT_MIDNIGHT_SELL"),   marketId)));
+        assertEq(redeemKey, keccak256(abi.encode(keccak256("LIMIT_MIDNIGHT_REDEEM"), marketId)));
+
+        assertEq(
+            _strategyBuyKey(address(strategy)),
+            keccak256(abi.encode(keccak256("LIMIT_MIDNIGHT_STRATEGY_BUY"), address(strategy), marketId))
+        );
+        assertEq(
+            _strategySellKey(address(strategy)),
+            keccak256(abi.encode(keccak256("LIMIT_MIDNIGHT_STRATEGY_SELL"), address(strategy), marketId))
+        );
+    }
+
+    function test_keys_makerBuySpendsTheStrategyBuyAndBuyKeysOnly() public {
+        Limits memory expected = _limits(address(strategy));
+
+        ( uint256 buyerAssets, ) = _take(_bid(UNITS), UNITS);
+
+        expected.buy         -= buyerAssets;
+        expected.strategyBuy -= buyerAssets;
+
+        _assertLimits(_limits(address(strategy)), expected);
+    }
+
+    function test_keys_makerSellSpendsTheStrategySellAndSellKeysOnly() public {
+        _seedCredit(SEEDED_UNITS);
+
+        Limits memory expected = _limits(address(strategy));
+
+        ( , uint256 sellerAssets ) = _take(_ask(UNITS), UNITS);
+
+        expected.sell         -= sellerAssets;
+        expected.strategySell -= sellerAssets;
+
+        _assertLimits(_limits(address(strategy)), expected);
+    }
+
+    function test_keys_takesSpendTheMarketKeyOnly() public {
+        Limits memory expected = _limits(address(strategy));
+
+        expected.buy -= _seedCredit(UNITS);
+
+        _assertLimits(_limits(address(strategy)), expected);
+
+        expected.sell -= _sell(_offer(true, TICK_99, uint128(UNITS)), UNITS, 1);
+
+        _assertLimits(_limits(address(strategy)), expected);
+    }
+
+    function test_keys_redeemSpendsTheRedeemKeyOnly() public {
+        _seedCredit(UNITS);
+        _repay(UNITS);
+
+        Limits memory expected = _limits(address(strategy));
+
+        expected.redeem -= _redeem(UNITS, 1);
+
+        _assertLimits(_limits(address(strategy)), expected);
+    }
+
+    function test_keys_makerBuysAndTakeBuysShareTheBuyKey() public {
+        uint256 headroom = 1_000e18;
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(buyKey, _makerBuyerAssets(UNITS, MAKER_BUY_TICK) + headroom, 0);
+
+        _take(_bid(UNITS), UNITS);
+
+        assertEq(rateLimits.getCurrentRateLimit(buyKey), headroom);
+
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        _buy(_offer(false, TICK_98, uint128(2 * headroom)), 2 * headroom, type(uint256).max);
+
+        _buy(_offer(false, TICK_98, uint128(headroom)), headroom, type(uint256).max);
+    }
+
+    function test_keys_makerSellsAndTakeSellsShareTheSellKey() public {
+        _seedCredit(SEEDED_UNITS);
+
+        uint256 headroom = 1_000e18;
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(sellKey, _makerSellerAssets(UNITS, TICK_98) + headroom, 0);
+
+        _take(_ask(UNITS), UNITS);
+
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), headroom);
+
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        _sell(_offer(true, TICK_99, uint128(2 * headroom)), 2 * headroom, 1);
+
+        _sell(_offer(true, TICK_99, uint128(headroom)), headroom, 1);
+    }
+
+    function test_keys_unsetStrategyKeyRevertsPerDirection() public {
+        _seedCredit(SEEDED_UNITS);
+
+        _setStrategyKeys(address(strategy), 0, 5_000_000e18);
+
+        _expectTakeRevert(_bid(SEEDED_UNITS), UNITS, "RateLimits/zero-maxAmount");
+        _take(_ask(SEEDED_UNITS), UNITS);
+
+        _setStrategyKeys(address(strategy), 5_000_000e18, 0);
+
+        _expectTakeRevert(_ask(SEEDED_UNITS), UNITS, "RateLimits/zero-maxAmount");
+        _take(_bid(SEEDED_UNITS), UNITS);
+    }
+
+    function test_keys_buyKeyCannotFundASell() public {
+        _seedCredit(SEEDED_UNITS);
+
+        _setStrategyKeys(address(strategy), 5_000_000e18, 0);
+
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+
+        _expectTakeRevert(_ask(UNITS), UNITS, "RateLimits/zero-maxAmount");
+
+        assertEq(rateLimits.getCurrentRateLimit(_strategyBuyKey(address(strategy))), 5_000_000e18);
+    }
+
+    function test_keys_marketAKeyCannotFundMarketB() public {
+        ( Market memory marketB, bytes32 idB ) = _onboardSecondMarket();
+
+        bytes32 strategyBuyKeyB = RateLimitHelpers.makeAddressBytes32Key(
+            MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, address(strategy), idB
+        );
+
+        Offer memory bidB = _bid(UNITS);
+        bidB.market = marketB;
+
+        assertFalse(foreignController.midnight_isCallbackAllowed(idB, address(strategy), true));
+
+        _expectTakeRevert(bidB, UNITS, "RateLimits/zero-maxAmount");
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(strategyBuyKeyB, 5_000_000e18, 0);
+
+        assertTrue(foreignController.midnight_isCallbackAllowed(idB, address(strategy), true));
+
+        ( uint256 buyerAssets, ) = _take(bidB, UNITS);
+
+        assertEq(rateLimits.getCurrentRateLimit(strategyBuyKeyB),                     5_000_000e18 - buyerAssets);
+        assertEq(rateLimits.getCurrentRateLimit(_strategyBuyKey(address(strategy))), 5_000_000e18);
+        assertEq(rateLimits.getCurrentRateLimit(buyKey),                              5_000_000e18);
+    }
+
+    function test_keys_twoStrategiesAreMeteredIndependently() public {
+        MirrorFundingStrategy other = new MirrorFundingStrategy(
+            MIDNIGHT, address(almProxy), address(foreignController)
+        );
+
+        _setStrategyKeys(address(other), 2_000_000e18, 2_000_000e18);
+
+        Offer memory otherBid = _bid(SEEDED_UNITS);
+        otherBid.callback = address(other);
+
+        Limits memory expected      = _limits(address(strategy));
+        Limits memory otherExpected = _limits(address(other));
+
+        ( uint256 assets      , ) = _take(_bid(SEEDED_UNITS), 300_000e18);
+        ( uint256 otherAssets , ) = _take(otherBid,           200_000e18);
+
+        expected.buy         -= assets + otherAssets;
+        expected.strategyBuy -= assets;
+
+        otherExpected.buy         -= assets + otherAssets;
+        otherExpected.strategyBuy -= otherAssets;
+
+        _assertLimits(_limits(address(strategy)), expected);
+        _assertLimits(_limits(address(other)),    otherExpected);
+    }
+
+    function test_keys_zeroingTheStrategyKeysOffboardsAndFlipsTheView() public {
+        _seedCredit(SEEDED_UNITS);
+
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+
+        _take(_bid(UNITS), UNITS);
+        _take(_ask(UNITS), UNITS);
+
+        _setStrategyKeys(address(strategy), 0, 0);
+
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+
+        _expectTakeRevert(_bid(SEEDED_UNITS), 1_000e18, "RateLimits/zero-maxAmount");
+        _expectTakeRevert(_ask(SEEDED_UNITS), 1_000e18, "RateLimits/zero-maxAmount");
+    }
+
+}
