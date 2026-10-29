@@ -4,6 +4,8 @@ pragma solidity ^0.8.21;
 import { IERC4626 }    from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 import { ERC4626Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC4626Mock.sol";
 
+import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
+
 import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
 
 import "./Midnight.t.sol";
@@ -1425,6 +1427,63 @@ contract MidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
 
         _expectTakeRevert(_bid(SEEDED_UNITS), 1_000e18, "RateLimits/zero-maxAmount");
         _expectTakeRevert(_ask(SEEDED_UNITS), 1_000e18, "RateLimits/zero-maxAmount");
+    }
+
+}
+
+contract MidnightMakerUnlimitedStrategyKeyTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 1_000_000e18;
+
+    function setUp() public override {
+        super.setUp();
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(_strategyBuyKey(address(strategy)));
+        rateLimits.setUnlimitedRateLimitData(_strategySellKey(address(strategy)));
+        vm.stopPrank();
+
+        _seedCredit(UNITS);
+    }
+
+    function _assertUnlimited(bytes32 key) internal view {
+        IRateLimits.RateLimitData memory data = rateLimits.getRateLimitData(key);
+
+        assertEq(data.maxAmount,                  type(uint256).max);
+        assertEq(data.lastAmount,                 type(uint256).max);
+        assertEq(rateLimits.getCurrentRateLimit(key), type(uint256).max);
+    }
+
+    function test_unlimitedStrategyKey_countsAsOnboarded() public view {
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+    }
+
+    function test_unlimitedStrategyKey_tracksNoSpendAndLeavesTheMarketKeyBinding() public {
+        uint256 lastUpdated = rateLimits.getRateLimitData(_strategyBuyKey(address(strategy))).lastUpdated;
+
+        vm.warp(block.timestamp + 1 hours);
+
+        uint256 buyBefore  = rateLimits.getCurrentRateLimit(buyKey);
+        uint256 sellBefore = rateLimits.getCurrentRateLimit(sellKey);
+
+        ( uint256 buyerAssets, )  = _take(_makerOffer(true,  MAKER_BUY_TICK, uint128(UNITS)), UNITS);
+        ( , uint256 sellerAssets) = _take(_makerOffer(false, TICK_98,        uint128(UNITS)), UNITS);
+
+        _assertUnlimited(_strategyBuyKey(address(strategy)));
+        _assertUnlimited(_strategySellKey(address(strategy)));
+
+        assertEq(rateLimits.getRateLimitData(_strategyBuyKey(address(strategy))).lastUpdated, lastUpdated);
+
+        assertEq(rateLimits.getCurrentRateLimit(buyKey),  buyBefore  - buyerAssets);
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), sellBefore - sellerAssets);
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(buyKey, 1_000e18, 0);
+
+        vm.prank(address(strategy));
+        vm.expectRevert("RateLimits/rate-limit-exceeded");
+        foreignController.midnight_fundFill(marketId, true, 1_000e18 + 1, 1_000_000e18, 0);
     }
 
 }
