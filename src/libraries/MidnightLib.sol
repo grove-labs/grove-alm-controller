@@ -82,7 +82,7 @@ library MidnightLib {
         bool         buy;
         uint256      assets;
         uint256      units;
-
+        uint256      pendingFee;
     }
 
     struct RedeemParams {
@@ -366,15 +366,17 @@ library MidnightLib {
             return;
         }
 
-        // Read from the position rather than taken from the caller; the fill leaves the per-unit
-        // fee rate unchanged, so a full exit is the only case this cannot recover.
-        ( uint256 credit, uint256 pendingFee ) = _position(
+        // Midnight has already moved the sold units and their fee out of the position.
+        ( uint256 creditPost, uint256 carriedFee ) = _position(
             IMidnight(params.midnight).toMarket(marketId), marketId, address(params.proxy)
         );
 
         uint256 floor      = MidnightTickLib.tickToPrice(config.minSellTick);
-        uint256 yieldFloor = _minSellPrice(
-            config.maxSellYield, timeToMaturity, credit, pendingFee
+        uint256 yieldFloor = _yieldPrice(
+            config.maxSellYield,
+            timeToMaturity,
+            _sellFeePerUnit(creditPost, carriedFee, params.units, params.pendingFee),
+            true
         );
 
         if (yieldFloor > floor) floor = yieldFloor;
@@ -472,6 +474,25 @@ library MidnightLib {
         if (credit == 0) return WAD;
 
         return _yieldPrice(maxYield, timeToMaturity, pendingFee * WAD / credit, true);
+    }
+
+    // The lower of the reported and carried rates, so a reported fee can only raise the floor; a
+    // full exit leaves no carried rate and so prices at the zero-fee yield floor.
+    function _sellFeePerUnit(
+        uint256 creditPost,
+        uint256 carriedFee,
+        uint256 units,
+        uint256 reportedFee
+    )
+        internal pure returns (uint256 feePerUnit)
+    {
+        if (creditPost == 0) return 0;
+
+        feePerUnit = carriedFee * WAD / creditPost;
+
+        uint256 reportedFeePerUnit = reportedFee * WAD / units;
+
+        if (reportedFeePerUnit < feePerUnit) feePerUnit = reportedFeePerUnit;
     }
 
     // Rounds against the caller: down for the buy ceiling, up for the sell floor.
