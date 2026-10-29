@@ -24,7 +24,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `setMidnightMarketConfig(marketId, maxBuyTick, minSellTick, minBuyYield, maxSellYield, maxContinuousFee, maxLossFactor)` | admin | Onboards the market (`minSellTick != 0`) for taking and sets the price, fee and loss bounds that maker fills use too. Preserves the make config. |
 | `setMidnightMakeConfig(marketId, maxOfferSize)` | admin; `FREEZER` may set `0` only | Needs a market onboarded for taking. Caches `loanToken` and `maturity` from `toMarket`. `maxOfferSize` is the make-enabled flag (`!= 0`) and caps the assets of each **fill**, not each offer. |
 | `setMidnightGroups(marketId, buyGroup, sellGroup)` | admin | Both groups must be non-zero and distinct (`FC/invalid-groups`). |
-| `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). This is a blanket grant; see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant). |
+| `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). This is a blanket grant; see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant). Keep exactly one ratifier authorized per proxy; see [One ratifier per proxy](#kill-switches-and-runbook). |
 | `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and the dust rule makes that a no-op. |
 
 Group rules: one group per direction per market. To make a market one-directional, leave the other direction's strategy keys unset. Never reuse a group on another market, because cancelling it would retire both books. This is an operational rule, not a code check.
@@ -51,7 +51,7 @@ The ids are `MidnightLib` constants (`keccak256("LIMIT_MIDNIGHT_*")`). The keys 
 - The two strategy keys **are** the strategy whitelist, per market and per direction. A non-zero `maxAmount` means the strategy is onboarded for that (market, direction). There is no separate mapping, setter, event or role. Governance onboards a strategy by setting its key and offboards it by zeroing the key.
 - A maker fill spends exactly two keys: first its strategy key, then the market key, both for the fill's direction. A take spends only its market key. No path spends a key of the other direction, and no path credits any key back. Capacity returns only through each key's own slope.
 - `midnight_fundFill` from an address with no strategy key for that (market, direction) reverts `RateLimits/zero-maxAmount` before any state change or transfer.
-- `maxAmount == type(uint256).max` means **unlimited**, which is the `RateLimits` special case: the key is never debited and tracks nothing. This is intended configuration that governance may choose deliberately. Such a key still counts as set, so the strategy is onboarded and `midnight_isCallbackAllowed` holds. The strategy is then bounded per fill by `maxOfferSize` and cumulatively by the market key for the direction alone. If that market key is also `type(uint256).max`, a keyed strategy's fabricated buys are bounded only by the proxy's loan-token balance.
+- `maxAmount == type(uint256).max` means **unlimited**, which is the `RateLimits` special case: the key is never debited and tracks nothing. This is intended configuration that governance may choose deliberately. Such a key still counts as set, so the strategy is onboarded and `midnight_isCallbackAllowed` holds. The strategy is then bounded per fill by `maxOfferSize` and cumulatively by the market key for the direction alone. Keep the market **buy** key finite: that is the intended configuration. An unlimited market buy key is still technically possible, but together with a faulty strategy it exposes the proxy's whole loan-token balance, because fabricated buys are then bounded only by that balance.
 - Maker and taker flow share the market keys. Any taker willing to trade at policy prices can use up that capacity, and a fill that exceeds any key on its path reverts the taker's transaction, not ours. If a direction's key is nearly spent, retire its group instead of leaving the book to fail.
 
 ## `midnight_fundFill`
@@ -98,13 +98,13 @@ Strategies are trusted code. The controller does not cross-check what a strategy
 
 ## Trust model
 
-A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a call involves no offer, group, ratifier or `take`. The buy branch pays `msg.sender`, and the price bound only ties `assets` to `units`, which the caller chooses. A fabricated buy can therefore draw up to the lower of the strategy buy key and the market buy key, plus whatever their slopes refill, repeated in chunks of up to `maxOfferSize`. If the market buy key is also `type(uint256).max`, fabricated buys are bounded only by the proxy's loan-token balance. A fabricated sell pays nothing and restores nothing; it only spends the sell budgets. A ratifier freeze does not stop this, and neither does `cancelMidnightOfferGroup`. Zeroing a strategy's keys stops that strategy. Zeroing `maxOfferSize` (FC `FREEZER` or admin) stops every strategy on that market, fabricated `fundFill` calls included, because it is `fundFill`'s first check. Callers without a key, genuine fills and takers cannot move funds outside policy.
+A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a call involves no offer, group, ratifier or `take`. The buy branch pays `msg.sender`, and the price bound only ties `assets` to `units`, which the caller chooses. A fabricated buy can therefore draw up to the lower of the strategy buy key and the market buy key, plus whatever their slopes refill, repeated in chunks of up to `maxOfferSize`. If the market buy key is also `type(uint256).max`, fabricated buys are bounded only by the proxy's loan-token balance, which is why the market buy key is kept finite. A fabricated sell pays nothing and restores nothing; it only spends the sell budgets. A ratifier freeze does not stop this, and neither does `cancelMidnightOfferGroup`. Zeroing a strategy's keys stops that strategy. Zeroing `maxOfferSize` (FC `FREEZER` or admin) stops every strategy on that market, fabricated `fundFill` calls included, because it is `fundFill`'s first check. Callers without a key, genuine fills and takers cannot move funds outside policy.
 
 ## Kill switches and runbook
 
 **Ratifier freeze.** The ratifier's `freeze()`, held by the ratifier's own freezer role, is the maker kill switch on both hosts. It stops new ratified maker fills in both directions. Only the ratifier admin can `unfreeze`. It does not stop a keyed strategy calling `fundFill` directly. Zeroing a strategy's keys stops that strategy; zeroing `maxOfferSize` (FC `FREEZER` or admin) stops every strategy on that market, fabricated `fundFill` calls included, because it is `fundFill`'s first check.
 
-Each host, and each chain, has its own ratifier deployment, bound to one proxy and one controller. A `freeze()` stops only the ratifier it is called on, so freeze every ratifier authorized for the affected proxy.
+**One ratifier per proxy.** Keep exactly one ratifier authorized for each proxy. Each host, and each chain, has its own ratifier deployment, bound to one proxy and one controller, and a `freeze()` stops only the ratifier it is called on. To change ratifier logic, deploy a new ratifier and swap the authorization: grant the new ratifier its roles (quoter, freezer, manager), authorize it, and deauthorize the old one with `setMidnightRatifierAuthorization(old, false)` in the same governance action. Offers signed for the old ratifier die with its deauthorization, because the ratifier address is part of the offer. If more than one ratifier is ever authorized for the proxy, freeze every one of them.
 
 | Lever | Scope | Who |
 |---|---|---|
@@ -117,9 +117,17 @@ Each host, and each chain, has its own ratifier deployment, bound to one proxy a
 
 **Runbook.**
 
-1. Freeze every ratifier authorized for the affected proxy.
+1. Freeze the proxy's ratifier (every ratifier authorized for the proxy, if more than one is).
 2. The FC `FREEZER` zeroes `maxOfferSize` on each affected market, which also halts fabricated `fundFill` calls there, then cancels the designated groups, and calls `removeRelayer` for operator-role strategies. ALM has no proxy freeze, and removing relayers does not stop maker fills, because pass-through strategies hold no role.
 3. Governance zeroes the strategy keys and revokes operator roles.
+
+**Strategy compromised.** A ratifier freeze does not stop a keyed strategy calling `fundFill` directly, so the order is different:
+
+1. The FC `FREEZER` zeroes `maxOfferSize` with `setMidnightMakeConfig(marketId, 0)` on every market the strategy is keyed for, one call per market. This stops fabricated `fundFill` calls, which the ratifier freeze does not. It also stops every other strategy on those markets.
+2. Governance zeroes the strategy's `LIMIT_MIDNIGHT_STRATEGY_*` keys.
+3. For an operator-role strategy, the FC `FREEZER` revokes its `RELAYER` role with `removeRelayer`.
+
+Once the strategy's keys are zero, the admin can restore `maxOfferSize` for the other strategies on those markets.
 
 Revoking the controller's `CONTROLLER` role on the ALMProxy is not a maker kill switch. It stops maker buys, but not maker sells, because the sell branch of `fundFill` makes no proxy call and Midnight pays the proxy directly. It also blocks `cancelMidnightOfferGroup` and `setMidnightRatifierAuthorization`, which reach the venue through the proxy.
 
