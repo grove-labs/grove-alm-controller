@@ -789,7 +789,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function cancelMidnightOfferGroup(bytes32 group) external nonReentrant {
-        // The freezer needs a maker kill switch; removing relayers does not stop fills.
+        // The ratifier freeze is the maker kill switch; the freezer may also retire groups.
         if (!hasRole(FREEZER, msg.sender)) _checkRole(RELAYER);
 
         proxy.doCall(
