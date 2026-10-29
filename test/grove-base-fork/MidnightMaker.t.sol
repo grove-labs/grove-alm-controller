@@ -1488,6 +1488,86 @@ contract MidnightMakerUnlimitedStrategyKeyTests is MidnightMakerTestBase {
 
 }
 
+contract MidnightMakerZeroUnitTakeTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 1_000_000e18;
+
+    struct Snapshot {
+        uint256 proxyBalance;
+        uint256 credit;
+        uint256 buy;
+        uint256 sell;
+        uint256 strategyBuy;
+        uint256 strategySell;
+    }
+
+    function setUp() public override {
+        super.setUp();
+
+        _seedCredit(UNITS);
+    }
+
+    function _snapshot() internal view returns (Snapshot memory) {
+        return Snapshot({
+            proxyBalance : loanToken.balanceOf(address(almProxy)),
+            credit       : _credit(),
+            buy          : rateLimits.getCurrentRateLimit(buyKey),
+            sell         : rateLimits.getCurrentRateLimit(sellKey),
+            strategyBuy  : rateLimits.getCurrentRateLimit(_strategyBuyKey(address(strategy))),
+            strategySell : rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)))
+        });
+    }
+
+    function _assertUnchanged(Snapshot memory before) internal view {
+        Snapshot memory current = _snapshot();
+
+        assertEq(current.proxyBalance, before.proxyBalance);
+        assertEq(current.credit,       before.credit);
+        assertEq(current.buy,          before.buy);
+        assertEq(current.sell,         before.sell);
+        assertEq(current.strategyBuy,  before.strategyBuy);
+        assertEq(current.strategySell, before.strategySell);
+    }
+
+    function test_zeroUnitTake_makerBuyMovesAndMetersNothing() public {
+        Snapshot memory before = _snapshot();
+
+        ( uint256 buyerAssets, uint256 sellerAssets ) =
+            _take(_makerOffer(true, MAKER_BUY_TICK, uint128(UNITS)), 0);
+
+        assertEq(buyerAssets,  0);
+        assertEq(sellerAssets, 0);
+
+        _assertUnchanged(before);
+    }
+
+    function test_zeroUnitTake_makerSellMovesAndMetersNothing() public {
+        Snapshot memory before = _snapshot();
+
+        ( uint256 buyerAssets, uint256 sellerAssets ) =
+            _take(_makerOffer(false, TICK_98, uint128(UNITS)), 0);
+
+        assertEq(buyerAssets,  0);
+        assertEq(sellerAssets, 0);
+
+        _assertUnchanged(before);
+    }
+
+    function test_zeroUnitTake_isRefusedAfterAGroupCancel() public {
+        vm.startPrank(ALM_RELAYER);
+        foreignController.cancelMidnightOfferGroup(BUY_GROUP);
+        foreignController.cancelMidnightOfferGroup(SELL_GROUP);
+        vm.stopPrank();
+
+        _expectTakeRevert(
+            _makerOffer(true, MAKER_BUY_TICK, uint128(UNITS)), 0, abi.encodeWithSignature("ConsumedUnits()")
+        );
+        _expectTakeRevert(
+            _makerOffer(false, TICK_98, uint128(UNITS)), 0, abi.encodeWithSignature("ConsumedUnits()")
+        );
+    }
+
+}
 // Same freeze contract as the periphery ratifier: a frozen ratifier refuses every offer.
 contract FreezableRatifier {
 
