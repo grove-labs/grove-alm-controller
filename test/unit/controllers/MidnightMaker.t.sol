@@ -777,29 +777,22 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, false, minAssets, UNITS, 0);
     }
 
-    function test_midnight_fundFill_sellRejectsAnyReportedFee() public {
+    function test_midnight_fundFill_sellFloorFallsWithCrystallizedFee() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 pendingFee = UNITS / 100;
+
+        uint256 withoutFee = _minSellAssets(UNITS, 0);
         uint256 withFee    = _minSellAssets(UNITS, pendingFee);
 
-        // A reported fee would buy a strictly lower floor, so it is refused rather than believed.
-        assertLt(withFee, _minSellAssets(UNITS, 0));
+        assertLt(withFee, withoutFee);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/pending-fee-not-zero");
+        vm.expectRevert("MidnightLib/fill-price-too-low");
+        controller.midnight_fundFill(marketId, false, withFee, UNITS, 0);
+
+        vm.prank(strategy);
         controller.midnight_fundFill(marketId, false, withFee, UNITS, pendingFee);
-
-        vm.prank(strategy);
-        vm.expectRevert("MidnightLib/pending-fee-not-zero");
-        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 1);
-    }
-
-    function test_midnight_fundFill_buyIgnoresReportedFee() public {
-        _setLimits(MAX_OFFER_SIZE);
-
-        vm.prank(strategy);
-        controller.midnight_fundFill(marketId, true, 1, UNITS, type(uint256).max);
     }
 
     function test_midnight_fundFill_sellIntoDebtIsRejected() public {

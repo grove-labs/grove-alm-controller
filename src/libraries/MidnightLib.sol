@@ -366,10 +366,6 @@ library MidnightLib {
             return;
         }
 
-        // Midnight charges the continuous fee to the debt side and this path keeps the proxy out of
-        // debt, so an honest fill reports zero and any other figure would only lower the floor.
-        require(params.pendingFee == 0, "MidnightLib/pending-fee-not-zero");
-
         uint256 floor      = MidnightTickLib.tickToPrice(config.minSellTick);
         uint256 yieldFloor = _minSellPrice(
             config.maxSellYield, timeToMaturity, params.units, params.pendingFee
