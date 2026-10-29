@@ -1423,3 +1423,75 @@ contract MidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
     }
 
 }
+
+// Same freeze contract as the periphery ratifier: a frozen ratifier refuses every offer.
+contract FreezableRatifier {
+
+    error RatifierFrozen();
+
+    bool public frozen;
+
+    function setFrozen(bool frozen_) external {
+        frozen = frozen_;
+    }
+
+    function isRatified(Offer memory, bytes memory, address) external view returns (bytes32) {
+        if (frozen) revert RatifierFrozen();
+
+        return keccak256("morpho.midnight.callbackSuccess");
+    }
+
+}
+
+contract MidnightMakerRatifierFreezeTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 400_000e18;
+
+    FreezableRatifier freezableRatifier;
+
+    function setUp() public override {
+        super.setUp();
+
+        freezableRatifier = new FreezableRatifier();
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMidnightRatifierAuthorization(address(freezableRatifier), true);
+
+        _seedCredit(1_000_000e18);
+    }
+
+    function _restingOffer(bool buy) internal returns (Offer memory offer) {
+        offer = _makerOffer(buy, buy ? MAKER_BUY_TICK : TICK_98, uint128(2 * UNITS));
+
+        offer.ratifier = address(freezableRatifier);
+
+        _take(offer, PROBE_UNITS);
+    }
+
+    function test_ratifierFreeze_stopsBothDirections() public {
+        Offer memory bid = _restingOffer(true);
+        Offer memory ask = _restingOffer(false);
+
+        freezableRatifier.setFrozen(true);
+
+        _expectTakeRevert(bid, UNITS, abi.encodeWithSignature("RatifierFrozen()"));
+        _expectTakeRevert(ask, UNITS, abi.encodeWithSignature("RatifierFrozen()"));
+
+        // Nothing on the host changed, so the ratifier alone is what stops the fills.
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+
+        freezableRatifier.setFrozen(false);
+
+        _take(bid, UNITS);
+        _take(ask, UNITS);
+    }
+
+    function test_ratifierFreeze_leavesTheTakerPathWorking() public {
+        freezableRatifier.setFrozen(true);
+
+        assertGt(_seedCredit(UNITS), 0);
+        assertGt(_sell(_offer(true, TICK_99, uint128(UNITS)), UNITS, 1), 0);
+    }
+
+}
