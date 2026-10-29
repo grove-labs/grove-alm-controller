@@ -4,8 +4,11 @@ pragma solidity ^0.8.21;
 import { IERC4626 }    from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 import { ERC4626Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC4626Mock.sol";
 
+import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
+
 import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
 
+import { AaveLib }    from "../../src/libraries/AaveLib.sol";
 import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
 
 import "./Midnight.t.sol";
@@ -1641,6 +1644,7 @@ contract MidnightMakerRatifierFreezeTests is MidnightMakerTestBase {
 }
 
 interface IJitControllerLike {
+    function withdrawAave(address aToken, uint256 amount) external returns (uint256);
     function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn) external returns (uint256);
 }
 
@@ -1790,6 +1794,170 @@ contract MidnightMakerJitSourcingTests is MidnightMakerTestBase {
         rateLimits.setRateLimitData(vaultWithdrawKey, _makerBuyerAssets(UNITS, MAKER_BUY_TICK) - 1, 0);
 
         _expectTakeRevert(_jitBid(), UNITS, "RateLimits/rate-limit-exceeded");
+    }
+
+}
+
+// Same shape as the vault strategy, sourcing from the live Aave V3 USDC reserve instead.
+contract JitAaveFundingStrategy {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+    address public immutable proxy;
+    address public immutable controller;
+    address public immutable aToken;
+
+    constructor(address midnight_, address proxy_, address controller_, address aToken_) {
+        midnight   = midnight_;
+        proxy      = proxy_;
+        controller = controller_;
+        aToken     = aToken_;
+    }
+
+    function onBuy(
+        bytes32 marketId,
+        Market  memory market,
+        uint256 buyerAssets,
+        uint256 units,
+        uint256 pendingFeeIncrease,
+        address buyer,
+        bytes   memory
+    )
+        external returns (bytes32)
+    {
+        require(msg.sender == midnight, "JitAaveFundingStrategy/not-midnight");
+        require(buyer      == proxy,    "JitAaveFundingStrategy/buyer-not-proxy");
+
+        if (buyerAssets == 0) return CALLBACK_SUCCESS;
+
+        IJitControllerLike(controller).withdrawAave(aToken, buyerAssets);
+
+        IFundFillLike(controller).midnight_fundFill(
+            marketId, true, buyerAssets, units, pendingFeeIncrease
+        );
+
+        IERC20Like(market.loanToken).approve(midnight, buyerAssets);
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
+interface IUSDCLike {
+    function configureMinter(address minter, uint256 minterAllowedAmount) external returns (bool);
+    function masterMinter() external view returns (address);
+}
+
+contract MidnightMakerAaveJitSourcingTests is MidnightMakerTestBase {
+
+    address constant AAVE_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
+
+    uint256 constant UNITS = 1_000_000e6;
+
+    address                aToken;
+    JitAaveFundingStrategy jitStrategy;
+
+    bytes32 aaveWithdrawKey;
+
+    function _loanTokenDecimals() internal pure override returns (uint8) { return 6; }
+
+    // The market lends real USDC so the sourcing leg can hit the live Aave reserve; the base mints it.
+    function _newLoanToken() internal override returns (MockERC20) {
+        vm.prank(IUSDCLike(USDC_BASE).masterMinter());
+        IUSDCLike(USDC_BASE).configureMinter(address(this), type(uint256).max);
+
+        return MockERC20(USDC_BASE);
+    }
+
+    function setUp() public override {
+        super.setUp();
+
+        aToken = IAavePool(AAVE_POOL).getReserveData(USDC_BASE).aTokenAddress;
+
+        jitStrategy = new JitAaveFundingStrategy(
+            MIDNIGHT, address(almProxy), address(foreignController), aToken
+        );
+
+        aaveWithdrawKey = RateLimitHelpers.makeAddressAddressKey(
+            AaveLib.LIMIT_AAVE_WITHDRAW, AAVE_POOL, aToken
+        );
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setUnlimitedRateLimitData(
+            RateLimitHelpers.makeAddressAddressAddressKey(
+                AaveLib.LIMIT_AAVE_DEPOSIT, USDC_BASE, AAVE_POOL, aToken
+            )
+        );
+        rateLimits.setRateLimitData(aaveWithdrawKey, 5_000_000e6, 0);
+        foreignController.setMaxSlippage(aToken, 1e18 - 1e4);
+        vm.stopPrank();
+
+        uint256 idle = loanToken.balanceOf(address(almProxy));
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositAave(aToken, idle);
+
+        assertEq(loanToken.balanceOf(address(almProxy)), 0);
+
+        _onboardStrategy(address(jitStrategy), 5_000_000e6);
+
+        bytes32 relayerRole = foreignController.RELAYER();
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.grantRole(relayerRole, address(jitStrategy));
+    }
+
+    function _jitBid() internal view returns (Offer memory offer) {
+        offer = _makerOffer(true, MAKER_BUY_TICK, uint128(UNITS));
+
+        offer.callback = address(jitStrategy);
+    }
+
+    function test_jitAave_fillsAMakerBuyFromTheLiveReserve() public {
+        uint256 aTokensBefore = IERC20Like(aToken).balanceOf(address(almProxy));
+        uint256 buyBefore     = rateLimits.getCurrentRateLimit(buyKey);
+
+        ( uint256 buyerAssets, ) = _take(_jitBid(), UNITS);
+
+        assertEq(buyerAssets, _makerBuyerAssets(UNITS, MAKER_BUY_TICK));
+        assertGt(buyerAssets, 0);
+        assertEq(_credit(),   UNITS);
+
+        assertApproxEqAbs(IERC20Like(aToken).balanceOf(address(almProxy)), aTokensBefore - buyerAssets, 2);
+        assertEq(loanToken.balanceOf(address(almProxy)), 0);
+
+        assertEq(loanToken.balanceOf(address(jitStrategy)),           0);
+        assertEq(loanToken.allowance(address(jitStrategy), MIDNIGHT), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(aaveWithdrawKey), 5_000_000e6 - buyerAssets);
+        assertEq(
+            rateLimits.getCurrentRateLimit(_strategyBuyKey(address(jitStrategy))),
+            5_000_000e6 - buyerAssets
+        );
+        assertEq(rateLimits.getCurrentRateLimit(buyKey), buyBefore - buyerAssets);
+    }
+
+    function test_jitAave_isBoundByTheAaveWithdrawKey() public {
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(aaveWithdrawKey, _makerBuyerAssets(UNITS, MAKER_BUY_TICK) - 1, 0);
+
+        _expectTakeRevert(_jitBid(), UNITS, "RateLimits/rate-limit-exceeded");
+    }
+
+    function test_jitAave_needsTheRelayerRole() public {
+        bytes32 relayerRole = foreignController.RELAYER();
+
+        vm.prank(ALM_FREEZER);
+        foreignController.removeRelayer(address(jitStrategy));
+
+        _expectTakeRevert(
+            _jitBid(),
+            UNITS,
+            abi.encodeWithSignature(
+                "AccessControlUnauthorizedAccount(address,bytes32)", address(jitStrategy), relayerRole
+            )
+        );
     }
 
 }
