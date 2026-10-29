@@ -3,7 +3,7 @@ pragma solidity ^0.8.21;
 
 import "../UnitTestBase.t.sol";
 
-import { MidnightTickLib } from "../../../src/libraries/midnight/MidnightTickLib.sol";
+import { MidnightTickLib, MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
 contract MidnightTickLibWrapper {
 
@@ -19,6 +19,21 @@ contract MidnightTickLibTests is UnitTestBase {
 
     function setUp() public {
         wrapper = new MidnightTickLibWrapper();
+    }
+
+    // A zero maxBuyTick refuses maker buys only because this price is exactly zero.
+    function test_tickToPrice_zeroTickIsZero() public view {
+        assertEq(wrapper.tickToPrice(0), 0);
+    }
+
+    function test_tickToPrice_maxTickIsExactlyPar() public view {
+        assertEq(MAX_TICK, 6744);
+        assertEq(wrapper.tickToPrice(MAX_TICK), 1e18);
+    }
+
+    function test_tickToPrice_aboveMaxTickReverts() public {
+        vm.expectRevert("MidnightTickLib/tick-out-of-range");
+        wrapper.tickToPrice(MAX_TICK + 1);
     }
 
     // Pinned against an independent model of the upstream curve.
