@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+import { IERC4626 }    from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import { ERC4626Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC4626Mock.sol";
+
+import { ERC4626Lib } from "../../src/libraries/ERC4626Lib.sol";
+
 import "./Midnight.t.sol";
 
 interface IFundFillLike {
@@ -1492,6 +1497,160 @@ contract MidnightMakerRatifierFreezeTests is MidnightMakerTestBase {
 
         assertGt(_seedCredit(UNITS), 0);
         assertGt(_sell(_offer(true, TICK_99, uint128(UNITS)), UNITS, 1), 0);
+    }
+
+}
+
+interface IJitControllerLike {
+    function withdrawERC4626(address token, uint256 amount, uint256 maxSharesIn) external returns (uint256);
+}
+
+// Phase 3 shape: holds RELAYER and sources each buy fill from a vault just in time.
+contract JitVaultFundingStrategy {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+    address public immutable proxy;
+    address public immutable controller;
+    address public immutable vault;
+
+    constructor(address midnight_, address proxy_, address controller_, address vault_) {
+        midnight   = midnight_;
+        proxy      = proxy_;
+        controller = controller_;
+        vault      = vault_;
+    }
+
+    function onBuy(
+        bytes32 marketId,
+        Market  memory market,
+        uint256 buyerAssets,
+        uint256 units,
+        uint256 pendingFeeIncrease,
+        address buyer,
+        bytes   memory
+    )
+        external returns (bytes32)
+    {
+        require(msg.sender == midnight, "JitVaultFundingStrategy/not-midnight");
+        require(buyer      == proxy,    "JitVaultFundingStrategy/buyer-not-proxy");
+
+        if (buyerAssets == 0) return CALLBACK_SUCCESS;
+
+        IJitControllerLike(controller).withdrawERC4626(
+            vault, buyerAssets, IERC4626(vault).previewWithdraw(buyerAssets)
+        );
+
+        IFundFillLike(controller).midnight_fundFill(
+            marketId, true, buyerAssets, units, pendingFeeIncrease
+        );
+
+        IERC20Like(market.loanToken).approve(midnight, buyerAssets);
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
+contract MidnightMakerJitSourcingTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 1_000_000e18;
+
+    ERC4626Mock             vault;
+    JitVaultFundingStrategy jitStrategy;
+
+    bytes32 vaultWithdrawKey;
+
+    function setUp() public override {
+        super.setUp();
+
+        vault = new ERC4626Mock(address(loanToken));
+
+        jitStrategy = new JitVaultFundingStrategy(
+            MIDNIGHT, address(almProxy), address(foreignController), address(vault)
+        );
+
+        vaultWithdrawKey = RateLimitHelpers.makeAssetKey(ERC4626Lib.LIMIT_4626_WITHDRAW, address(vault));
+
+        vm.startPrank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressAddressKey(
+                ERC4626Lib.LIMIT_4626_DEPOSIT, address(loanToken), address(vault)
+            ),
+            type(uint256).max,
+            0
+        );
+        rateLimits.setRateLimitData(vaultWithdrawKey, 5_000_000e18, 0);
+        foreignController.setMaxExchangeRate(address(vault), 1, 1);
+        vm.stopPrank();
+
+        uint256 idle = loanToken.balanceOf(address(almProxy));
+
+        vm.prank(ALM_RELAYER);
+        foreignController.depositERC4626(address(vault), idle, idle);
+
+        assertEq(loanToken.balanceOf(address(almProxy)), 0);
+
+        _onboardStrategy(address(jitStrategy), 5_000_000e18);
+    }
+
+    function _jitBid() internal view returns (Offer memory offer) {
+        offer = _makerOffer(true, MAKER_BUY_TICK, uint128(UNITS));
+
+        offer.callback = address(jitStrategy);
+    }
+
+    function _grantRelayer() internal {
+        bytes32 relayerRole = foreignController.RELAYER();
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.grantRole(relayerRole, address(jitStrategy));
+    }
+
+    function test_jit_fillsAMakerBuyFromTheVault() public {
+        _grantRelayer();
+
+        uint256 sharesBefore = vault.balanceOf(address(almProxy));
+
+        ( uint256 buyerAssets, ) = _take(_jitBid(), UNITS);
+
+        assertEq(buyerAssets, _makerBuyerAssets(UNITS, MAKER_BUY_TICK));
+        assertEq(_credit(),   UNITS);
+
+        assertEq(vault.balanceOf(address(almProxy)),     sharesBefore - buyerAssets);
+        assertEq(loanToken.balanceOf(address(almProxy)), 0);
+
+        assertEq(loanToken.balanceOf(address(jitStrategy)),           0);
+        assertEq(loanToken.allowance(address(jitStrategy), MIDNIGHT), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(vaultWithdrawKey), 5_000_000e18 - buyerAssets);
+        assertEq(
+            rateLimits.getCurrentRateLimit(_strategyBuyKey(address(jitStrategy))),
+            5_000_000e18 - buyerAssets
+        );
+        assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18 - buyerAssets);
+    }
+
+    function test_jit_needsTheRelayerRole() public {
+        _expectTakeRevert(
+            _jitBid(),
+            UNITS,
+            abi.encodeWithSignature(
+                "AccessControlUnauthorizedAccount(address,bytes32)",
+                address(jitStrategy),
+                foreignController.RELAYER()
+            )
+        );
+    }
+
+    function test_jit_isBoundByTheVaultWithdrawKey() public {
+        _grantRelayer();
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(vaultWithdrawKey, _makerBuyerAssets(UNITS, MAKER_BUY_TICK) - 1, 0);
+
+        _expectTakeRevert(_jitBid(), UNITS, "RateLimits/rate-limit-exceeded");
     }
 
 }
