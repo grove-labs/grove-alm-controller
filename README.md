@@ -16,6 +16,8 @@ This repo contains the onchain components of the Grove Liquidity Layer. The foll
 - `MainnetController`: This controller contract is intended to be used on the Ethereum mainnet.
 - `RateLimits`: This contract is used to enforce and update rate limits on logic in the `MainnetController` contract. This contract is stateful and is used to store the rate limit data.
 
+The Morpho Midnight integration on `ForeignController`, including maker mode, is described in [MIDNIGHT.md](MIDNIGHT.md).
+
 ## ⚖️ Licensing
 
 This repository is a fork of the sparkdotfi/spark-alm-controller. All code in this repository is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0), which requires that modifications to the code must be made available under the same license. See the [LICENSE](LICENSE) file for more details.
