@@ -25,7 +25,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `setMidnightMakeConfig(marketId, maxOfferSize)` | admin; `FREEZER` may set `0` only | Needs a market onboarded for taking. Caches `loanToken` and `maturity` from `toMarket`. `maxOfferSize` is the make-enabled flag (`!= 0`) and caps the assets of each **fill**, not each offer. |
 | `setMidnightGroups(marketId, buyGroup, sellGroup)` | admin | Both groups must be non-zero and distinct (`FC/invalid-groups`). |
 | `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). |
-| `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good, and even a zero-unit take of an offer in it then reverts `ConsumedUnits()`. |
+| `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and the dust rule makes that a no-op. |
 
 Group rules: one group per direction per market. To make a market one-directional, leave the other direction's strategy keys unset. Never reuse a group on another market, because cancelling it would retire both books. This is an operational rule, not a code check.
 

@@ -1556,6 +1556,7 @@ contract MidnightMakerZeroUnitTakeTests is MidnightMakerTestBase {
         _assertUnchanged(before);
     }
 
+    // Holds because these offers cap maxUnits below type(uint128).max, the consumed amount a cancel sets.
     function test_zeroUnitTake_isRefusedAfterAGroupCancel() public {
         vm.startPrank(ALM_RELAYER);
         foreignController.cancelMidnightOfferGroup(BUY_GROUP);
