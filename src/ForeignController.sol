@@ -808,8 +808,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         bytes32 marketId,
         bool    buy,
         uint256 assets,
-        uint256 units,
-        uint256 pendingFee
+        uint256 units
     )
         external nonReentrant
     {
@@ -822,8 +821,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             strategy     : msg.sender,
             buy          : buy,
             assets       : assets,
-            units        : units,
-            pendingFee   : pendingFee
+            units        : units
         }));
 
         emit MidnightFillFunded(marketId, msg.sender, buy, assets, units);

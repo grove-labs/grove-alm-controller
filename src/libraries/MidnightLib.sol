@@ -82,7 +82,7 @@ library MidnightLib {
         bool         buy;
         uint256      assets;
         uint256      units;
-        uint256      pendingFee;
+
     }
 
     struct RedeemParams {
@@ -366,9 +366,15 @@ library MidnightLib {
             return;
         }
 
+        // Read from the position rather than taken from the caller; the fill leaves the per-unit
+        // fee rate unchanged, so a full exit is the only case this cannot recover.
+        ( uint256 credit, uint256 pendingFee ) = _position(
+            IMidnight(params.midnight).toMarket(marketId), marketId, address(params.proxy)
+        );
+
         uint256 floor      = MidnightTickLib.tickToPrice(config.minSellTick);
         uint256 yieldFloor = _minSellPrice(
-            config.maxSellYield, timeToMaturity, params.units, params.pendingFee
+            config.maxSellYield, timeToMaturity, credit, pendingFee
         );
 
         if (yieldFloor > floor) floor = yieldFloor;

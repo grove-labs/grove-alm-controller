@@ -8,8 +8,7 @@ interface IFundFillLike {
         bytes32 marketId,
         bool    buy,
         uint256 assets,
-        uint256 units,
-        uint256 pendingFee
+        uint256 units
     ) external;
 }
 
@@ -60,7 +59,7 @@ contract MirrorFundingStrategy {
         if (buyerAssets == 0) return CALLBACK_SUCCESS;
 
         IFundFillLike(controller).midnight_fundFill(
-            marketId, true, buyerAssets, units, pendingFeeIncrease
+            marketId, true, buyerAssets, units
         );
 
         IERC20Like(market.loanToken).approve(midnight, buyerAssets);
@@ -87,7 +86,7 @@ contract MirrorFundingStrategy {
         if (units == 0) return CALLBACK_SUCCESS;
 
         IFundFillLike(controller).midnight_fundFill(
-            marketId, false, sellerAssets, units, pendingFeeDecrease
+            marketId, false, sellerAssets, units
         );
 
         return CALLBACK_SUCCESS;
@@ -603,14 +602,14 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
     function test_attack_directFundFillFromAnUnfundedAddress() public {
         vm.prank(attacker);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
+        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18);
     }
 
     function test_attack_directFundFillFromTheOnboardedStrategy() public {
         uint256 proxyBalanceBefore = loanToken.balanceOf(address(almProxy));
 
         vm.prank(address(strategy));
-        foreignController.midnight_fundFill(marketId, true, 1_000e18, 1_000_000e18, 0);
+        foreignController.midnight_fundFill(marketId, true, 1_000e18, 1_000_000e18);
 
         assertEq(loanToken.balanceOf(address(strategy)), 1_000e18);
         assertEq(loanToken.balanceOf(address(almProxy)), proxyBalanceBefore - 1_000e18);
@@ -624,7 +623,7 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
     function test_attack_directFundFillAboveThePriceBound() public {
         vm.prank(address(strategy));
         vm.expectRevert("MidnightLib/fill-price-too-high");
-        foreignController.midnight_fundFill(marketId, true, 1_000_000e18, 1_000_000e18, 0);
+        foreignController.midnight_fundFill(marketId, true, 1_000_000e18, 1_000_000e18);
     }
 
     function test_attack_directSellFillCannotCreateBuyCapacity() public {
@@ -632,7 +631,7 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
         rateLimits.setRateLimitData(buyKey, 5_000_000e18, 0, 1_000_000e18, block.timestamp);
 
         vm.prank(address(strategy));
-        foreignController.midnight_fundFill(marketId, false, 500_000e18, 500_000e18, 0);
+        foreignController.midnight_fundFill(marketId, false, 500_000e18, 500_000e18);
 
         assertEq(loanToken.balanceOf(address(strategy)), 0);
 
@@ -785,8 +784,8 @@ contract FundFillReenterer {
     function _reenter(uint256 units) internal {
         (bool ok, bytes memory ret) = controller.call(
             abi.encodeWithSignature(
-                "midnight_fundFill(bytes32,bool,uint256,uint256,uint256)",
-                marketId, true, units / 2, units, 0
+                "midnight_fundFill(bytes32,bool,uint256,uint256)",
+                marketId, true, units / 2, units
             )
         );
 
@@ -874,7 +873,7 @@ contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
 
         vm.prank(stranger);
         vm.expectRevert("RateLimits/zero-maxAmount");
-        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
+        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18);
     }
 
 }
