@@ -1057,6 +1057,22 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
+    // No buy-not-enabled check on this path: tickToPrice(0) == 0 is what refuses the fill.
+    function test_midnight_fundFill_zeroMaxBuyTickRefusesEveryBuy() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            marketId, 0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
+        );
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-high");
+        controller.midnight_fundFill(marketId, true, 1, 1e30, 0);
+    }
+
     function test_midnight_fundFill_oneWeiOverTheBound() public {
         _setLimits(MAX_OFFER_SIZE);
 
