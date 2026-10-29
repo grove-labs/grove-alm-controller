@@ -878,3 +878,287 @@ contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
     }
 
 }
+
+// Claims the whole fill as pending fee, the most a strategy could report.
+contract FeeInflatingStrategy {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable controller;
+
+    constructor(address controller_) {
+        controller = controller_;
+    }
+
+    function onSell(
+        bytes32 marketId, Market memory, uint256 sellerAssets, uint256 units, uint256, address, address, bytes memory
+    )
+        external returns (bytes32)
+    {
+        IFundFillLike(controller).midnight_fundFill(marketId, false, sellerAssets, units, units);
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
+// Buys the proxy's ask and, from its own onBuy, sells into the proxy's bid before the ask's onSell runs.
+contract NestedMakerBuyTaker {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+
+    constructor(address midnight_) {
+        midnight = midnight_;
+    }
+
+    function fund(Market memory market, address loanToken, address collateralToken, uint256 collateral)
+        external
+    {
+        IERC20(loanToken).approve(midnight, type(uint256).max);
+        IERC20(collateralToken).approve(midnight, type(uint256).max);
+
+        IMidnightTestHarness(midnight).supplyCollateral(market, 0, collateral, address(this));
+    }
+
+    function take(Offer memory ask, uint256 askUnits, Offer memory bid, uint256 bidUnits)
+        external returns (uint256, uint256)
+    {
+        return IMidnight(midnight).take(
+            ask, "", askUnits, address(this), address(0), address(this), abi.encode(bid, bidUnits)
+        );
+    }
+
+    function onBuy(bytes32, Market memory, uint256, uint256, uint256, address, bytes memory data)
+        external returns (bytes32)
+    {
+        require(msg.sender == midnight, "NestedMakerBuyTaker/not-midnight");
+
+        ( Offer memory bid, uint256 bidUnits ) = abi.decode(data, (Offer, uint256));
+
+        IMidnight(midnight).take(bid, "", bidUnits, address(this), address(this), address(0), "");
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
+contract MidnightMakerSellFeeTestBase is MidnightMakerTestBase {
+
+    uint256 constant SEEDED_UNITS = 1_000_000e18;
+
+    // Low enough that the yield floor, not minSellTick, prices the exit.
+    uint16 constant SELL_YIELD = 2_00;
+
+    function setUp() public virtual override {
+        super.setUp();
+
+        _setYields(MIN_BUY_YIELD, SELL_YIELD);
+    }
+
+    function _position() internal view returns (uint256, uint256) {
+        ( uint128 credit, uint128 pendingFee, ) =
+            midnight.updatePositionView(market, marketId, address(almProxy));
+
+        return (credit, pendingFee);
+    }
+
+    function _floorAtFeePerUnit(uint256 feePerUnit) internal view returns (uint256 floor) {
+        floor = MidnightLib._minSellPrice(SELL_YIELD, _timeToMaturity(), 1e18, feePerUnit);
+
+        uint256 tickFloor = MidnightTickLib.tickToPrice(TICK_98);
+
+        if (tickFloor > floor) floor = tickFloor;
+    }
+
+    function _firstTickAtOrAbove(uint256 price) internal pure returns (uint256 tick) {
+        tick = TICK_98;
+
+        while (MidnightTickLib.tickToPrice(tick) < price) tick += TICK_SPACING;
+    }
+
+    function _liveFeePerUnit() internal view returns (uint256) {
+        return uint256(MidnightLib.MAX_CONTINUOUS_FEE) * _timeToMaturity();
+    }
+
+}
+
+contract MidnightMakerSellPendingFeeTests is MidnightMakerSellFeeTestBase {
+
+    FeeInflatingStrategy inflatingStrategy;
+
+    function setUp() public override {
+        super.setUp();
+
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+        _seedCredit(SEEDED_UNITS);
+
+        inflatingStrategy = new FeeInflatingStrategy(address(foreignController));
+
+        _onboardStrategy(address(inflatingStrategy), 5_000_000e18);
+    }
+
+    function _positionFloorTick() internal view returns (uint256) {
+        ( uint256 credit, uint256 pendingFee ) = _position();
+
+        assertGt(pendingFee, 0);
+
+        return _firstTickAtOrAbove(_floorAtFeePerUnit(pendingFee * 1e18 / credit));
+    }
+
+    function _zeroFeeFloorTick() internal view returns (uint256) {
+        return _firstTickAtOrAbove(_floorAtFeePerUnit(0));
+    }
+
+    function _inflatedAsk(uint256 tick, uint256 units) internal view returns (Offer memory offer) {
+        offer = _makerOffer(false, tick, uint128(units));
+
+        offer.callback = address(inflatingStrategy);
+    }
+
+    function test_makerSell_partialExitClearsAtThePositionFeeFloor() public {
+        uint256 units = 400_000e18;
+        uint256 tick  = _positionFloorTick();
+
+        assertLt(tick, _zeroFeeFloorTick());
+
+        _expectTakeRevert(
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-price-too-low"
+        );
+
+        uint256 sellBefore         = rateLimits.getCurrentRateLimit(sellKey);
+        uint256 strategySellBefore = rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)));
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, tick));
+        assertEq(_credit(),    SEEDED_UNITS - units);
+
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), sellBefore - sellerAssets);
+        assertEq(
+            rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy))),
+            strategySellBefore - sellerAssets
+        );
+    }
+
+    function test_makerSell_partialExitIgnoresAnInflatedReportedFee() public {
+        uint256 units = 400_000e18;
+        uint256 tick  = _positionFloorTick();
+
+        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-price-too-low");
+
+        ( , uint256 sellerAssets ) = _take(_inflatedAsk(tick, units), units);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, tick));
+        assertEq(_credit(),    SEEDED_UNITS - units);
+    }
+
+    function test_makerSell_fullExitClearsAtTheZeroFeeYieldFloor() public {
+        uint256 units = _credit();
+        uint256 tick  = _zeroFeeFloorTick();
+
+        assertLt(_positionFloorTick(), tick);
+
+        _expectTakeRevert(
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-price-too-low"
+        );
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, tick));
+
+        assertEq(_credit(),                                  0);
+        assertEq(midnight.debt(marketId, address(almProxy)), 0);
+    }
+
+    function test_makerSell_fullExitIgnoresAnInflatedReportedFee() public {
+        uint256 units = _credit();
+        uint256 tick  = _zeroFeeFloorTick();
+
+        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-price-too-low");
+
+        _take(_inflatedAsk(tick, units), units);
+
+        assertEq(_credit(), 0);
+    }
+
+    function testFuzz_makerSell_honestFillAtThePositionFeeFloorNeverTrips(
+        uint256 units,
+        uint256 ticksAbove
+    )
+        public
+    {
+        units      = bound(units,      1, SEEDED_UNITS / 2);
+        ticksAbove = bound(ticksAbove, 0, 64);
+
+        uint256 tick = _positionFloorTick() + ticksAbove * TICK_SPACING;
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, tick));
+        assertEq(_credit(),    SEEDED_UNITS - units);
+    }
+
+}
+
+contract MidnightMakerNestedFillTests is MidnightMakerSellFeeTestBase {
+
+    uint256 constant NESTED_UNITS = 1_000_000e18;
+
+    NestedMakerBuyTaker nestedTaker;
+
+    function setUp() public override {
+        super.setUp();
+
+        // Bought before the fee goes live, so the position carries none and an exit reports none.
+        _seedCredit(SEEDED_UNITS);
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
+        nestedTaker = new NestedMakerBuyTaker(MIDNIGHT);
+
+        loanToken.mint(address(nestedTaker), 100_000_000e18);
+        collateralToken.mint(address(nestedTaker), 100_000_000e18);
+
+        nestedTaker.fund(market, address(loanToken), address(collateralToken), 10_000_000e18);
+    }
+
+    function _nestedTake(uint256 askTick) internal returns (uint256, uint256) {
+        return nestedTaker.take(
+            _makerOffer(false, askTick, uint128(SEEDED_UNITS)),
+            SEEDED_UNITS,
+            _makerOffer(true, MAKER_BUY_TICK, uint128(NESTED_UNITS)),
+            NESTED_UNITS
+        );
+    }
+
+    function test_sec01_nestedMakerBuyCannotLowerTheSellFloor() public {
+        ( , uint256 pendingFee ) = _position();
+
+        assertEq(pendingFee, 0);
+
+        uint256 tick = _firstTickAtOrAbove(_floorAtFeePerUnit(0)) - TICK_SPACING;
+
+        // A floor read from the post-fill position alone would clear this ask.
+        assertGe(MidnightTickLib.tickToPrice(tick), _floorAtFeePerUnit(_liveFeePerUnit()));
+
+        vm.expectRevert("MidnightLib/fill-price-too-low");
+        _nestedTake(tick);
+    }
+
+    function test_sec01_nestedMakerBuyClearsAtTheZeroFeeYieldFloor() public {
+        uint256 tick = _firstTickAtOrAbove(_floorAtFeePerUnit(0));
+
+        ( , uint256 sellerAssets ) = _nestedTake(tick);
+
+        assertEq(sellerAssets, _makerSellerAssets(SEEDED_UNITS, tick));
+
+        ( uint256 credit, uint256 pendingFee ) = _position();
+
+        assertEq(credit,                     NESTED_UNITS);
+        assertEq(pendingFee * 1e18 / credit, _liveFeePerUnit());
+
+        assertEq(midnight.debt(marketId, address(almProxy)), 0);
+    }
+
+}
