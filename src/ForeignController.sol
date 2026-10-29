@@ -13,7 +13,6 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { MessagingFee }  from "./interfaces/ILayerZero.sol";
-import { Offer }         from "./interfaces/MidnightInterfaces.sol";
 
 import { IMidnight, Offer } from "./interfaces/MidnightInterfaces.sol";
 
