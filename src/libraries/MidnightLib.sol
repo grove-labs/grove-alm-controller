@@ -353,7 +353,7 @@ library MidnightLib {
 
             if (yieldBound < bound) bound = yieldBound;
 
-            require(params.assets <= params.units * bound / WAD, "MidnightLib/fill-price-too-high");
+            require(params.assets * WAD <= params.units * bound, "MidnightLib/fill-price-too-high");
 
             _decreaseStrategyLimit(
                 params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_BUY, params.strategy, marketId, params.assets

@@ -998,6 +998,22 @@ contract MidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
+    function test_midnight_fundFill_buyChecksTheFeeBeforeTheLossFactor() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, 100
+        );
+
+        venue.setContinuousFee(marketId, MidnightLib._continuousFeePerSecond(10) + 1);
+        venue.setLossFactor(marketId, 101);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/continuous-fee-too-high");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
     function test_midnight_fundFill_lossFactorTooHigh() public {
         _setLimits(MAX_OFFER_SIZE);
 
