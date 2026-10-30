@@ -69,6 +69,8 @@ The call is roleless on purpose: the caller's funded strategy key is the authori
 
 **Dust callbacks.** The strategy returns success without calling `fundFill` when `buyerAssets == 0` on a buy, or when `units == 0` on a sell or a zero-unit take. Nothing is metered and nothing moves. A zero-asset buy gives the proxy free dust credit. This is a conformance rule: `fundFill` refuses both cases, so a strategy that called it would fail an unrelated taker's transaction.
 
+**Sell dust.** A sell whose assets round to zero (`units > 0`, `sellerAssets == 0`) reverts by design with `MidnightLib/zero-assets`; strategies do not short-circuit it. Midnight has already taken the proxy's units when `onSell` runs, so a short-circuit would hand those units away with no floor and no meter; the revert costs only the dust taker.
+
 ## Strategy conformance rules
 
 Strategies are trusted code. The controller does not cross-check what a strategy reports; it bounds it with the price gates and the keys. Every strategy must:
@@ -78,7 +80,7 @@ Strategies are trusted code. The controller does not cross-check what a strategy
 - call `fundFill` with the callback's direction and exactly Midnight's `assets`, `units` and pending-fee value;
 - leave no allowance behind and no balance in the **strategy** itself;
 - never take amounts, venues or slippage parameters from callback data;
-- follow the dust rule above.
+- follow the dust rules above: short-circuit a zero-asset buy and a zero-unit sell, and pass a sell whose assets round to zero to `fundFill`, which reverts by design; strategies do not short-circuit it.
 
 **Pass-through strategies (phase 2)**, such as `ProxyBasicFillStrategy`, hold no role.
 
@@ -114,6 +116,8 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 | `removeRelayer(strategy)` | an operator-role strategy's sourcing path | FC `FREEZER` |
 | zero `LIMIT_MIDNIGHT_STRATEGY_*` | one strategy, one market and direction, its fabricated `fundFill` calls included | RateLimits admin |
 | `setMidnightRatifierAuthorization(ratifier, false)` | every resting offer naming that ratifier | admin |
+
+`setMidnightMakeConfig` reads the venue (`toMarket`) even when it only zeroes `maxOfferSize`, so that lever depends on the read. This is accepted: the Midnight singleton is immutable and market records are permanent, so the read cannot start failing.
 
 **Runbook.**
 
