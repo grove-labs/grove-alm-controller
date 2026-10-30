@@ -29,6 +29,17 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 
 Group rules: one group per direction per market. To make a market one-directional, leave the other direction's strategy keys unset. Never reuse a group on another market, because cancelling it would retire both books. This is an operational rule, not a code check.
 
+### Enabling maker mode
+
+The market must already be onboarded for taking: `setMidnightMarketConfig` with a non-zero `minSellTick`, and `LIMIT_MIDNIGHT_BUY`, `LIMIT_MIDNIGHT_SELL` and `LIMIT_MIDNIGHT_REDEEM` set for it (see [Rate-limit model](#rate-limit-model)). `midnight_isCallbackAllowed` stays false for a direction whose market key is unset. Then, in this order:
+
+1. Deploy the ratifier and the funding strategy from the periphery, both bound to this proxy and this controller. Before authorizing anything, review the deployed code against the audited source, check the strategy against the [conformance rules](#strategy-conformance-rules), and run the opcode scan over the ratifier's runtime (see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant)).
+2. `setMidnightMakeConfig(marketId, maxOfferSize)`.
+3. `setMidnightGroups(marketId, buyGroup, sellGroup)`.
+4. Set `LIMIT_MIDNIGHT_STRATEGY_BUY` and `LIMIT_MIDNIGHT_STRATEGY_SELL` for each strategy and direction the market's offers may use. A direction whose strategy keys stay unset stays closed.
+5. Grant the ratifier's roles. The quoter gets `QUOTER_ROLE` at deployment, through the constructor's `quoter_` argument, or in the spell. The spell grants `FREEZER_ROLE` and `MANAGER_ROLE`, so the ratifier has a freezer before it is authorized.
+6. `setMidnightRatifierAuthorization(ratifier, true)` **last**, once everything above is in place, the ratifier's roles included. This is the step that makes resting offers fillable.
+
 ## Rate-limit model
 
 Per market, shared by takes and maker fills (`RateLimitHelpers.makeBytes32Key(id, marketId)`):
@@ -106,7 +117,7 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 **Ratifier freeze.** The ratifier's `freeze()`, held by the ratifier's own freezer role, is the maker kill switch on both hosts. It stops new ratified maker fills in both directions. Only the ratifier admin can `unfreeze`. It does not stop a keyed strategy calling `fundFill` directly. Zeroing a strategy's keys stops that strategy; zeroing `maxOfferSize` (FC `FREEZER` or admin) stops every strategy on that market, fabricated `fundFill` calls included, because it is `fundFill`'s first check.
 
-**One ratifier per proxy.** Keep exactly one ratifier authorized for each proxy. Each host, and each chain, has its own ratifier deployment, bound to one proxy and one controller, and a `freeze()` stops only the ratifier it is called on. To change ratifier logic, deploy a new ratifier and swap the authorization: grant the new ratifier its roles (quoter, freezer, manager), authorize it, and deauthorize the old one with `setMidnightRatifierAuthorization(old, false)` in the same governance action. Offers signed for the old ratifier die with its deauthorization, because the ratifier address is part of the offer. If more than one ratifier is ever authorized for the proxy, freeze every one of them.
+**One ratifier per proxy.** Keep exactly one ratifier authorized for each proxy. Each host, and each chain, has its own ratifier deployment, bound to one proxy and one controller, and a `freeze()` stops only the ratifier it is called on. To change ratifier logic, deploy a new ratifier and swap the authorization: grant the new ratifier its `FREEZER_ROLE` and `MANAGER_ROLE` (and `QUOTER_ROLE`, unless its deployment granted it), authorize it, and deauthorize the old one with `setMidnightRatifierAuthorization(old, false)` in the same governance action. Offers signed for the old ratifier die with its deauthorization, because the ratifier address is part of the offer. If more than one ratifier is ever authorized for the proxy, freeze every one of them.
 
 | Lever | Scope | Who |
 |---|---|---|
