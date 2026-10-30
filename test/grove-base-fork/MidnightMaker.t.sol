@@ -399,6 +399,16 @@ contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
         );
     }
 
+    function test_makerSell_dustFillRevertsZeroAssets() public {
+        assertEq(_makerSellerAssets(1, 0), 0);
+
+        vm.expectCall(
+            address(foreignController),
+            abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector, marketId, false, 0, 1)
+        );
+        _expectTakeRevert(_makerOffer(false, 0, uint128(400_000e18)), 1, "MidnightLib/zero-assets");
+    }
+
     function test_makerSell_strategyMovesNoAssets() public {
         _take(_makerOffer(false, TICK_98, uint128(400_000e18)), 400_000e18);
 
