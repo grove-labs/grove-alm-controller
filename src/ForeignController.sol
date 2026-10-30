@@ -13,7 +13,8 @@ import { ICCTPLike }     from "./interfaces/CCTPInterfaces.sol";
 import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { MessagingFee }  from "./interfaces/ILayerZero.sol";
-import { Offer }         from "./interfaces/MidnightInterfaces.sol";
+
+import { IMidnight, Offer } from "./interfaces/MidnightInterfaces.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -47,6 +48,20 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
     event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
+    event MidnightFillFunded(
+        bytes32 indexed marketId,
+        address indexed strategy,
+        bool            buy,
+        uint256         assets,
+        uint256         units
+    );
+    event MidnightGroupsSet(bytes32 indexed marketId, bytes32 buyGroup, bytes32 sellGroup);
+    event MidnightMakeConfigSet(
+        bytes32 indexed marketId,
+        address loanToken,
+        uint256 maturity,
+        uint256 maxOfferSize
+    );
     event MidnightMarketConfigSet(
         bytes32 indexed marketId,
         uint16  maxBuyTick,
@@ -56,6 +71,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
+    event MidnightOfferGroupCancelled(bytes32 indexed group);
+    event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -91,7 +108,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     mapping(address pool => uint256 maxSlippage)                     public maxSlippages;  // 1e18 precision
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
-    mapping(bytes32 marketId => MidnightLib.MarketConfig config) public midnightMarketConfigs;
+    mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
+    mapping(bytes32 marketId => MidnightLib.OfferGroups groups) internal _midnightOfferGroups;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -241,18 +259,15 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        MidnightLib.MarketConfig memory config = MidnightLib.MarketConfig({
-            maxBuyTick       : maxBuyTick,
-            minSellTick      : minSellTick,
-            minBuyYield      : minBuyYield,
-            maxSellYield     : maxSellYield,
-            maxContinuousFee : maxContinuousFee,
-            maxLossFactor    : maxLossFactor
-        });
-
-        MidnightLib.validateMarketConfig(config);
-
-        midnightMarketConfigs[marketId] = config;
+        MidnightLib.setTakeConfig(
+            _midnightMarketConfigs[marketId],
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor
+        );
 
         emit MidnightMarketConfigSet(
             marketId,
@@ -263,6 +278,47 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             maxContinuousFee,
             maxLossFactor
         );
+    }
+
+    function setMidnightMakeConfig(bytes32 marketId, uint256 maxOfferSize) external {
+        // Disabling make is a safety action the freezer may take; enabling stays with governance.
+        if (maxOfferSize != 0 || !hasRole(FREEZER, msg.sender)) _checkRole(DEFAULT_ADMIN_ROLE);
+
+        ( address loanToken, uint256 maturity ) = MidnightLib.setMakeConfig(
+            _midnightMarketConfigs[marketId], midnight, marketId, maxOfferSize
+        );
+
+        emit MidnightMakeConfigSet(marketId, loanToken, maturity, maxOfferSize);
+    }
+
+    function setMidnightGroups(bytes32 marketId, bytes32 buyGroup, bytes32 sellGroup) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        // Zero is the ratifier's "not designated" sentinel, and one shared group cancels both sides.
+        require(
+            buyGroup != 0 && sellGroup != 0 && buyGroup != sellGroup,
+            "FC/invalid-groups"
+        );
+
+        _midnightOfferGroups[marketId] = MidnightLib.OfferGroups({
+            buyGroup  : buyGroup,
+            sellGroup : sellGroup
+        });
+
+        emit MidnightGroupsSet(marketId, buyGroup, sellGroup);
+    }
+
+    function setMidnightRatifierAuthorization(address ratifier, bool authorized) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(ratifier != address(0), "FC/ratifier-zero-address");
+
+        proxy.doCall(
+            midnight,
+            abi.encodeCall(IMidnight.setIsAuthorized, (ratifier, authorized, address(proxy)))
+        );
+
+        emit MidnightRatifierAuthorizationSet(ratifier, authorized);
     }
 
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
@@ -726,10 +782,86 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             rateLimits   : rateLimits,
             midnight     : midnight,
             marketId     : marketId,
-            config       : midnightMarketConfigs[marketId],
+            config       : _midnightMarketConfigs[marketId],
             units        : units,
             minAssetsOut : minAssetsOut
         }));
+    }
+
+    function cancelMidnightOfferGroup(bytes32 group) external nonReentrant {
+        // The ratifier freeze is the maker kill switch; the freezer may also cancel groups.
+        if (!hasRole(FREEZER, msg.sender)) _checkRole(RELAYER);
+
+        proxy.doCall(
+            midnight,
+            abi.encodeCall(IMidnight.setConsumed, (group, type(uint128).max, address(proxy)))
+        );
+
+        emit MidnightOfferGroupCancelled(group);
+    }
+
+    /**********************************************************************************************/
+    /*** Midnight maker funding                                                                 ***/
+    /**********************************************************************************************/
+
+    // Deliberately roleless: a funded (market, strategy) rate limit is the authorization.
+    function midnight_fundFill(
+        bytes32 marketId,
+        bool    buy,
+        uint256 assets,
+        uint256 units,
+        uint256 pendingFee
+    )
+        external nonReentrant
+    {
+        MidnightLib.fundFill(MidnightLib.FundFillParams({
+            proxy        : proxy,
+            rateLimits   : rateLimits,
+            midnight     : midnight,
+            marketId     : marketId,
+            config       : _midnightMarketConfigs[marketId],
+            strategy     : msg.sender,
+            buy          : buy,
+            assets       : assets,
+            units        : units,
+            pendingFee   : pendingFee
+        }));
+
+        emit MidnightFillFunded(marketId, msg.sender, buy, assets, units);
+    }
+
+    function midnightMarketConfigs(bytes32 marketId)
+        external view returns (MidnightLib.MarketConfig memory)
+    {
+        return _midnightMarketConfigs[marketId];
+    }
+
+    function midnight_getDesignatedGroups(bytes32 marketId)
+        external view returns (MidnightLib.OfferGroups memory)
+    {
+        return _midnightOfferGroups[marketId];
+    }
+
+    function midnight_isCallbackAllowed(bytes32 marketId, address callback, bool buy)
+        external view returns (bool)
+    {
+        // Hard-coded, so a key funded for the zero address by mistake cannot ratify an unmetered offer.
+        if (callback == address(0))                                 return false;
+        if (_midnightMarketConfigs[marketId].maxOfferSize == 0)     return false;
+
+        bytes32 strategyKey = RateLimitHelpers.makeAddressBytes32Key(
+            buy ? MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY : MidnightLib.LIMIT_MIDNIGHT_STRATEGY_SELL,
+            callback,
+            marketId
+        );
+
+        bytes32 marketKey = RateLimitHelpers.makeBytes32Key(
+            buy ? MidnightLib.LIMIT_MIDNIGHT_BUY : MidnightLib.LIMIT_MIDNIGHT_SELL,
+            marketId
+        );
+
+        return rateLimits.getRateLimitData(strategyKey).maxAmount != 0
+            && rateLimits.getRateLimitData(marketKey).maxAmount   != 0;
     }
 
     /**********************************************************************************************/
@@ -875,7 +1007,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             rateLimits   : rateLimits,
             midnight     : midnight,
             marketId     : marketId,
-            config       : midnightMarketConfigs[marketId],
+            config       : _midnightMarketConfigs[marketId],
             offer        : offer,
             ratifierData : ratifierData,
             units        : units,
