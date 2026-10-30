@@ -37,7 +37,7 @@ The market must already be onboarded for taking: `setMidnightMarketConfig` with 
 2. `setMidnightMakeConfig(marketId, maxOfferSize)`.
 3. `setMidnightGroups(marketId, buyGroup, sellGroup)`.
 4. Set `LIMIT_MIDNIGHT_STRATEGY_BUY` and `LIMIT_MIDNIGHT_STRATEGY_SELL` for each strategy and direction the market's offers may use. A direction whose strategy keys stay unset stays closed.
-5. Grant the ratifier's roles. The quoter gets `QUOTER_ROLE` at deployment, through the constructor's `quoter_` argument, or in the spell. The spell grants `FREEZER_ROLE` and `MANAGER_ROLE`, so the ratifier has a freezer before it is authorized.
+5. Grant the ratifier's roles. The quoter gets `QUOTER_ROLE` at deployment, through the constructor's `quoter_` argument, or in the spell. The spell grants `FREEZER_ROLE` and `MANAGER_ROLE` to keys other than the quoter. With these grants in the spell, the ratifier has a freezer before it is authorized.
 6. `setMidnightRatifierAuthorization(ratifier, true)` **last**, once everything above is in place, the ratifier's roles included. This is the step that makes resting offers fillable.
 
 ## Rate-limit model
