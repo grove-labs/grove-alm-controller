@@ -138,11 +138,11 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 **Strategy compromised.** A ratifier freeze does not stop a keyed strategy calling `fundFill` directly, so the order is different:
 
-1. The FC `FREEZER` zeroes `maxOfferSize` with `setMidnightMakeConfig(marketId, 0)` on every market the strategy is keyed for, one call per market. This stops fabricated `fundFill` calls, which the ratifier freeze does not. It also stops every other strategy on those markets.
+1. The FC `FREEZER` zeroes `maxOfferSize` with `setMidnightMakeConfig(marketId, 0)` on every market the strategy is keyed for, one call per market. This stops fabricated `fundFill` calls, which the ratifier freeze does not. Strategy keys are hashes in `RateLimits` and cannot be listed on-chain, so keep each strategy's keyed markets on record off-chain; if the list is uncertain, zero every market whose latest `MidnightMakeConfigSet` has a non-zero `maxOfferSize`. Each call needs the full `marketId`. It also stops every other strategy on those markets.
 2. Governance zeroes the strategy's `LIMIT_MIDNIGHT_STRATEGY_*` keys.
 3. For an operator-role strategy, the FC `FREEZER` revokes its `RELAYER` role with `removeRelayer`.
 
-Once the strategy's keys are zero, the admin can restore `maxOfferSize` for the other strategies on those markets.
+Once the strategy's keys are zero, the admin can restore `maxOfferSize` for the other strategies on those markets. Every lever is visible in the mempool, and a compromised strategy can draw the remaining buy budget in front of it, so send the freezer's and governance's transactions through a private relay.
 
 Revoking the controller's `CONTROLLER` role on the ALMProxy is not a maker kill switch. It stops maker buys, but not maker sells, because the sell branch of `fundFill` makes no proxy call and Midnight pays the proxy directly. It also blocks `cancelMidnightOfferGroup` and `setMidnightRatifierAuthorization`, which reach the venue through the proxy.
 
