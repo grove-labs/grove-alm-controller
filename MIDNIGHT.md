@@ -27,7 +27,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). This is a blanket grant; see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant). Keep exactly one ratifier authorized per proxy; see [One ratifier per proxy](#kill-switches-and-runbook). |
 | `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and the dust rule makes that a no-op. |
 
-Group rules: one group per direction per market. To make a market one-directional, leave the other direction's strategy keys unset. Never reuse a group on another market, because cancelling it would retire both books. This is an operational rule, not a code check.
+Group rules: one group per direction per market. To make a market one-directional, leave the other direction's strategy keys unset. Never reuse a group on another market, because cancelling it would retire both books. This is an operational rule, not a code check. Midnight accepts a cancel for any group id, including one never designated, so a compromised FC `FREEZER` or `RELAYER` can retire replacement groups as soon as their ids are public, for example while a spell naming them is pending; revoke the compromised role before the new group ids are published.
 
 ### Enabling maker mode
 
@@ -144,7 +144,7 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 Once the strategy's keys are zero, the admin can restore `maxOfferSize` for the other strategies on those markets. Every lever is visible in the mempool, and a compromised strategy can draw the remaining buy budget in front of it, so send the freezer's and governance's transactions through a private relay.
 
-Revoking the controller's `CONTROLLER` role on the ALMProxy is not a maker kill switch. It stops maker buys, but not maker sells, because the sell branch of `fundFill` makes no proxy call and Midnight pays the proxy directly. It also blocks `cancelMidnightOfferGroup` and `setMidnightRatifierAuthorization`, which reach the venue through the proxy.
+Revoking the controller's `CONTROLLER` role on the ALMProxy is not a maker kill switch. It stops maker buys, but not maker sells, because the sell branch of `fundFill` makes no proxy call and Midnight pays the proxy directly. It also blocks `cancelMidnightOfferGroup` and `setMidnightRatifierAuthorization`, which reach the venue through the proxy, so after it the `FREEZER`'s cancel reverts too and zeroing `maxOfferSize` is its lever that still works.
 
 ## Ratifier authorization is a blanket grant
 
