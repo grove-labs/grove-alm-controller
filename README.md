@@ -20,4 +20,4 @@ The Morpho Midnight integration on `ForeignController`, including maker mode, is
 
 ## ⚖️ Licensing
 
-This repository is a fork of the sparkdotfi/spark-alm-controller. All code in this repository is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0), which requires that modifications to the code must be made available under the same license. See the [LICENSE](LICENSE) file for more details.
+This repository is a fork of the sparkdotfi/spark-alm-controller. All code in this repository is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0), which requires that modifications to the code must be made available under the same license. See the [LICENSE](LICENSE) file for more details. The vendored Morpho Midnight files (`src/libraries/midnight/MidnightTickLib.sol`, `src/libraries/midnight/MidnightIdLib.sol` and `src/interfaces/MidnightInterfaces.sol`) keep upstream's GPL-2.0-or-later license.

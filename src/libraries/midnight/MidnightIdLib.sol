@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Morpho Association
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.21;
+// Copyright (c) 2026 Morpho Association
 
 import { Market } from "../../interfaces/MidnightInterfaces.sol";
 
