@@ -1328,3 +1328,66 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     }
 
 }
+
+contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMakerTestBase {
+
+    function setUp() public override {
+        super.setUp();
+
+        _onboardTake();
+
+        loanToken.mint(address(proxy), 1);
+    }
+
+    // Excluded checks, held passing by a 1-wei fill on a fee-free, debt-free market: zero-assets,
+    // zero-units, offer-size-too-large, rate-limit-exceeded, continuous fee, loss factor, price, debt.
+    function testFuzz_midnightIsCallbackAllowed_matchesTheFundFillGates(
+        address            callback,
+        bool               buy,
+        uint256            maxOfferSize,
+        uint256[4] memory  keyAmounts,
+        uint8              zeroMask
+    )
+        public
+    {
+        vm.assume(callback != address(0));
+        assumeNotForgeAddress(callback);
+
+        maxOfferSize = zeroMask & 1 == 0 ? bound(maxOfferSize, 1, type(uint128).max) : 0;
+
+        for (uint256 i; i < 4; ++i) {
+            keyAmounts[i] = zeroMask & (2 << i) == 0 ? bound(keyAmounts[i], 1, type(uint256).max) : 0;
+        }
+
+        vm.startPrank(admin);
+        controller.setMidnightMakeConfig(marketId, maxOfferSize);
+        rateLimits.setRateLimitData(_strategyBuyKey(callback),  keyAmounts[0], 0);
+        rateLimits.setRateLimitData(_strategySellKey(callback), keyAmounts[1], 0);
+        rateLimits.setRateLimitData(_buyKey(),                  keyAmounts[2], 0);
+        rateLimits.setRateLimitData(_sellKey(),                 keyAmounts[3], 0);
+        vm.stopPrank();
+
+        bool allowed = controller.midnight_isCallbackAllowed(marketId, callback, buy);
+
+        vm.prank(callback);
+        ( bool funded, bytes memory reason ) = address(controller).call(abi.encodeCall(
+            ForeignController.midnight_fundFill, (marketId, buy, 1, buy ? WAD : 1, 0)
+        ));
+
+        assertEq(allowed, funded);
+
+        if (!funded) {
+            bytes32 reasonHash = keccak256(reason);
+
+            assertTrue(
+                reasonHash == keccak256(_revertReason("MidnightLib/make-not-enabled")) ||
+                reasonHash == keccak256(_revertReason("RateLimits/zero-maxAmount"))
+            );
+        }
+    }
+
+    function _revertReason(string memory message) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature("Error(string)", message);
+    }
+
+}
