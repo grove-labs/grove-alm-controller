@@ -130,6 +130,8 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 `setMidnightMakeConfig` reads the venue (`toMarket`) even when it only zeroes `maxOfferSize`, so that lever depends on the read. This is accepted: the Midnight singleton is immutable and market records are permanent, so the read cannot start failing.
 
+Setting `maxBuyTick` to zero closes entry but leaves `midnight_isCallbackAllowed` true for buys, so the ratifier still ratifies buy offers whose fills then revert in `fundFill`; to stop maker buys, also zero `maxOfferSize` or freeze the ratifier.
+
 **Runbook.**
 
 1. Freeze the proxy's ratifier (every ratifier authorized for the proxy, if more than one is).
@@ -156,12 +158,14 @@ Authorize only a reviewed, immutable contract that cannot use the grant: no upgr
 
 The three periphery-facing selectors, the `fundFill` checks and their order, the view semantics, the key ids and encodings, and the maker events are identical on both hosts. The rest differs by convention:
 
-- **Roles.** Admin maps to `DEFAULT_ADMIN_ROLE` on both hosts, and FC `RELAYER` maps to the diamond `ALLOCATOR_ROLE`. Both hosts let a freezer zero `maxOfferSize` and cancel offer groups: FC `FREEZER` here, and on the diamond `MIDNIGHT_FREEZER_ROLE` in `AccessControls`. The Midnight freezer (`FREEZER`) can disable making on a market by setting `maxOfferSize` to zero, which stops every strategy on that market, fabricated `fundFill` calls included; only the admin can set it back to a non-zero value. The Midnight freezer (`FREEZER`) can also cancel an offer group, which retires the group permanently; only governance can set new groups.
+- **Roles.** Admin maps to `DEFAULT_ADMIN_ROLE` on both hosts, and FC `RELAYER` maps to the diamond `ALLOCATOR_ROLE`. Both hosts let a freezer zero `maxOfferSize` and cancel offer groups: FC `FREEZER` here, and on the diamond `MIDNIGHT_FREEZER_ROLE` in `AccessControls`.
+  - **This controller:** The Midnight freezer (`FREEZER`) can disable making on a market by setting `maxOfferSize` to zero, which stops every strategy on that market, fabricated `fundFill` calls included; only the admin can set it back to a non-zero value. The Midnight freezer (`FREEZER`) can also cancel an offer group, which retires the group permanently; only governance can set new groups.
+  - **Diamond:** The Midnight freezer (`MIDNIGHT_FREEZER_ROLE` in `AccessControls`) can disable making on a market by setting `maxOfferSize` to zero, which stops every strategy on that market, fabricated `fundFill` calls included; only the admin can set it back to a non-zero value. The Midnight freezer (`MIDNIGHT_FREEZER_ROLE` in `AccessControls`) can also cancel an offer group, which retires the group permanently; only governance can set new groups.
 - **Operator roles.** The FC admin grants `RELAYER` and the FC freezer can `removeRelayer`. On the diamond, the `AccessControls` allocator role admin grants and revokes `ALLOCATOR_ROLE`.
 - **Make config.** `setMidnightMakeConfig` takes a `marketId` here and the full `Market` struct on the diamond. The cached maturity is a `uint48` here and a `uint64` on the diamond. Midnight caps maturity at 100 years, so neither width binds.
 - **Key getters.** The diamond exposes strategy key getters. Here the ids are `MidnightLib` constants and keys are built with `RateLimitHelpers`.
 - **Error prefixes.** Errors here are `MidnightLib/...` and `FC/...`; on the diamond they are `MidnightFacet/...`. The suffixes match for every maker check except the zero ratifier (`FC/ratifier-zero-address` vs `MidnightFacet/zero-ratifier`) and the transfer (`ERC20Lib/transfer-failed` vs `MidnightFacet/transfer-failed`). An unset key reverts `RateLimits/zero-maxAmount` on both.
-- **Transfer return data.** `ERC20Lib.transfer` accepts empty return data or a first word decoding to `true` for any return of 32 bytes or more. The diamond requires exactly 32 bytes. The two differ only for a non-standard token that returns more than 32 bytes.
+- **Transfer return data.** `ERC20Lib.transfer` accepts empty return data or a first word decoding to `true` for any return of 32 bytes or more. The diamond accepts empty return data or exactly 32 bytes decoding to `true`. The two differ only for a non-standard token that returns more than 32 bytes.
 - **Setter guards and events.** The Midnight config setters are not `nonReentrant` here, while on the diamond they are. They are admin-only on both hosts, except that the freezer may zero `maxOfferSize`, and their only state-changing external call is the ratifier authorization `doCall`. The diamond emits taker events (`MidnightBuy`, `MidnightSell`, `MidnightRedeem`); this controller emits none.
 - **Full exit with an oversized fee.** This controller returns the zero fee rate for a full exit before it divides `pendingFee` by `units`. The diamond divides first, so a full exit reporting a `pendingFee` above about `1.16e59` reverts there and passes here. Midnight's fee is a `uint128`, and a conforming strategy forwards it unchanged, so the case is unreachable.
 - **USDS mint.** Not available here. See the phase 3 considerations above.
