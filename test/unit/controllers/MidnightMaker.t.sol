@@ -245,7 +245,7 @@ contract MidnightMakerTestBase is UnitTestBase {
 
 }
 
-contract SetMidnightMakeConfigTests is MidnightMakerTestBase {
+contract ForeignControllerSetMidnightMakeConfigTests is MidnightMakerTestBase {
 
     function test_setMidnightMakeConfig_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -377,7 +377,7 @@ contract SetMidnightMakeConfigTests is MidnightMakerTestBase {
 
 }
 
-contract SetMidnightGroupsTests is MidnightMakerTestBase {
+contract ForeignControllerSetMidnightGroupsTests is MidnightMakerTestBase {
 
     function test_setMidnightGroups_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -442,7 +442,7 @@ contract SetMidnightGroupsTests is MidnightMakerTestBase {
 
 }
 
-contract SetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
+contract ForeignControllerSetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
 
     function test_setMidnightRatifierAuthorization_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -494,7 +494,7 @@ contract SetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
 
 }
 
-contract CancelMidnightOfferGroupTests is MidnightMakerTestBase {
+contract ForeignControllerCancelMidnightOfferGroupTests is MidnightMakerTestBase {
 
     function test_cancelMidnightOfferGroup_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
@@ -541,7 +541,7 @@ contract CancelMidnightOfferGroupTests is MidnightMakerTestBase {
 
 }
 
-contract SetMidnightMakeConfigFreezerTests is MidnightMakerTestBase {
+contract ForeignControllerSetMidnightMakeConfigFreezerTests is MidnightMakerTestBase {
 
     function setUp() public override {
         super.setUp();
@@ -605,7 +605,7 @@ contract SetMidnightMakeConfigFreezerTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightPeripheryViewTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
     function test_midnightPeripherySelectors() public pure {
         assertEq(ForeignController.midnight_fundFill.selector,            bytes4(0xfb9e2099));
@@ -732,7 +732,7 @@ contract MidnightPeripheryViewTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightFundFillTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
     uint256 constant UNITS            = 1_000e18;
     uint256 constant POSITION_CREDIT  = 1_000_000e18;

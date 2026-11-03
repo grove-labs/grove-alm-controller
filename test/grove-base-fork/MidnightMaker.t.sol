@@ -240,7 +240,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
 }
 
-contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
 
     // A buy rounding to zero assets short-circuits in the strategy, so no controller check runs.
     function test_makerBuy_dustFillNeverReachesTheController() public {
@@ -355,7 +355,7 @@ contract MidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerSellLifecycleTests is MidnightMakerTestBase {
 
     uint256 constant SEEDED_UNITS = 1_000_000e18;
 
@@ -450,7 +450,7 @@ contract MidnightMakerSellLifecycleTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerRetroactivityTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerRetroactivityTests is MidnightMakerTestBase {
 
     uint256 units = 1_000_000e18;
 
@@ -520,7 +520,7 @@ contract MidnightMakerRetroactivityTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerKillSwitchTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerKillSwitchTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 1_000_000e18;
 
@@ -564,7 +564,7 @@ contract MidnightMakerKillSwitchTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerAttackTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerAttackTests is MidnightMakerTestBase {
 
     // The taker picks takerCallback, so it can name our strategy and fire the opposite callback.
     function test_attack_takerNamesOurStrategyAsItsOwnCallbackOnMakerBuy() public {
@@ -687,7 +687,7 @@ contract MidnightMakerAttackTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerInvariantTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerInvariantTests is MidnightMakerTestBase {
 
     function test_invariant_debtStaysZeroAcrossAMixedBook() public {
         _seedCredit(1_000_000e18);
@@ -717,7 +717,7 @@ contract MidnightMakerInvariantTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerMaturityTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerMaturityTests is MidnightMakerTestBase {
 
     function _straddlingBuyOffer() internal view returns (Offer memory offer) {
         offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
@@ -816,7 +816,7 @@ contract FundFillReenterer {
 
 }
 
-contract MidnightMakerReentrancyTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerReentrancyTests is MidnightMakerTestBase {
 
     FundFillReenterer reenterer;
 
@@ -1004,7 +1004,7 @@ contract MidnightMakerSellFeeTestBase is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerSellPendingFeeTests is MidnightMakerSellFeeTestBase {
+contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellFeeTestBase {
 
     FeeInflatingStrategy inflatingStrategy;
 
@@ -1122,7 +1122,7 @@ contract MidnightMakerSellPendingFeeTests is MidnightMakerSellFeeTestBase {
 
 }
 
-contract MidnightMakerNestedFillTests is MidnightMakerSellFeeTestBase {
+contract ForeignControllerMidnightMakerNestedFillTests is MidnightMakerSellFeeTestBase {
 
     uint256 constant NESTED_UNITS = 1_000_000e18;
 
@@ -1183,7 +1183,7 @@ contract MidnightMakerNestedFillTests is MidnightMakerSellFeeTestBase {
 
 }
 
-contract MidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
 
     uint256 constant UNITS        = 400_000e18;
     uint256 constant SEEDED_UNITS = 1_000_000e18;
@@ -1444,7 +1444,7 @@ contract MidnightMakerRateLimitKeyTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerUnlimitedStrategyKeyTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerUnlimitedStrategyKeyTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 1_000_000e18;
 
@@ -1501,7 +1501,7 @@ contract MidnightMakerUnlimitedStrategyKeyTests is MidnightMakerTestBase {
 
 }
 
-contract MidnightMakerZeroUnitTakeTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerZeroUnitTakeTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 1_000_000e18;
 
@@ -1601,7 +1601,7 @@ contract FreezableRatifier {
 
 }
 
-contract MidnightMakerRatifierFreezeTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerRatifierFreezeTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 400_000e18;
 
@@ -1707,7 +1707,7 @@ contract JitVaultFundingStrategy {
 
 }
 
-contract MidnightMakerJitSourcingTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerJitSourcingTests is MidnightMakerTestBase {
 
     uint256 constant UNITS = 1_000_000e18;
 
@@ -1860,7 +1860,7 @@ interface IUSDCLike {
     function masterMinter() external view returns (address);
 }
 
-contract MidnightMakerAaveJitSourcingTests is MidnightMakerTestBase {
+contract ForeignControllerMidnightMakerAaveJitSourcingTests is MidnightMakerTestBase {
 
     address constant AAVE_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
 
