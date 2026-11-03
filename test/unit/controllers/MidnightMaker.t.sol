@@ -1337,8 +1337,10 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
         loanToken.mint(address(proxy), 1);
     }
 
-    // Excluded checks, held passing by a 1-wei fill on a fee-free, debt-free market: zero-assets,
-    // zero-units, offer-size-too-large, rate-limit-exceeded, continuous fee, loss factor, price, debt.
+    // Excluded checks, held passing by a 1-wei fill on a fee-free, debt-free market with a funded
+    // proxy: zero-assets, zero-units, offer-size-too-large, rate-limit-exceeded, continuous fee,
+    // loss factor, price, debt, transfer. The zero callback is also excluded: the view hard-codes
+    // false for it.
     function testFuzz_midnightIsCallbackAllowed_matchesTheFundFillGates(
         address            callback,
         bool               buy,
