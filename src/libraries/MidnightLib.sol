@@ -476,8 +476,7 @@ library MidnightLib {
         return _yieldPrice(maxYield, timeToMaturity, pendingFee * WAD / credit, true);
     }
 
-    // The lower of the reported and carried rates, so a reported fee can only raise the floor; a
-    // full exit leaves no carried rate and so prices at the zero-fee yield floor.
+    // The lower of the reported and carried rates, so a reported fee can only raise the floor.
     function _sellFeePerUnit(
         uint256 creditPost,
         uint256 carriedFee,
