@@ -15,6 +15,10 @@ contract MidnightTickLibWrapper {
 
 contract MidnightTickLibTests is UnitTestBase {
 
+    // From grove-morpho-midnight-periphery test/unit/UpstreamTickPrices.t.sol test_upstreamTickToPrice_allTicksHash.
+    bytes32 internal constant UPSTREAM_TICK_PRICES_HASH =
+        0xa5a7c8c6d9b7dbf9ef3ad44c33a38b599bcb2d9487361c5bf80af8e02871d215;
+
     MidnightTickLibWrapper wrapper;
 
     function setUp() public {
@@ -33,6 +37,17 @@ contract MidnightTickLibTests is UnitTestBase {
     function test_tickToPrice_aboveMaxTickReverts() public {
         vm.expectRevert("MidnightTickLib/tick-out-of-range");
         wrapper.tickToPrice(MAX_TICK + 1);
+    }
+
+    function test_tickToPrice_allTicksMatchUpstreamHash() public view {
+        uint256[] memory prices = new uint256[](MAX_TICK + 1);
+
+        for (uint256 tick = 0; tick <= MAX_TICK; tick++) {
+            prices[tick] = wrapper.tickToPrice(tick);
+        }
+
+        assertEq(MAX_TICK, 6744);
+        assertEq(keccak256(abi.encodePacked(prices)), UPSTREAM_TICK_PRICES_HASH);
     }
 
     // Pinned against an independent model of the upstream curve.
