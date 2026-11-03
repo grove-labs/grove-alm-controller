@@ -559,6 +559,43 @@ contract ForeignControllerSetMidnightMakeConfigFreezerTests is MidnightMakerTest
         assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
     }
 
+    function test_setMidnightMakeConfig_freezerZeroingEmitsMakeConfigSet() public {
+        _enableMake();
+
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightMakeConfigSet(marketId, address(loanToken), maturity, 0);
+        controller.setMidnightMakeConfig(marketId, 0);
+    }
+
+    function test_setMidnightMakeConfig_freezerZeroingMarketNotOnboarded() public {
+        vm.prank(freezer);
+        vm.expectRevert("MidnightLib/market-not-onboarded");
+        controller.setMidnightMakeConfig(keccak256("otherMarket"), 0);
+    }
+
+    function test_setMidnightMakeConfig_freezerZeroingInvalidMidnight() public {
+        Market memory other = _market();
+        other.midnight = makeAddr("otherVenue");
+
+        venue.setMarket(marketId, other);
+
+        vm.prank(freezer);
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        controller.setMidnightMakeConfig(marketId, 0);
+    }
+
+    function test_setMidnightMakeConfig_freezerZeroingMaturityOutOfBounds() public {
+        Market memory far = _market();
+        far.maturity = uint256(type(uint48).max) + 1;
+
+        venue.setMarket(marketId, far);
+
+        vm.prank(freezer);
+        vm.expectRevert("MidnightLib/maturity-oob");
+        controller.setMidnightMakeConfig(marketId, 0);
+    }
+
     function test_setMidnightMakeConfig_freezerCannotEnableMake() public {
         vm.prank(freezer);
         vm.expectRevert(abi.encodeWithSignature(
