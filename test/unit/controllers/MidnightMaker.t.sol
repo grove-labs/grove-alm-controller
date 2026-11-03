@@ -766,6 +766,42 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
         );
     }
 
+    function test_midnightIsCallbackAllowed_buyRequiresMaxBuyTick() public {
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+
+        _closeBuyEntry();
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxBuyTick,   0);
+        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+    }
+
+    function test_midnightIsCallbackAllowed_sellIgnoresMaxBuyTick() public {
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        _closeBuyEntry();
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxBuyTick, 0);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+    }
+
+    function _closeBuyEntry() internal {
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            marketId, 0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
+        );
+    }
+
 }
 
 contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
@@ -1339,8 +1375,8 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
 
     // Excluded checks, held passing by a 1-wei fill on a fee-free, debt-free market with a funded
     // proxy: zero-assets, zero-units, offer-size-too-large, rate-limit-exceeded, continuous fee,
-    // loss factor, price, debt, transfer. The zero callback is also excluded: the view hard-codes
-    // false for it.
+    // loss factor, price other than a zero maxBuyTick, debt, transfer. The zero callback is also
+    // excluded: the view hard-codes false for it.
     function testFuzz_midnightIsCallbackAllowed_matchesTheFundFillGates(
         address            callback,
         bool               buy,
@@ -1355,12 +1391,23 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
 
         maxOfferSize = zeroMask & 1 == 0 ? bound(maxOfferSize, 1, type(uint128).max) : 0;
 
+        bool zeroMaxBuyTick = zeroMask & 32 != 0;
+
         for (uint256 i; i < 4; ++i) {
             keyAmounts[i] = zeroMask & (2 << i) == 0 ? bound(keyAmounts[i], 1, type(uint256).max) : 0;
         }
 
         vm.startPrank(admin);
         controller.setMidnightMakeConfig(marketId, maxOfferSize);
+        controller.setMidnightMarketConfig(
+            marketId,
+            zeroMaxBuyTick ? 0 : MAX_BUY_TICK,
+            MIN_SELL_TICK,
+            0,
+            MAX_SELL_YIELD,
+            0,
+            type(uint128).max
+        );
         rateLimits.setRateLimitData(_strategyBuyKey(callback),  keyAmounts[0], 0);
         rateLimits.setRateLimitData(_strategySellKey(callback), keyAmounts[1], 0);
         rateLimits.setRateLimitData(_buyKey(),                  keyAmounts[2], 0);
@@ -1381,7 +1428,11 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
 
             assertTrue(
                 reasonHash == keccak256(_revertReason("MidnightLib/make-not-enabled")) ||
-                reasonHash == keccak256(_revertReason("RateLimits/zero-maxAmount"))
+                reasonHash == keccak256(_revertReason("RateLimits/zero-maxAmount")) ||
+                (
+                    buy && zeroMaxBuyTick &&
+                    reasonHash == keccak256(_revertReason("MidnightLib/fill-price-too-high"))
+                )
             );
         }
     }

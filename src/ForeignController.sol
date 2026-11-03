@@ -846,8 +846,9 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         external view returns (bool)
     {
         // Hard-coded, so a key funded for the zero address by mistake cannot ratify an unmetered offer.
-        if (callback == address(0))                                 return false;
-        if (_midnightMarketConfigs[marketId].maxOfferSize == 0)     return false;
+        if (callback == address(0))                                   return false;
+        if (_midnightMarketConfigs[marketId].maxOfferSize == 0)       return false;
+        if (buy && _midnightMarketConfigs[marketId].maxBuyTick == 0) return false;
 
         bytes32 strategyKey = RateLimitHelpers.makeAddressBytes32Key(
             buy ? MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY : MidnightLib.LIMIT_MIDNIGHT_STRATEGY_SELL,
