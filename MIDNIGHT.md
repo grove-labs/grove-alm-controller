@@ -15,7 +15,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `midnight_isCallbackAllowed(bytes32 marketId, address callback, bool buy) returns (bool)` | `0x5c0f4590` | view |
 | `midnight_getDesignatedGroups(bytes32 marketId) returns (bytes32 buyGroup, bytes32 sellGroup)` | `0x87d2a293` | view |
 
-`midnight_isCallbackAllowed` returns `callback != 0 && maxOfferSize != 0 && strategyKey(buy).maxAmount != 0 && marketKey(buy).maxAmount != 0`. It reads `maxAmount`, not the current capacity. A zero callback is always `false`, so an offer that names no callback (and would therefore never reach `fundFill`) cannot be ratified.
+`midnight_isCallbackAllowed` returns `callback != 0 && maxOfferSize != 0 && (!buy || maxBuyTick != 0) && strategyKey(buy).maxAmount != 0 && marketKey(buy).maxAmount != 0`. It reads `maxAmount`, not the current capacity. A zero callback is always `false`, so an offer that names no callback (and would therefore never reach `fundFill`) cannot be ratified.
 
 ## Admin configuration
 
@@ -130,7 +130,7 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 `setMidnightMakeConfig` reads the venue (`toMarket`) even when it only zeroes `maxOfferSize`, so that lever depends on the read. This is accepted: the Midnight singleton is immutable and market records are permanent, so the read cannot start failing.
 
-Setting `maxBuyTick` to zero closes entry but leaves `midnight_isCallbackAllowed` true for buys, so the ratifier still ratifies buy offers whose fills then revert in `fundFill`; maker buy fills, fabricated `fundFill` calls included, already revert with `fill-price-too-high`; to stop the ratifier ratifying buy offers too, freeze the ratifier or zero `maxOfferSize`, which also stops maker sells on that market.
+Setting `maxBuyTick` to zero closes entry: `midnight_isCallbackAllowed` then returns false for buys, so the ratifier refuses buy offers, resting ones included, and maker buy fills, fabricated `fundFill` calls included, revert with `fill-price-too-high`.
 
 **Runbook.**
 
