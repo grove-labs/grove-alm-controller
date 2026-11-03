@@ -650,7 +650,6 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
         assertEq(ForeignController.midnight_getDesignatedGroups.selector, bytes4(0x87d2a293));
     }
 
-    // The ratifier reaches both views through staticcall, so neither may revert.
     function test_midnightViews_areStaticcallSafeOnUnknownMarkets() public view {
         bytes32 unknown = keccak256("unknownMarket");
 
@@ -1094,7 +1093,6 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
-    // No buy-not-enabled check on this path: tickToPrice(0) == 0 is what refuses the fill.
     function test_midnight_fundFill_zeroMaxBuyTickRefusesEveryBuy() public {
         _setLimits(MAX_OFFER_SIZE);
 

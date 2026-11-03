@@ -21,7 +21,6 @@ contract MidnightTickLibTests is UnitTestBase {
         wrapper = new MidnightTickLibWrapper();
     }
 
-    // A zero maxBuyTick refuses maker buys only because this price is exactly zero.
     function test_tickToPrice_zeroTickIsZero() public view {
         assertEq(wrapper.tickToPrice(0), 0);
     }
