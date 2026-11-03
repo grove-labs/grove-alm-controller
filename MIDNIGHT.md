@@ -130,7 +130,7 @@ A keyed strategy can call `midnight_fundFill` with no fill behind it. Such a cal
 
 `setMidnightMakeConfig` reads the venue (`toMarket`) even when it only zeroes `maxOfferSize`, so that lever depends on the read. This is accepted: the Midnight singleton is immutable and market records are permanent, so the read cannot start failing.
 
-Setting `maxBuyTick` to zero closes entry but leaves `midnight_isCallbackAllowed` true for buys, so the ratifier still ratifies buy offers whose fills then revert in `fundFill`; to stop maker buys, also zero `maxOfferSize` or freeze the ratifier.
+Setting `maxBuyTick` to zero closes entry but leaves `midnight_isCallbackAllowed` true for buys, so the ratifier still ratifies buy offers whose fills then revert in `fundFill`; maker buy fills, fabricated `fundFill` calls included, already revert with `fill-price-too-high`; to stop the ratifier ratifying buy offers too, freeze the ratifier or zero `maxOfferSize`, which also stops maker sells on that market.
 
 **Runbook.**
 
@@ -158,7 +158,7 @@ Authorize only a reviewed, immutable contract that cannot use the grant: no upgr
 
 The three periphery-facing selectors, the `fundFill` checks and their order, the view semantics, the key ids and encodings, and the maker events are identical on both hosts. The rest differs by convention:
 
-- **Roles.** Admin maps to `DEFAULT_ADMIN_ROLE` on both hosts, and FC `RELAYER` maps to the diamond `ALLOCATOR_ROLE`. Both hosts let a freezer zero `maxOfferSize` and cancel offer groups: FC `FREEZER` here, and on the diamond `MIDNIGHT_FREEZER_ROLE` in `AccessControls`.
+- **Roles.** Admin maps to `DEFAULT_ADMIN_ROLE` on both hosts, and FC `RELAYER` maps to the diamond `ALLOCATOR_ROLE`. Both hosts let a freezer zero `maxOfferSize` and cancel offer groups: FC `FREEZER` here, and on the diamond `MIDNIGHT_FREEZER_ROLE` in `AccessControls`. The role ids differ: this controller's is `keccak256("FREEZER")` and the diamond's is `0x734f97facdc17c5a0364162ede289ef3fc7501314999442287d4c3f97235a585`, so a spell must not reuse one host's id on the other.
   - **This controller:** The Midnight freezer (`FREEZER`) can disable making on a market by setting `maxOfferSize` to zero, which stops every strategy on that market, fabricated `fundFill` calls included; only the admin can set it back to a non-zero value. The Midnight freezer (`FREEZER`) can also cancel an offer group, which retires the group permanently; only governance can set new groups.
   - **Diamond:** The Midnight freezer (`MIDNIGHT_FREEZER_ROLE` in `AccessControls`) can disable making on a market by setting `maxOfferSize` to zero, which stops every strategy on that market, fabricated `fundFill` calls included; only the admin can set it back to a non-zero value. The Midnight freezer (`MIDNIGHT_FREEZER_ROLE` in `AccessControls`) can also cancel an offer group, which retires the group permanently; only governance can set new groups.
 - **Operator roles.** The FC admin grants `RELAYER` and the FC freezer can `removeRelayer`. On the diamond, the `AccessControls` allocator role admin grants and revokes `ALLOCATOR_ROLE`.
