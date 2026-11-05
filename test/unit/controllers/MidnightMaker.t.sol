@@ -98,7 +98,6 @@ contract MidnightMakerTestBase is UnitTestBase {
         uint256         assets,
         uint256         units
     );
-    event MidnightGroupsSet(bytes32 indexed marketId, bytes32 buyGroup, bytes32 sellGroup);
     event MidnightMakeConfigSet(
         bytes32 indexed marketId,
         address loanToken,
@@ -377,71 +376,6 @@ contract ForeignControllerSetMidnightMakeConfigTests is MidnightMakerTestBase {
 
 }
 
-contract ForeignControllerSetMidnightGroupsTests is MidnightMakerTestBase {
-
-    function test_setMidnightGroups_unauthorizedAccount() public {
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
-            DEFAULT_ADMIN_ROLE
-        ));
-        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
-    }
-
-    function test_setMidnightGroups() public {
-        MidnightLib.OfferGroups memory groups = controller.midnight_getDesignatedGroups(marketId);
-
-        assertEq(groups.buyGroup,  bytes32(0));
-        assertEq(groups.sellGroup, bytes32(0));
-
-        vm.prank(admin);
-        vm.expectEmit(address(controller));
-        emit MidnightGroupsSet(marketId, bytes32("buy"), bytes32("sell"));
-        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
-
-        groups = controller.midnight_getDesignatedGroups(marketId);
-
-        assertEq(groups.buyGroup,  bytes32("buy"));
-        assertEq(groups.sellGroup, bytes32("sell"));
-
-        groups = controller.midnight_getDesignatedGroups(keccak256("otherMarket"));
-
-        assertEq(groups.buyGroup,  bytes32(0));
-        assertEq(groups.sellGroup, bytes32(0));
-    }
-
-    function test_setMidnightGroups_zeroBuyGroup() public {
-        vm.prank(admin);
-        vm.expectRevert("FC/invalid-groups");
-        controller.setMidnightGroups(marketId, bytes32(0), bytes32("sell"));
-    }
-
-    function test_setMidnightGroups_zeroSellGroup() public {
-        vm.prank(admin);
-        vm.expectRevert("FC/invalid-groups");
-        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32(0));
-    }
-
-    function test_setMidnightGroups_sameGroupBothSides() public {
-        vm.prank(admin);
-        vm.expectRevert("FC/invalid-groups");
-        controller.setMidnightGroups(marketId, bytes32("same"), bytes32("same"));
-    }
-
-    function test_setMidnightGroups_directionsAreIndependent() public {
-        vm.startPrank(admin);
-        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
-        controller.setMidnightGroups(marketId, bytes32("buy2"), bytes32("sell"));
-        vm.stopPrank();
-
-        MidnightLib.OfferGroups memory groups = controller.midnight_getDesignatedGroups(marketId);
-
-        assertEq(groups.buyGroup,  bytes32("buy2"));
-        assertEq(groups.sellGroup, bytes32("sell"));
-    }
-
-}
-
 contract ForeignControllerSetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
 
     function test_setMidnightRatifierAuthorization_unauthorizedAccount() public {
@@ -537,6 +471,44 @@ contract ForeignControllerCancelMidnightOfferGroupTests is MidnightMakerTestBase
         assertEq(venue.consumedGroup(),    bytes32("sell"));
         assertEq(venue.consumedAmount(),   type(uint128).max);
         assertEq(venue.consumedOnBehalf(), address(proxy));
+    }
+
+    function testFuzz_cancelMidnightOfferGroup_relayerAnyGroupId(bytes32 group) public {
+        vm.prank(relayer);
+        vm.expectEmit(address(controller));
+        emit MidnightOfferGroupCancelled(group);
+        controller.cancelMidnightOfferGroup(group);
+
+        assertEq(venue.consumedCalls(),    1);
+        assertEq(venue.consumedGroup(),    group);
+        assertEq(venue.consumedAmount(),   type(uint128).max);
+        assertEq(venue.consumedOnBehalf(), address(proxy));
+    }
+
+    function testFuzz_cancelMidnightOfferGroup_freezerAnyGroupId(bytes32 group) public {
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightOfferGroupCancelled(group);
+        controller.cancelMidnightOfferGroup(group);
+
+        assertEq(venue.consumedCalls(),    1);
+        assertEq(venue.consumedGroup(),    group);
+        assertEq(venue.consumedAmount(),   type(uint128).max);
+        assertEq(venue.consumedOnBehalf(), address(proxy));
+    }
+
+    function test_cancelMidnightOfferGroup_manyGroupsOnAnUnconfiguredMarket() public {
+        vm.prank(relayer);
+        controller.cancelMidnightOfferGroup(bytes32(0));
+
+        vm.prank(freezer);
+        controller.cancelMidnightOfferGroup(keccak256("otherMarket-group"));
+
+        vm.prank(relayer);
+        controller.cancelMidnightOfferGroup(bytes32("buy"));
+
+        assertEq(venue.consumedCalls(), 3);
+        assertEq(venue.consumedGroup(), bytes32("buy"));
     }
 
 }
@@ -645,30 +617,32 @@ contract ForeignControllerSetMidnightMakeConfigFreezerTests is MidnightMakerTest
 contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
     function test_midnightPeripherySelectors() public pure {
-        assertEq(ForeignController.midnight_fundFill.selector,            bytes4(0xfb9e2099));
-        assertEq(ForeignController.midnight_isCallbackAllowed.selector,   bytes4(0x5c0f4590));
-        assertEq(ForeignController.midnight_getDesignatedGroups.selector, bytes4(0x87d2a293));
+        assertEq(ForeignController.midnight_fundFill.selector,          bytes4(0xfb9e2099));
+        assertEq(ForeignController.midnight_isCallbackAllowed.selector, bytes4(0x5c0f4590));
+    }
+
+    function test_midnightGroupDesignationIsGone() public {
+        ( bool getOk, ) = address(controller).staticcall(
+            abi.encodeWithSelector(bytes4(0x87d2a293), marketId)
+        );
+
+        vm.prank(admin);
+        ( bool setOk, ) = address(controller).call(
+            abi.encodeWithSelector(bytes4(0xa494afa4), marketId, bytes32("buy"), bytes32("sell"))
+        );
+
+        assertFalse(getOk);
+        assertFalse(setOk);
     }
 
     function test_midnightViews_areStaticcallSafeOnUnknownMarkets() public view {
         bytes32 unknown = keccak256("unknownMarket");
 
-        ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
-            abi.encodeCall(ForeignController.midnight_getDesignatedGroups, (unknown))
-        );
-
         ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
             abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (unknown, strategy, true))
         );
 
-        assertTrue(groupsOk);
         assertTrue(allowedOk);
-
-        MidnightLib.OfferGroups memory groups =
-            abi.decode(groupsOut, (MidnightLib.OfferGroups));
-
-        assertEq(groups.buyGroup,  bytes32(0));
-        assertEq(groups.sellGroup, bytes32(0));
 
         assertFalse(abi.decode(allowedOut, (bool)));
     }
@@ -679,25 +653,11 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
         _setLimits(MAX_OFFER_SIZE);
         _onboardStrategy(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightGroups(marketId, bytes32("buy"), bytes32("sell"));
-
-        ( bool groupsOk, bytes memory groupsOut ) = address(controller).staticcall(
-            abi.encodeCall(ForeignController.midnight_getDesignatedGroups, (marketId))
-        );
-
         ( bool allowedOk, bytes memory allowedOut ) = address(controller).staticcall(
             abi.encodeCall(ForeignController.midnight_isCallbackAllowed, (marketId, strategy, true))
         );
 
-        assertTrue(groupsOk);
         assertTrue(allowedOk);
-
-        MidnightLib.OfferGroups memory groups =
-            abi.decode(groupsOut, (MidnightLib.OfferGroups));
-
-        assertEq(groups.buyGroup,  bytes32("buy"));
-        assertEq(groups.sellGroup, bytes32("sell"));
 
         assertTrue(abi.decode(allowedOut, (bool)));
     }

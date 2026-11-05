@@ -150,7 +150,6 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
-        foreignController.setMidnightGroups(marketId, BUY_GROUP, SELL_GROUP);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
         rateLimits.setRateLimitData(_strategyBuyKey(address(strategy)),  5_000_000e18, 0);
         rateLimits.setRateLimitData(_strategySellKey(address(strategy)), 5_000_000e18, 0);
@@ -174,6 +173,12 @@ contract MidnightMakerTestBase is MidnightTestBase {
     function _makerOffer(bool buy, uint256 tick, uint128 maxUnits)
         internal view returns (Offer memory)
     {
+        return _makerOfferInGroup(buy, tick, maxUnits, buy ? BUY_GROUP : SELL_GROUP);
+    }
+
+    function _makerOfferInGroup(bool buy, uint256 tick, uint128 maxUnits, bytes32 group)
+        internal view returns (Offer memory)
+    {
         return Offer({
             market                  : market,
             buy                     : buy,
@@ -181,7 +186,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
             start                   : block.timestamp,
             expiry                  : block.timestamp + 1 days,
             tick                    : tick,
-            group                   : buy ? BUY_GROUP : SELL_GROUP,
+            group                   : group,
             callback                : address(strategy),
             callbackData            : new bytes(0),
             receiverIfMakerIsSeller : buy ? address(0) : address(almProxy),
@@ -516,6 +521,70 @@ contract ForeignControllerMidnightMakerRetroactivityTests is MidnightMakerTestBa
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), false);
 
         _expectTakeRevert(offer, 1, abi.encodeWithSignature("RatifierUnauthorized()"));
+    }
+
+}
+
+contract ForeignControllerMidnightMakerFreeGroupTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 400_000e18;
+
+    bytes32 constant GROUP_A = keccak256("ops-group-a");
+    bytes32 constant GROUP_B = keccak256("ops-group-b");
+    bytes32 constant GROUP_C = keccak256("ops-group-c");
+
+    function setUp() public override {
+        super.setUp();
+
+        _seedCredit(1_000_000e18);
+    }
+
+    function test_freeGroups_offersFillInAnyGroup() public {
+        ( uint256 buyerAssets, ) =
+            _take(_makerOfferInGroup(true, MAKER_BUY_TICK, uint128(UNITS), GROUP_A), UNITS);
+
+        assertEq(buyerAssets, _makerBuyerAssets(UNITS, MAKER_BUY_TICK));
+
+        _take(_makerOfferInGroup(true, MAKER_BUY_TICK, uint128(UNITS), GROUP_B), UNITS);
+
+        ( , uint256 sellerAssets ) =
+            _take(_makerOfferInGroup(false, TICK_98, uint128(UNITS), GROUP_C), UNITS);
+
+        assertEq(sellerAssets, _makerSellerAssets(UNITS, TICK_98));
+
+        assertEq(harness.consumed(address(almProxy), GROUP_A), UNITS);
+        assertEq(harness.consumed(address(almProxy), GROUP_B), UNITS);
+        assertEq(harness.consumed(address(almProxy), GROUP_C), UNITS);
+    }
+
+    function test_freeGroups_relayerRetiresAnArbitraryGroup() public {
+        vm.prank(ALM_RELAYER);
+        foreignController.cancelMidnightOfferGroup(GROUP_A);
+
+        assertEq(harness.consumed(address(almProxy), GROUP_A), type(uint128).max);
+
+        _expectTakeRevert(
+            _makerOfferInGroup(true, MAKER_BUY_TICK, uint128(UNITS), GROUP_A),
+            PROBE_UNITS,
+            abi.encodeWithSignature("ConsumedUnits()")
+        );
+
+        _take(_makerOfferInGroup(true, MAKER_BUY_TICK, uint128(UNITS), GROUP_B), UNITS);
+    }
+
+    function test_freeGroups_freezerRetiresAnArbitraryGroup() public {
+        vm.prank(ALM_FREEZER);
+        foreignController.cancelMidnightOfferGroup(GROUP_C);
+
+        assertEq(harness.consumed(address(almProxy), GROUP_C), type(uint128).max);
+
+        _expectTakeRevert(
+            _makerOfferInGroup(false, TICK_98, uint128(UNITS), GROUP_C),
+            UNITS,
+            abi.encodeWithSignature("ConsumedUnits()")
+        );
+
+        _take(_makerOfferInGroup(false, TICK_98, uint128(UNITS), GROUP_B), UNITS);
     }
 
 }

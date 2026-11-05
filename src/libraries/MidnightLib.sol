@@ -67,11 +67,6 @@ library MidnightLib {
         uint256 settlementFee;
     }
 
-    struct OfferGroups {
-        bytes32 buyGroup;
-        bytes32 sellGroup;
-    }
-
     struct FundFillParams {
         IALMProxy    proxy;
         IRateLimits  rateLimits;

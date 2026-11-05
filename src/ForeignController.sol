@@ -55,7 +55,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint256         assets,
         uint256         units
     );
-    event MidnightGroupsSet(bytes32 indexed marketId, bytes32 buyGroup, bytes32 sellGroup);
     event MidnightMakeConfigSet(
         bytes32 indexed marketId,
         address loanToken,
@@ -109,7 +108,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
-    mapping(bytes32 marketId => MidnightLib.OfferGroups groups) internal _midnightOfferGroups;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -289,23 +287,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         );
 
         emit MidnightMakeConfigSet(marketId, loanToken, maturity, maxOfferSize);
-    }
-
-    function setMidnightGroups(bytes32 marketId, bytes32 buyGroup, bytes32 sellGroup) external {
-        _checkRole(DEFAULT_ADMIN_ROLE);
-
-        // Zero is the ratifier's "not designated" sentinel, and one shared group cancels both sides.
-        require(
-            buyGroup != 0 && sellGroup != 0 && buyGroup != sellGroup,
-            "FC/invalid-groups"
-        );
-
-        _midnightOfferGroups[marketId] = MidnightLib.OfferGroups({
-            buyGroup  : buyGroup,
-            sellGroup : sellGroup
-        });
-
-        emit MidnightGroupsSet(marketId, buyGroup, sellGroup);
     }
 
     function setMidnightRatifierAuthorization(address ratifier, bool authorized) external {
@@ -788,6 +769,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         }));
     }
 
+    /// @dev Groups are operator-managed: any number and any id, per market or across markets.
+    ///      Retiring a group is permanent.
     function cancelMidnightOfferGroup(bytes32 group) external nonReentrant {
         // Cancelling is a safety action the freezer may also take; any other caller needs RELAYER.
         if (!hasRole(FREEZER, msg.sender)) _checkRole(RELAYER);
@@ -834,12 +817,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         external view returns (MidnightLib.MarketConfig memory)
     {
         return _midnightMarketConfigs[marketId];
-    }
-
-    function midnight_getDesignatedGroups(bytes32 marketId)
-        external view returns (MidnightLib.OfferGroups memory)
-    {
-        return _midnightOfferGroups[marketId];
     }
 
     function midnight_isCallbackAllowed(bytes32 marketId, address callback, bool buy)
