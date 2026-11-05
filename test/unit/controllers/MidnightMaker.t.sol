@@ -272,6 +272,25 @@ contract ForeignControllerSetMidnightMakeConfigTests is MidnightMakerTestBase {
         controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max));
     }
 
+    function test_setMidnightMakeConfig_marketNotOnboardedBeforeMaxOfferSize() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/market-not-onboarded");
+        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max) + 1);
+    }
+
+    function test_setMidnightMakeConfig_maxOfferSizeBeforeVenueChecks() public {
+        _onboardTake();
+
+        Market memory other = _market();
+        other.midnight = makeAddr("otherVenue");
+
+        venue.setMarket(marketId, other);
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-offer-size-oob");
+        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max) + 1);
+    }
+
     function test_setMidnightMakeConfig_invalidMidnight() public {
         _onboardTake();
 
