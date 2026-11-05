@@ -327,8 +327,6 @@ library MidnightLib {
     function fundFill(FundFillParams memory params) external {
         MarketConfig memory config = params.config;
 
-        bytes32 marketId = params.marketId;
-
         require(config.maxOfferSize != 0, "MidnightLib/make-not-enabled");
         require(params.assets != 0,       "MidnightLib/zero-assets");
         require(params.units  != 0,       "MidnightLib/zero-units");
@@ -341,36 +339,50 @@ library MidnightLib {
         uint256 timeToMaturity = _timeToMaturity(config.maturity);
 
         if (params.buy) {
-            uint256 feeCeiling = _continuousFeePerSecond(config.maxContinuousFee);
-
-            // The bound below assumes the ceiling, so a live fee above it clears under minBuyYield.
-            require(
-                IMidnight(params.midnight).continuousFee(marketId) <= feeCeiling,
-                "MidnightLib/continuous-fee-too-high"
-            );
-
-            require(
-                IMidnight(params.midnight).lossFactor(marketId) <= config.maxLossFactor,
-                "MidnightLib/loss-factor-too-high"
-            );
-
-            uint256 bound      = MidnightTickLib.tickToPrice(config.maxBuyTick);
-            uint256 yieldBound = _maxBuyPrice(config.minBuyYield, timeToMaturity, feeCeiling);
-
-            if (yieldBound < bound) bound = yieldBound;
-
-            require(params.assets * WAD <= params.units * bound, "MidnightLib/fill-price-too-high");
-
-            _decreaseStrategyLimit(
-                params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_BUY, params.strategy, marketId, params.assets
-            );
-
-            _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_BUY, marketId, params.assets);
-
-            ERC20Lib.transfer(params.proxy, config.loanToken, params.strategy, params.assets);
-
-            return;
+            _fundFillBuy(params, timeToMaturity);
+        } else {
+            _fundFillSell(params, timeToMaturity);
         }
+    }
+
+    function _fundFillBuy(FundFillParams memory params, uint256 timeToMaturity) internal {
+        MarketConfig memory config = params.config;
+
+        bytes32 marketId = params.marketId;
+
+        uint256 feeCeiling = _continuousFeePerSecond(config.maxContinuousFee);
+
+        // The bound below assumes the ceiling, so a live fee above it clears under minBuyYield.
+        require(
+            IMidnight(params.midnight).continuousFee(marketId) <= feeCeiling,
+            "MidnightLib/continuous-fee-too-high"
+        );
+
+        require(
+            IMidnight(params.midnight).lossFactor(marketId) <= config.maxLossFactor,
+            "MidnightLib/loss-factor-too-high"
+        );
+
+        uint256 bound      = MidnightTickLib.tickToPrice(config.maxBuyTick);
+        uint256 yieldBound = _maxBuyPrice(config.minBuyYield, timeToMaturity, feeCeiling);
+
+        if (yieldBound < bound) bound = yieldBound;
+
+        require(params.assets * WAD <= params.units * bound, "MidnightLib/fill-price-too-high");
+
+        _decreaseStrategyLimit(
+            params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_BUY, params.strategy, marketId, params.assets
+        );
+
+        _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_BUY, marketId, params.assets);
+
+        ERC20Lib.transfer(params.proxy, config.loanToken, params.strategy, params.assets);
+    }
+
+    function _fundFillSell(FundFillParams memory params, uint256 timeToMaturity) internal {
+        MarketConfig memory config = params.config;
+
+        bytes32 marketId = params.marketId;
 
         // Midnight has already moved the sold units and their fee out of the position.
         ( uint256 creditPost, uint256 carriedFee ) = _position(
