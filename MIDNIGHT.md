@@ -25,7 +25,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). This is a blanket grant; see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant). Keep exactly one ratifier authorized per proxy; see [One ratifier per proxy](#kill-switches-and-runbook). |
 | `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and the dust rule makes that a no-op. |
 
-Groups are operator-managed: any number and any id, per market or across markets. Retiring a group is permanent. To make a market one-directional, leave the other direction's strategy keys unset. Midnight accepts a cancel for any group id, so a compromised canceller (`RELAYER` or `FREEZER`) can retire any group the quoter uses, including new ones; revoke the compromised role before quoting in new groups.
+Groups are operator-managed: any number and any id, per market or across markets. Retiring a group is permanent. Midnight counts consumption per group, so offers that share a group share its capacity and are cancelled together. Midnight keeps no list of groups and a cancel needs the exact id, so keep every group id the quoter has used on record off-chain. To make a market one-directional, leave the other direction's strategy keys unset. Midnight accepts a cancel for any group id, so a compromised canceller (`RELAYER` or `FREEZER`) can retire any group the quoter uses, including new ones; revoke the compromised role before quoting in new groups.
 
 ### Enabling maker mode
 
@@ -132,7 +132,7 @@ Setting `maxBuyTick` to zero closes entry: `midnight_isCallbackAllowed` then ret
 **Runbook.**
 
 1. Freeze the proxy's ratifier (every ratifier authorized for the proxy, if more than one is).
-2. The FC `FREEZER` zeroes `maxOfferSize` on each affected market, which also halts fabricated `fundFill` calls there, then cancels the groups the quoter uses, and calls `removeRelayer` for operator-role strategies. ALM has no proxy freeze, and removing relayers does not stop maker fills, because pass-through strategies hold no role.
+2. The FC `FREEZER` zeroes `maxOfferSize` on each affected market, which also halts fabricated `fundFill` calls there, then cancels the groups the quoter uses, and calls `removeRelayer` for operator-role strategies. ALM has no proxy freeze, and removing relayers does not stop maker fills, because pass-through strategies hold no role. A compromised quoter can sign offers in groups nobody has seen, so cancelling the groups the quoter uses does not retire them; the ratifier freezer calls `removeQuoter` on that key before any `unfreeze()`.
 3. Governance zeroes the strategy keys and revokes operator roles.
 
 **Strategy compromised.** A ratifier freeze does not stop a keyed strategy calling `fundFill` directly, so the order is different:
