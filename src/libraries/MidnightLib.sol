@@ -123,9 +123,11 @@ library MidnightLib {
     )
         external returns (address loanToken, uint256 maturity)
     {
-        Market memory market = _validateMarket(config, midnight, marketId);
+        _validateMarket(config);
 
         _validateMakeConfig(maxOfferSize);
+
+        Market memory market = _validateMarketExists(midnight, marketId);
 
         config.maturity     = uint48(market.maturity);
         config.maxOfferSize = uint128(maxOfferSize);
@@ -152,20 +154,22 @@ library MidnightLib {
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
     }
 
-    function _validateMarket(MarketConfig memory config, address midnight, bytes32 marketId)
+    function _validateMarket(MarketConfig memory config) internal pure {
+        require(config.minSellTick != 0, "MidnightLib/market-not-onboarded");
+    }
+
+    function _validateMakeConfig(uint256 maxOfferSize) internal pure {
+        require(maxOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
+    }
+
+    function _validateMarketExists(address midnight, bytes32 marketId)
         internal view returns (Market memory market)
     {
-        require(config.minSellTick != 0, "MidnightLib/market-not-onboarded");
-
         // Reverts for an id Midnight never created.
         market = IMidnight(midnight).toMarket(marketId);
 
         require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
         require(market.maturity <= type(uint48).max, "MidnightLib/maturity-oob");
-    }
-
-    function _validateMakeConfig(uint256 maxOfferSize) internal pure {
-        require(maxOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
     }
 
     /**********************************************************************************************/
