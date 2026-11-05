@@ -112,7 +112,7 @@ library MidnightLib {
         config.maxContinuousFee = maxContinuousFee;
         config.maxLossFactor    = maxLossFactor;
 
-        _validateMarketConfig(config);
+        _validateTakeConfig(config);
     }
 
     function setMakeConfig(
@@ -123,14 +123,9 @@ library MidnightLib {
     )
         external returns (address loanToken, uint256 maturity)
     {
-        require(config.minSellTick != 0,           "MidnightLib/market-not-onboarded");
-        require(maxOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
+        Market memory market = _validateMarket(config, midnight, marketId);
 
-        // Reverts for an id Midnight never created.
-        Market memory market = IMidnight(midnight).toMarket(marketId);
-
-        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
-        require(market.maturity <= type(uint48).max, "MidnightLib/maturity-oob");
+        _validateMakeConfig(maxOfferSize);
 
         config.maturity     = uint48(market.maturity);
         config.maxOfferSize = uint128(maxOfferSize);
@@ -140,7 +135,7 @@ library MidnightLib {
         maturity  = market.maturity;
     }
 
-    function _validateMarketConfig(MarketConfig memory config) internal pure {
+    function _validateTakeConfig(MarketConfig memory config) internal pure {
         require(config.maxBuyTick <= MAX_TICK, "MidnightLib/max-buy-tick-oob");
 
         require(
@@ -155,6 +150,22 @@ library MidnightLib {
 
         // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
+    }
+
+    function _validateMarket(MarketConfig memory config, address midnight, bytes32 marketId)
+        internal view returns (Market memory market)
+    {
+        require(config.minSellTick != 0, "MidnightLib/market-not-onboarded");
+
+        // Reverts for an id Midnight never created.
+        market = IMidnight(midnight).toMarket(marketId);
+
+        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
+        require(market.maturity <= type(uint48).max, "MidnightLib/maturity-oob");
+    }
+
+    function _validateMakeConfig(uint256 maxOfferSize) internal pure {
+        require(maxOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
     }
 
     /**********************************************************************************************/
