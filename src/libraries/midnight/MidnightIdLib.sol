@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Morpho Association
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.21;
+// Copyright (c) 2026 Morpho Association
 
 import { Market } from "../../interfaces/MidnightInterfaces.sol";
 
@@ -12,6 +12,7 @@ library MidnightIdLib {
     bytes constant SSTORE2_PREFIX = hex"600b380380600b5f395ff3";
 
     function toId(Market memory market) internal pure returns (bytes32) {
+        // The packed pair cannot collide: SSTORE2_PREFIX is a fixed size.
         return keccak256(
             abi.encodePacked(
                 uint8(0xff),
