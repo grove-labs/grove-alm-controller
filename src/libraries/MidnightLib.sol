@@ -125,8 +125,7 @@ library MidnightLib {
     )
         external
     {
-        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
-        require(market.maturity <= type(uint64).max, "MidnightLib/maturity-oob");
+        _validateMarket(market, midnight);
 
         bytes32 marketId = MidnightIdLib.toId(market);
 
@@ -139,11 +138,9 @@ library MidnightLib {
         config.maxContinuousFee = maxContinuousFee;
         config.maxLossFactor    = maxLossFactor;
 
-        _validateTakeConfig(config);
+        _validateMarketConfig(config, maxMakeOfferSize);
 
-        _validateMakeConfig(maxMakeOfferSize);
-
-        _validateMarketExists(midnight, marketId);
+        _requireMarketId(_getMarket(midnight, marketId), marketId);
 
         config.maxMakeOfferSize = uint128(maxMakeOfferSize);
         config.maturity         = uint64(market.maturity);
@@ -152,7 +149,14 @@ library MidnightLib {
         _emitMarketConfigSet(marketId, config);
     }
 
-    function _validateTakeConfig(MarketConfig memory config) internal pure {
+    function _validateMarket(Market calldata market, address midnight) internal pure {
+        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
+        require(market.maturity <= type(uint64).max, "MidnightLib/maturity-oob");
+    }
+
+    function _validateMarketConfig(MarketConfig memory config, uint256 maxMakeOfferSize)
+        internal pure
+    {
         require(config.maxBuyTick <= MAX_TICK, "MidnightLib/max-buy-tick-oob");
 
         require(
@@ -167,15 +171,8 @@ library MidnightLib {
 
         // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
-    }
 
-    function _validateMakeConfig(uint256 maxMakeOfferSize) internal pure {
         require(maxMakeOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
-    }
-
-    function _validateMarketExists(address midnight, bytes32 marketId) internal view {
-        // Reverts for an id Midnight never created.
-        _requireMarketId(IMidnight(midnight).toMarket(marketId), marketId);
     }
 
     function _emitMarketConfigSet(bytes32 marketId, MarketConfig storage config) private {
@@ -311,7 +308,7 @@ library MidnightLib {
         require(params.minAssetsOut != 0,       "MidnightLib/min-assets-out-not-set");
 
         bytes32       marketId = params.marketId;
-        Market memory market   = IMidnight(params.midnight).toMarket(marketId);
+        Market memory market   = _getMarket(params.midnight, marketId);
 
         ( uint256 credit, ) = _position(market, marketId, address(params.proxy));
 
@@ -411,7 +408,7 @@ library MidnightLib {
 
         // Midnight has already moved the sold units and their fee out of the position.
         ( uint256 creditPost, uint256 carriedFee ) = _position(
-            IMidnight(params.midnight).toMarket(marketId), marketId, address(params.proxy)
+            _getMarket(params.midnight, marketId), marketId, address(params.proxy)
         );
 
         uint256 floor      = MidnightTickLib.tickToPrice(config.minSellTick);
@@ -556,6 +553,11 @@ library MidnightLib {
     // The market arrives in calldata and feeds the yield bounds, so bind it to the id first.
     function _requireMarketId(Market memory market, bytes32 marketId) internal pure {
         require(MidnightIdLib.toId(market) == marketId, "MidnightLib/market-mismatch");
+    }
+
+    // Reverts for an id Midnight never created.
+    function _getMarket(address midnight, bytes32 marketId) internal view returns (Market memory) {
+        return IMidnight(midnight).toMarket(marketId);
     }
 
     function _timeToMaturity(uint256 maturity) internal view returns (uint256) {
