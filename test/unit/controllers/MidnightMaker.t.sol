@@ -1203,6 +1203,41 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
     }
 
+    function test_midnight_fundFill_buyYieldBoundUsesTheLiveFee() public {
+        _setLimits(MAX_OFFER_SIZE);
+
+        _setConfig(uint16(MIDNIGHT_MAX_TICK), MIN_SELL_TICK, 1_00, MAX_SELL_YIELD, 1_00_00, type(uint128).max);
+
+        uint256 timeToMaturity = maturity - block.timestamp;
+
+        uint256 ceilingBound = MidnightLib._maxBuyPrice(
+            1_00, timeToMaturity, MidnightLib._continuousFeePerSecond(1_00_00)
+        );
+        uint256 liveBound = MidnightLib._maxBuyPrice(1_00, timeToMaturity, 0);
+
+        assertEq(venue.continuousFee(marketId), 0);
+        assertLt(liveBound, MidnightTickLib.tickToPrice(uint16(MIDNIGHT_MAX_TICK)));
+
+        uint256 assets = UNITS * liveBound / WAD;
+
+        assertGt(assets * WAD, UNITS * ceilingBound);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-high");
+        controller.midnight_fundFill(marketId, true, assets + 1, UNITS, 0);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        assertEq(loanToken.balanceOf(strategy), assets);
+
+        venue.setContinuousFee(marketId, MidnightLib._continuousFeePerSecond(1_00_00));
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-high");
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+    }
+
     function test_midnight_fundFill_sellFloorBoundary() public {
         _setLimits(MAX_OFFER_SIZE);
 

@@ -372,11 +372,10 @@ library MidnightLib {
 
         bytes32 marketId = params.marketId;
 
-        uint256 feeCeiling = _continuousFeePerSecond(config.maxContinuousFee);
+        uint256 continuousFee = IMidnight(params.midnight).continuousFee(marketId);
 
-        // The bound below assumes the ceiling, so a live fee above it clears under minBuyYield.
         require(
-            IMidnight(params.midnight).continuousFee(marketId) <= feeCeiling,
+            continuousFee <= _continuousFeePerSecond(config.maxContinuousFee),
             "MidnightLib/continuous-fee-too-high"
         );
 
@@ -386,7 +385,7 @@ library MidnightLib {
         );
 
         uint256 bound      = MidnightTickLib.tickToPrice(config.maxBuyTick);
-        uint256 yieldBound = _maxBuyPrice(config.minBuyYield, timeToMaturity, feeCeiling);
+        uint256 yieldBound = _maxBuyPrice(config.minBuyYield, timeToMaturity, continuousFee);
 
         if (yieldBound < bound) bound = yieldBound;
 

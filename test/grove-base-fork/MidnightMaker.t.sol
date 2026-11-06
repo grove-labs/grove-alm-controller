@@ -123,7 +123,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
         uint256         units
     );
 
-    // The controller prices against the configured fee ceiling, so its buy bound is the tighter one.
+    // Below both buy bounds at any live fee up to the configured ceiling.
     uint16 constant MAKER_BUY_TICK = TICK_98;
 
     // A buy of one unit rounds to zero assets and never reaches the controller.
@@ -341,11 +341,46 @@ contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBas
     }
 
     function test_makerBuy_priceCeilingBoundary() public {
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
         _take(_makerOffer(true, 4296, 1_000e18), 1_000e18);
 
         _expectTakeRevert(
             _makerOffer(true, 4300, 2_000e18), 1_000e18, "MidnightLib/fill-price-too-high"
         );
+    }
+
+    function test_makerBuy_yieldBoundUsesTheLiveFee() public {
+        uint256 ceilingBound = MidnightLib._maxBuyPrice(
+            MIN_BUY_YIELD, _timeToMaturity(), MidnightLib.MAX_CONTINUOUS_FEE
+        );
+        uint256 liveBound = MidnightLib._maxBuyPrice(MIN_BUY_YIELD, _timeToMaturity(), 0);
+
+        assertEq(midnight.continuousFee(marketId), 0);
+
+        uint256 betweenTick = TICK_98;
+        while (MidnightTickLib.tickToPrice(betweenTick) <= ceilingBound) betweenTick += TICK_SPACING;
+
+        uint256 aboveTick = betweenTick;
+        while (MidnightTickLib.tickToPrice(aboveTick) <= liveBound) aboveTick += TICK_SPACING;
+
+        assertGt(aboveTick, betweenTick);
+
+        _setConfig(uint16(aboveTick), TICK_98, MAX_CONTINUOUS_FEE_CBP);
+
+        _expectTakeRevert(
+            _makerOffer(true, aboveTick, 1_000e18), 1_000e18, "MidnightLib/fill-price-too-high"
+        );
+
+        Offer memory offer = _makerOffer(true, betweenTick, 2_000e18);
+
+        _take(offer, 1_000e18);
+
+        assertEq(_credit(), 1_000e18);
+
+        _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
+        _expectTakeRevert(offer, 1_000e18, "MidnightLib/fill-price-too-high");
     }
 
     function test_makerBuy_settlementFeeFallsEntirelyOnTheTaker() public {
