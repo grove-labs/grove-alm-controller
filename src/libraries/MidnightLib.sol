@@ -33,6 +33,23 @@ library MidnightLib {
     uint256 internal constant FEE_CBP_RATE  = 1e12;  // one centi-basis point per year, WAD
 
     /**********************************************************************************************/
+    /*** Events                                                                                 ***/
+    /**********************************************************************************************/
+
+    event MidnightMarketConfigSet(
+        bytes32 indexed marketId,
+        address loanToken,
+        uint256 maturity,
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor,
+        uint256 maxMakeOfferSize
+    );
+
+    /**********************************************************************************************/
     /*** Structs                                                                                ***/
     /**********************************************************************************************/
 
@@ -43,8 +60,8 @@ library MidnightLib {
         uint16  maxSellYield;      // basis points a year
         uint16  maxContinuousFee;  // centi-basis points a year
         uint128 maxLossFactor;     // fraction of type(uint128).max
-        uint48  maturity;
-        uint128 maxOfferSize;      // non-zero marks the market as make-enabled, and caps each fill
+        uint128 maxMakeOfferSize;  // non-zero marks the market as make-enabled, and caps each fill
+        uint64  maturity;
         address loanToken;
     }
 
@@ -94,17 +111,27 @@ library MidnightLib {
     /*** Config functions                                                                       ***/
     /**********************************************************************************************/
 
-    function setTakeConfig(
-        MarketConfig storage config,
-        uint16               maxBuyTick,
-        uint16               minSellTick,
-        uint16               minBuyYield,
-        uint16               maxSellYield,
-        uint16               maxContinuousFee,
-        uint128              maxLossFactor
+    function setMarketConfig(
+        mapping(bytes32 => MarketConfig) storage configs,
+        address                                  midnight,
+        Market calldata                          market,
+        uint16                                   maxBuyTick,
+        uint16                                   minSellTick,
+        uint16                                   minBuyYield,
+        uint16                                   maxSellYield,
+        uint16                                   maxContinuousFee,
+        uint128                                  maxLossFactor,
+        uint256                                  maxMakeOfferSize
     )
         external
     {
+        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
+        require(market.maturity <= type(uint64).max, "MidnightLib/maturity-oob");
+
+        bytes32 marketId = MidnightIdLib.toId(market);
+
+        MarketConfig storage config = configs[marketId];
+
         config.maxBuyTick       = maxBuyTick;
         config.minSellTick      = minSellTick;
         config.minBuyYield      = minBuyYield;
@@ -113,28 +140,16 @@ library MidnightLib {
         config.maxLossFactor    = maxLossFactor;
 
         _validateTakeConfig(config);
-    }
 
-    function setMakeConfig(
-        MarketConfig storage config,
-        address              midnight,
-        bytes32              marketId,
-        uint256              maxOfferSize
-    )
-        external returns (address loanToken, uint256 maturity)
-    {
-        _validateMarket(config);
+        _validateMakeConfig(maxMakeOfferSize);
 
-        _validateMakeConfig(maxOfferSize);
+        _validateMarketExists(midnight, marketId);
 
-        Market memory market = _validateMarketExists(midnight, marketId);
+        config.maxMakeOfferSize = uint128(maxMakeOfferSize);
+        config.maturity         = uint64(market.maturity);
+        config.loanToken        = market.loanToken;
 
-        config.maturity     = uint48(market.maturity);
-        config.maxOfferSize = uint128(maxOfferSize);
-        config.loanToken    = market.loanToken;
-
-        loanToken = market.loanToken;
-        maturity  = market.maturity;
+        _emitMarketConfigSet(marketId, config);
     }
 
     function _validateTakeConfig(MarketConfig memory config) internal pure {
@@ -154,22 +169,28 @@ library MidnightLib {
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
     }
 
-    function _validateMarket(MarketConfig memory config) internal pure {
-        require(config.minSellTick != 0, "MidnightLib/market-not-onboarded");
+    function _validateMakeConfig(uint256 maxMakeOfferSize) internal pure {
+        require(maxMakeOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
     }
 
-    function _validateMakeConfig(uint256 maxOfferSize) internal pure {
-        require(maxOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
-    }
-
-    function _validateMarketExists(address midnight, bytes32 marketId)
-        internal view returns (Market memory market)
-    {
+    function _validateMarketExists(address midnight, bytes32 marketId) internal view {
         // Reverts for an id Midnight never created.
-        market = IMidnight(midnight).toMarket(marketId);
+        _requireMarketId(IMidnight(midnight).toMarket(marketId), marketId);
+    }
 
-        require(market.midnight == midnight,         "MidnightLib/invalid-midnight");
-        require(market.maturity <= type(uint48).max, "MidnightLib/maturity-oob");
+    function _emitMarketConfigSet(bytes32 marketId, MarketConfig storage config) private {
+        emit MidnightMarketConfigSet(
+            marketId,
+            config.loanToken,
+            config.maturity,
+            config.maxBuyTick,
+            config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
+            config.maxContinuousFee,
+            config.maxLossFactor,
+            config.maxMakeOfferSize
+        );
     }
 
     /**********************************************************************************************/
@@ -331,12 +352,12 @@ library MidnightLib {
     function fundFill(FundFillParams memory params) external {
         MarketConfig memory config = params.config;
 
-        require(config.maxOfferSize != 0, "MidnightLib/make-not-enabled");
-        require(params.assets != 0,       "MidnightLib/zero-assets");
-        require(params.units  != 0,       "MidnightLib/zero-units");
+        require(config.maxMakeOfferSize != 0, "MidnightLib/make-not-enabled");
+        require(params.assets != 0,           "MidnightLib/zero-assets");
+        require(params.units  != 0,           "MidnightLib/zero-units");
 
         require(
-            params.assets <= config.maxOfferSize,
+            params.assets <= config.maxMakeOfferSize,
             "MidnightLib/offer-size-too-large"
         );
 

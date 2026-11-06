@@ -14,7 +14,7 @@ import { IRateLimits }   from "./interfaces/IRateLimits.sol";
 import { IPendleMarket } from "./interfaces/PendleInterfaces.sol";
 import { MessagingFee }  from "./interfaces/ILayerZero.sol";
 
-import { IMidnight, Offer } from "./interfaces/MidnightInterfaces.sol";
+import { IMidnight, Market, Offer } from "./interfaces/MidnightInterfaces.sol";
 
 import { AaveLib }       from "./libraries/AaveLib.sol";
 import { AaveV4Lib }     from "./libraries/AaveV4Lib.sol";
@@ -55,21 +55,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint256         assets,
         uint256         units
     );
-    event MidnightMakeConfigSet(
-        bytes32 indexed marketId,
-        address loanToken,
-        uint256 maturity,
-        uint256 maxOfferSize
-    );
-    event MidnightMarketConfigSet(
-        bytes32 indexed marketId,
-        uint16  maxBuyTick,
-        uint16  minSellTick,
-        uint16  minBuyYield,
-        uint16  maxSellYield,
-        uint16  maxContinuousFee,
-        uint128 maxLossFactor
-    );
+    event MidnightMakeDisabled(bytes32 indexed marketId);
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -245,48 +231,31 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     }
 
     function setMidnightMarketConfig(
-        bytes32 marketId,
-        uint16  maxBuyTick,
-        uint16  minSellTick,
-        uint16  minBuyYield,
-        uint16  maxSellYield,
-        uint16  maxContinuousFee,
-        uint128 maxLossFactor
+        Market calldata market,
+        uint16          maxBuyTick,
+        uint16          minSellTick,
+        uint16          minBuyYield,
+        uint16          maxSellYield,
+        uint16          maxContinuousFee,
+        uint128         maxLossFactor,
+        uint256         maxMakeOfferSize
     )
         external
     {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        MidnightLib.setTakeConfig(
-            _midnightMarketConfigs[marketId],
+        MidnightLib.setMarketConfig(
+            _midnightMarketConfigs,
+            midnight,
+            market,
             maxBuyTick,
             minSellTick,
             minBuyYield,
             maxSellYield,
             maxContinuousFee,
-            maxLossFactor
+            maxLossFactor,
+            maxMakeOfferSize
         );
-
-        emit MidnightMarketConfigSet(
-            marketId,
-            maxBuyTick,
-            minSellTick,
-            minBuyYield,
-            maxSellYield,
-            maxContinuousFee,
-            maxLossFactor
-        );
-    }
-
-    function setMidnightMakeConfig(bytes32 marketId, uint256 maxOfferSize) external {
-        // Disabling make is a safety action the freezer may take; enabling stays with governance.
-        if (maxOfferSize != 0 || !hasRole(FREEZER, msg.sender)) _checkRole(DEFAULT_ADMIN_ROLE);
-
-        ( address loanToken, uint256 maturity ) = MidnightLib.setMakeConfig(
-            _midnightMarketConfigs[marketId], midnight, marketId, maxOfferSize
-        );
-
-        emit MidnightMakeConfigSet(marketId, loanToken, maturity, maxOfferSize);
     }
 
     function setMidnightRatifierAuthorization(address ratifier, bool authorized) external {
@@ -320,6 +289,14 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function removeRelayer(address relayer) external onlyRole(FREEZER) {
         _revokeRole(RELAYER, relayer);
         emit RelayerRemoved(relayer);
+    }
+
+    function disableMidnightMake(bytes32 marketId) external {
+        _checkRole(FREEZER);
+
+        _midnightMarketConfigs[marketId].maxMakeOfferSize = 0;
+
+        emit MidnightMakeDisabled(marketId);
     }
 
     /**********************************************************************************************/
@@ -823,8 +800,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         external view returns (bool)
     {
         // Hard-coded, so a key funded for the zero address by mistake cannot ratify an unmetered offer.
-        if (callback == address(0))                                   return false;
-        if (_midnightMarketConfigs[marketId].maxOfferSize == 0)       return false;
+        if (callback == address(0))                                  return false;
+        if (_midnightMarketConfigs[marketId].maxMakeOfferSize == 0)  return false;
         if (buy && _midnightMarketConfigs[marketId].maxBuyTick == 0) return false;
 
         bytes32 strategyKey = RateLimitHelpers.makeAddressBytes32Key(

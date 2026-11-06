@@ -12,13 +12,16 @@ import { RateLimitHelpers }  from "../../../src/RateLimitHelpers.sol";
 
 import { CollateralParams, Market } from "../../../src/interfaces/MidnightInterfaces.sol";
 
-import { MidnightLib }     from "../../../src/libraries/MidnightLib.sol";
-import { MidnightIdLib }   from "../../../src/libraries/midnight/MidnightIdLib.sol";
-import { MidnightTickLib } from "../../../src/libraries/midnight/MidnightTickLib.sol";
+import { MidnightLib }   from "../../../src/libraries/MidnightLib.sol";
+import { MidnightIdLib } from "../../../src/libraries/midnight/MidnightIdLib.sol";
+
+import { MidnightTickLib, MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
 import { UnitTestBase } from "../UnitTestBase.t.sol";
 
 contract MockMidnightVenue {
+
+    error MarketNotCreated();
 
     mapping(bytes32 => bytes)   internal _markets;
     mapping(bytes32 => uint128) public   lossFactor;
@@ -27,8 +30,6 @@ contract MockMidnightVenue {
     mapping(bytes32 => mapping(address => uint256)) public debt;
     mapping(bytes32 => mapping(address => uint128)) public credit;
     mapping(bytes32 => mapping(address => uint128)) public pendingFee;
-
-    bool public marketCreated;
 
     address public authorizedTarget;
     bool    public authorizedFlag;
@@ -41,8 +42,7 @@ contract MockMidnightVenue {
     uint256 public consumedCalls;
 
     function setMarket(bytes32 id, Market memory market) external {
-        _markets[id]  = abi.encode(market);
-        marketCreated = true;
+        _markets[id] = abi.encode(market);
     }
 
     function setLossFactor(bytes32 id, uint128 value) external {
@@ -69,7 +69,8 @@ contract MockMidnightVenue {
     }
 
     function toMarket(bytes32 id) external view returns (Market memory) {
-        require(marketCreated, "MockMidnight/market-not-created");
+        if (_markets[id].length == 0) revert MarketNotCreated();
+
         return abi.decode(_markets[id], (Market));
     }
 
@@ -98,11 +99,18 @@ contract MidnightMakerTestBase is UnitTestBase {
         uint256         assets,
         uint256         units
     );
-    event MidnightMakeConfigSet(
+    event MidnightMakeDisabled(bytes32 indexed marketId);
+    event MidnightMarketConfigSet(
         bytes32 indexed marketId,
         address loanToken,
         uint256 maturity,
-        uint256 maxOfferSize
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor,
+        uint256 maxMakeOfferSize
     );
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
@@ -171,16 +179,78 @@ contract MidnightMakerTestBase is UnitTestBase {
         });
     }
 
-    function _onboardTake() internal {
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
+    // Restates the current maxMakeOfferSize, since the setter writes every field.
+    function _setConfig(
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor
+    )
+        internal
+    {
+        _setConfig(
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor,
+            controller.midnightMarketConfigs(marketId).maxMakeOfferSize
         );
     }
 
-    function _enableMake() internal {
+    function _setConfig(
+        uint16  maxBuyTick,
+        uint16  minSellTick,
+        uint16  minBuyYield,
+        uint16  maxSellYield,
+        uint16  maxContinuousFee,
+        uint128 maxLossFactor,
+        uint256 maxMakeOfferSize
+    )
+        internal
+    {
         vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        controller.setMidnightMarketConfig(
+            _market(),
+            maxBuyTick,
+            minSellTick,
+            minBuyYield,
+            maxSellYield,
+            maxContinuousFee,
+            maxLossFactor,
+            maxMakeOfferSize
+        );
+    }
+
+    function _onboardTake() internal {
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max);
+    }
+
+    function _enableMake() internal {
+        _setMakeOfferSize(MAX_OFFER_SIZE);
+    }
+
+    // Restates the current bounds, since the setter writes every field.
+    function _setMakeOfferSize(uint256 maxMakeOfferSize) internal {
+        MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(marketId);
+
+        _setConfig(
+            config.maxBuyTick,
+            config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
+            config.maxContinuousFee,
+            config.maxLossFactor,
+            maxMakeOfferSize
+        );
+    }
+
+    function _disableMake() internal {
+        vm.prank(freezer);
+        controller.disableMidnightMake(marketId);
     }
 
     function _buyKey() internal view returns (bytes32) {
@@ -244,157 +314,342 @@ contract MidnightMakerTestBase is UnitTestBase {
 
 }
 
-contract ForeignControllerSetMidnightMakeConfigTests is MidnightMakerTestBase {
+contract ForeignControllerSetMidnightMarketConfigTests is MidnightMakerTestBase {
 
-    function test_setMidnightMakeConfig_unauthorizedAccount() public {
-        vm.expectRevert(abi.encodeWithSignature(
+    // Midnight's own ceiling: 1% a year, in centi-basis points.
+    uint16 constant MAX_CONTINUOUS_FEE_CBP = 1_00_00;
+
+    uint16 constant MIN_BUY_YIELD = 1_00;
+
+    function _set(Market memory market, uint16 maxBuyTick, uint256 maxMakeOfferSize) internal {
+        controller.setMidnightMarketConfig(
+            market, maxBuyTick, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max, maxMakeOfferSize
+        );
+    }
+
+    function _setBounds(
+        uint16 maxBuyTick,
+        uint16 minSellTick,
+        uint16 maxSellYield,
+        uint16 maxContinuousFee
+    )
+        internal
+    {
+        controller.setMidnightMarketConfig(
+            _market(), maxBuyTick, minSellTick, 0, maxSellYield, maxContinuousFee, 0, MAX_OFFER_SIZE
+        );
+    }
+
+    function _unauthorized(address account) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
-            address(this),
+            account,
             DEFAULT_ADMIN_ROLE
-        ));
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        );
     }
 
-    function test_setMidnightMakeConfig_marketNotOnboarded() public {
-        vm.prank(admin);
-        vm.expectRevert("MidnightLib/market-not-onboarded");
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+    function test_setMidnightMarketConfig_unauthorizedAccount() public {
+        vm.expectRevert(_unauthorized(address(this)));
+        _set(_market(), MAX_BUY_TICK, MAX_OFFER_SIZE);
     }
 
-    function test_setMidnightMakeConfig_maxOfferSizeOutOfBounds() public {
-        _onboardTake();
+    function test_setMidnightMarketConfig_freezerCannotCall() public {
+        vm.prank(freezer);
+        vm.expectRevert(_unauthorized(freezer));
+        _set(_market(), MAX_BUY_TICK, 0);
 
-        vm.prank(admin);
-        vm.expectRevert("MidnightLib/max-offer-size-oob");
-        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max) + 1);
-
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max));
+        vm.prank(freezer);
+        vm.expectRevert(_unauthorized(freezer));
+        _set(_market(), MAX_BUY_TICK, MAX_OFFER_SIZE);
     }
 
-    function test_setMidnightMakeConfig_marketNotOnboardedBeforeMaxOfferSize() public {
-        vm.prank(admin);
-        vm.expectRevert("MidnightLib/market-not-onboarded");
-        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max) + 1);
+    function test_setMidnightMarketConfig_relayerCannotCall() public {
+        vm.prank(relayer);
+        vm.expectRevert(_unauthorized(relayer));
+        _set(_market(), MAX_BUY_TICK, 0);
+
+        vm.prank(relayer);
+        vm.expectRevert(_unauthorized(relayer));
+        _set(_market(), MAX_BUY_TICK, MAX_OFFER_SIZE);
     }
 
-    function test_setMidnightMakeConfig_maxOfferSizeBeforeVenueChecks() public {
-        _onboardTake();
-
+    function test_setMidnightMarketConfig_invalidMidnight() public {
         Market memory other = _market();
         other.midnight = makeAddr("otherVenue");
 
-        venue.setMarket(marketId, other);
+        venue.setMarket(MidnightIdLib.toId(other), other);
 
-        vm.prank(admin);
-        vm.expectRevert("MidnightLib/max-offer-size-oob");
-        controller.setMidnightMakeConfig(marketId, uint256(type(uint128).max) + 1);
-    }
-
-    function test_setMidnightMakeConfig_invalidMidnight() public {
-        _onboardTake();
-
-        Market memory other = _market();
-        other.midnight = makeAddr("otherVenue");
-
-        venue.setMarket(marketId, other);
+        vm.expectCall(address(venue), abi.encodeWithSelector(MockMidnightVenue.toMarket.selector), 0);
 
         vm.prank(admin);
         vm.expectRevert("MidnightLib/invalid-midnight");
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        _set(other, MAX_BUY_TICK, MAX_OFFER_SIZE);
     }
 
-    function test_setMidnightMakeConfig_maturityOutOfBounds() public {
-        _onboardTake();
-
+    function test_setMidnightMarketConfig_maturityOutOfBounds() public {
         Market memory far = _market();
-        far.maturity = uint256(type(uint48).max) + 1;
+        far.maturity = uint256(type(uint64).max) + 1;
 
-        venue.setMarket(marketId, far);
+        venue.setMarket(MidnightIdLib.toId(far), far);
 
         vm.prank(admin);
         vm.expectRevert("MidnightLib/maturity-oob");
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        _set(far, MAX_BUY_TICK, MAX_OFFER_SIZE);
+
+        far.maturity = type(uint64).max;
+
+        venue.setMarket(MidnightIdLib.toId(far), far);
+
+        vm.prank(admin);
+        _set(far, MAX_BUY_TICK, MAX_OFFER_SIZE);
+
+        assertEq(controller.midnightMarketConfigs(MidnightIdLib.toId(far)).maturity, type(uint64).max);
     }
 
-    function test_setMidnightMakeConfig_marketNotCreatedOnVenue() public {
-        _onboardTake();
+    function test_setMidnightMarketConfig_maxBuyTickOutOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-buy-tick-oob");
+        _setBounds(uint16(MIDNIGHT_MAX_TICK + 1), MIN_SELL_TICK, MAX_SELL_YIELD, 0);
+    }
 
-        MockMidnightVenue fresh = new MockMidnightVenue();
-
-        ForeignController other = new ForeignController(
-            admin,
-            address(proxy),
-            address(rateLimits),
-            makeAddr("psm"),
-            makeAddr("usdc"),
-            makeAddr("cctp"),
-            makeAddr("pendleRouter"),
-            makeAddr("uniswapV3Router"),
-            makeAddr("uniswapV3PositionManager"),
-            address(fresh)
-        );
-
+    function test_setMidnightMarketConfig_minSellTickOutOfBounds() public {
         vm.startPrank(admin);
-        other.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
-        );
 
-        vm.expectRevert("MockMidnight/market-not-created");
-        other.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
+        _setBounds(MAX_BUY_TICK, 0, MAX_SELL_YIELD, 0);
+
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
+        _setBounds(MAX_BUY_TICK, uint16(MIDNIGHT_MAX_TICK + 1), MAX_SELL_YIELD, 0);
+
         vm.stopPrank();
     }
 
-    function test_setMidnightMakeConfig() public {
-        _onboardTake();
+    function test_setMidnightMarketConfig_maxContinuousFeeOutOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-continuous-fee-oob");
+        _setBounds(MAX_BUY_TICK, MIN_SELL_TICK, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP + 1);
 
+        assertEq(
+            MidnightLib._continuousFeePerSecond(MAX_CONTINUOUS_FEE_CBP),
+            MidnightLib.MAX_CONTINUOUS_FEE
+        );
+
+        vm.prank(admin);
+        _setBounds(MAX_BUY_TICK, MIN_SELL_TICK, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP);
+    }
+
+    function test_setMidnightMarketConfig_maxSellYieldNotSet() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-sell-yield-not-set");
+        _setBounds(MAX_BUY_TICK, MIN_SELL_TICK, 0, 0);
+    }
+
+    function test_setMidnightMarketConfig_maxMakeOfferSizeOutOfBounds() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-offer-size-oob");
+        _set(_market(), MAX_BUY_TICK, uint256(type(uint128).max) + 1);
+
+        vm.prank(admin);
+        _set(_market(), MAX_BUY_TICK, type(uint128).max);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, type(uint128).max);
+    }
+
+    function test_setMidnightMarketConfig_marketNotCreated() public {
+        Market memory fresh = _market();
+        fresh.maturity = maturity + 1 days;
+
+        vm.prank(admin);
+        vm.expectRevert(MockMidnightVenue.MarketNotCreated.selector);
+        _set(fresh, MAX_BUY_TICK, MAX_OFFER_SIZE);
+    }
+
+    function test_setMidnightMarketConfig_marketMismatch() public {
+        Market memory other = _market();
+        other.rcfThreshold = 1;
+
+        venue.setMarket(marketId, other);
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/market-mismatch");
+        _set(_market(), MAX_BUY_TICK, MAX_OFFER_SIZE);
+    }
+
+    function test_setMidnightMarketConfig_invalidMidnightBeforeMaturity() public {
+        Market memory other = _market();
+        other.midnight = makeAddr("otherVenue");
+        other.maturity = uint256(type(uint64).max) + 1;
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        _set(other, MAX_BUY_TICK, MAX_OFFER_SIZE);
+    }
+
+    function test_setMidnightMarketConfig_maturityBeforeBounds() public {
+        Market memory far = _market();
+        far.maturity = uint256(type(uint64).max) + 1;
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/maturity-oob");
+        _set(far, uint16(MIDNIGHT_MAX_TICK + 1), MAX_OFFER_SIZE);
+    }
+
+    function test_setMidnightMarketConfig_boundsBeforeMaxMakeOfferSize() public {
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-buy-tick-oob");
+        _set(_market(), uint16(MIDNIGHT_MAX_TICK + 1), uint256(type(uint128).max) + 1);
+    }
+
+    function test_setMidnightMarketConfig_maxMakeOfferSizeBeforeVenueChecks() public {
+        Market memory fresh = _market();
+        fresh.maturity = maturity + 1 days;
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-offer-size-oob");
+        _set(fresh, MAX_BUY_TICK, uint256(type(uint128).max) + 1);
+
+        Market memory other = _market();
+        other.rcfThreshold = 1;
+
+        venue.setMarket(marketId, other);
+
+        vm.prank(admin);
+        vm.expectRevert("MidnightLib/max-offer-size-oob");
+        _set(_market(), MAX_BUY_TICK, uint256(type(uint128).max) + 1);
+    }
+
+    function test_setMidnightMarketConfig() public {
         MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(config.maturity,     0);
-        assertEq(config.maxOfferSize, 0);
-        assertEq(config.loanToken,    address(0));
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      0);
+        assertEq(config.minBuyYield,      0);
+        assertEq(config.maxSellYield,     0);
+        assertEq(config.maxContinuousFee, 0);
+        assertEq(config.maxLossFactor,    0);
+        assertEq(config.maxMakeOfferSize, 0);
+        assertEq(config.maturity,         0);
+        assertEq(config.loanToken,        address(0));
 
         vm.prank(admin);
         vm.expectEmit(address(controller));
-        emit MidnightMakeConfigSet(marketId, address(loanToken), maturity, MAX_OFFER_SIZE);
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
+        emit MidnightMarketConfigSet(
+            marketId,
+            address(loanToken),
+            maturity,
+            4000,
+            3000,
+            MIN_BUY_YIELD,
+            MAX_SELL_YIELD,
+            100,
+            1e18,
+            MAX_OFFER_SIZE
+        );
+        controller.setMidnightMarketConfig(
+            _market(), 4000, 3000, MIN_BUY_YIELD, MAX_SELL_YIELD, 100, 1e18, MAX_OFFER_SIZE
+        );
 
         config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(config.maturity,     maturity);
-        assertEq(config.maxOfferSize, MAX_OFFER_SIZE);
-        assertEq(config.loanToken,    address(loanToken));
-    }
+        assertEq(config.maxBuyTick,       4000);
+        assertEq(config.minSellTick,      3000);
+        assertEq(config.minBuyYield,      MIN_BUY_YIELD);
+        assertEq(config.maxSellYield,     MAX_SELL_YIELD);
+        assertEq(config.maxContinuousFee, 100);
+        assertEq(config.maxLossFactor,    1e18);
+        assertEq(config.maxMakeOfferSize, MAX_OFFER_SIZE);
+        assertEq(config.maturity,         maturity);
+        assertEq(config.loanToken,        address(loanToken));
 
-    function test_setMidnightMakeConfig_zeroDisablesMake() public {
-        _onboardTake();
-        _enableMake();
+        config = controller.midnightMarketConfigs(keccak256("otherMarket"));
+
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      0);
+        assertEq(config.maxMakeOfferSize, 0);
+        assertEq(config.maturity,         0);
+        assertEq(config.loanToken,        address(0));
 
         vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, 0);
+        vm.expectEmit(address(controller));
+        emit MidnightMarketConfigSet(
+            marketId,
+            address(loanToken),
+            maturity,
+            0,
+            uint16(MIDNIGHT_MAX_TICK),
+            0,
+            type(uint16).max,
+            MAX_CONTINUOUS_FEE_CBP,
+            type(uint128).max,
+            type(uint128).max
+        );
+        controller.setMidnightMarketConfig(
+            _market(),
+            0,
+            uint16(MIDNIGHT_MAX_TICK),
+            0,
+            type(uint16).max,
+            MAX_CONTINUOUS_FEE_CBP,
+            type(uint128).max,
+            type(uint128).max
+        );
 
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
+        config = controller.midnightMarketConfigs(marketId);
+
+        assertEq(config.maxBuyTick,       0);
+        assertEq(config.minSellTick,      MIDNIGHT_MAX_TICK);
+        assertEq(config.minBuyYield,      0);
+        assertEq(config.maxSellYield,     type(uint16).max);
+        assertEq(config.maxContinuousFee, MAX_CONTINUOUS_FEE_CBP);
+        assertEq(config.maxLossFactor,    type(uint128).max);
+        assertEq(config.maxMakeOfferSize, type(uint128).max);
+        assertEq(config.maturity,         maturity);
+        assertEq(config.loanToken,        address(loanToken));
     }
 
-    function test_setMidnightMarketConfig_preservesMakeConfig() public {
+    function test_setMidnightMarketConfig_restatesMaxMakeOfferSize() public {
         _onboardTake();
         _enableMake();
 
         vm.prank(admin);
         controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK - 1, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
+            _market(), MAX_BUY_TICK - 1, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max, 0
         );
 
         MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(marketId);
 
-        assertEq(config.maxBuyTick,   MAX_BUY_TICK - 1);
-        assertEq(config.maturity,     maturity);
-        assertEq(config.maxOfferSize, MAX_OFFER_SIZE);
-        assertEq(config.loanToken,    address(loanToken));
+        assertEq(config.maxBuyTick,       MAX_BUY_TICK - 1);
+        assertEq(config.maxMakeOfferSize, 0);
+        assertEq(config.maturity,         maturity);
+        assertEq(config.loanToken,        address(loanToken));
+
+        vm.prank(admin);
+        controller.setMidnightMarketConfig(
+            _market(), MAX_BUY_TICK - 1, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max, 1
+        );
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, 1);
+    }
+
+    function test_setMidnightMarketConfig_adminZeroEmitsOnlyTheConfigEvent() public {
+        _onboardTake();
+        _enableMake();
+
+        vm.recordLogs();
+
+        vm.prank(admin);
+        _set(_market(), MAX_BUY_TICK, 0);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        assertEq(logs.length,     1);
+        assertEq(logs[0].emitter, address(controller));
+        assertEq(logs[0].topics[0], MidnightLib.MidnightMarketConfigSet.selector);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, 0);
     }
 
 }
-
 contract ForeignControllerSetMidnightRatifierAuthorizationTests is MidnightMakerTestBase {
 
     function test_setMidnightRatifierAuthorization_unauthorizedAccount() public {
@@ -532,112 +787,215 @@ contract ForeignControllerCancelMidnightOfferGroupTests is MidnightMakerTestBase
 
 }
 
-contract ForeignControllerSetMidnightMakeConfigFreezerTests is MidnightMakerTestBase {
+contract ForeignControllerDisableMidnightMakeTests is MidnightMakerTestBase {
 
     function setUp() public override {
         super.setUp();
+
         _onboardTake();
+        _enableMake();
     }
 
-    function test_setMidnightMakeConfig_freezerCanDisableMake() public {
-        _enableMake();
-
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
-
-        vm.prank(freezer);
-        controller.setMidnightMakeConfig(marketId, 0);
-
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
+    function _unauthorized(address account) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            account,
+            FREEZER
+        );
     }
 
-    function test_setMidnightMakeConfig_freezerZeroingEmitsMakeConfigSet() public {
-        _enableMake();
+    function _assertSameExceptMakeOfferSize(
+        MidnightLib.MarketConfig memory before,
+        MidnightLib.MarketConfig memory current
+    )
+        internal pure
+    {
+        assertEq(current.maxBuyTick,       before.maxBuyTick);
+        assertEq(current.minSellTick,      before.minSellTick);
+        assertEq(current.minBuyYield,      before.minBuyYield);
+        assertEq(current.maxSellYield,     before.maxSellYield);
+        assertEq(current.maxContinuousFee, before.maxContinuousFee);
+        assertEq(current.maxLossFactor,    before.maxLossFactor);
+        assertEq(current.maturity,         before.maturity);
+        assertEq(current.loanToken,        before.loanToken);
+        assertEq(current.maxMakeOfferSize, 0);
+    }
+
+    function test_disableMidnightMake_unauthorizedAccount() public {
+        vm.expectRevert(_unauthorized(address(this)));
+        controller.disableMidnightMake(marketId);
+
+        vm.prank(admin);
+        vm.expectRevert(_unauthorized(admin));
+        controller.disableMidnightMake(marketId);
+
+        vm.prank(relayer);
+        vm.expectRevert(_unauthorized(relayer));
+        controller.disableMidnightMake(marketId);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, MAX_OFFER_SIZE);
+    }
+
+    function test_disableMidnightMake() public {
+        MidnightLib.MarketConfig memory before = controller.midnightMarketConfigs(marketId);
+
+        assertEq(before.maxMakeOfferSize, MAX_OFFER_SIZE);
 
         vm.prank(freezer);
         vm.expectEmit(address(controller));
-        emit MidnightMakeConfigSet(marketId, address(loanToken), maturity, 0);
-        controller.setMidnightMakeConfig(marketId, 0);
+        emit MidnightMakeDisabled(marketId);
+        controller.disableMidnightMake(marketId);
+
+        _assertSameExceptMakeOfferSize(before, controller.midnightMarketConfigs(marketId));
     }
 
-    function test_setMidnightMakeConfig_freezerZeroingMarketNotOnboarded() public {
-        vm.prank(freezer);
-        vm.expectRevert("MidnightLib/market-not-onboarded");
-        controller.setMidnightMakeConfig(keccak256("otherMarket"), 0);
-    }
-
-    function test_setMidnightMakeConfig_freezerZeroingInvalidMidnight() public {
-        Market memory other = _market();
-        other.midnight = makeAddr("otherVenue");
-
-        venue.setMarket(marketId, other);
+    function test_disableMidnightMake_isIdempotent() public {
+        MidnightLib.MarketConfig memory before = controller.midnightMarketConfigs(marketId);
 
         vm.prank(freezer);
-        vm.expectRevert("MidnightLib/invalid-midnight");
-        controller.setMidnightMakeConfig(marketId, 0);
-    }
-
-    function test_setMidnightMakeConfig_freezerZeroingMaturityOutOfBounds() public {
-        Market memory far = _market();
-        far.maturity = uint256(type(uint48).max) + 1;
-
-        venue.setMarket(marketId, far);
+        vm.expectEmit(address(controller));
+        emit MidnightMakeDisabled(marketId);
+        controller.disableMidnightMake(marketId);
 
         vm.prank(freezer);
-        vm.expectRevert("MidnightLib/maturity-oob");
-        controller.setMidnightMakeConfig(marketId, 0);
+        vm.expectEmit(address(controller));
+        emit MidnightMakeDisabled(marketId);
+        controller.disableMidnightMake(marketId);
+
+        _assertSameExceptMakeOfferSize(before, controller.midnightMarketConfigs(marketId));
     }
 
-    function test_setMidnightMakeConfig_freezerCannotEnableMake() public {
+    function test_disableMidnightMake_unconfiguredMarket() public {
+        bytes32 unknown = keccak256("unconfiguredMarket");
+
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightMakeDisabled(unknown);
+        controller.disableMidnightMake(unknown);
+
+        MidnightLib.MarketConfig memory config = controller.midnightMarketConfigs(unknown);
+
+        assertEq(config.minSellTick,      0);
+        assertEq(config.maxMakeOfferSize, 0);
+        assertEq(config.loanToken,        address(0));
+    }
+
+    function test_disableMidnightMake_readsNothingFromTheVenue() public {
+        MidnightLib.MarketConfig memory before = controller.midnightMarketConfigs(marketId);
+
+        vm.etch(address(venue), hex"5f5ffd");
+
+        vm.expectRevert();
+        venue.toMarket(marketId);
+
+        vm.expectCall(address(venue), abi.encodeWithSelector(MockMidnightVenue.toMarket.selector), 0);
+
+        vm.prank(freezer);
+        controller.disableMidnightMake(marketId);
+
+        _assertSameExceptMakeOfferSize(before, controller.midnightMarketConfigs(marketId));
+    }
+
+    function test_disableMidnightMake_worksAfterTheProxyRoleIsRevoked() public {
+        bytes32 controllerRole = proxy.CONTROLLER();
+
+        vm.prank(admin);
+        proxy.revokeRole(controllerRole, address(controller));
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(controller),
+            controllerRole
+        ));
+        controller.cancelMidnightOfferGroup(bytes32("buy"));
+
+        vm.prank(freezer);
+        controller.disableMidnightMake(marketId);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, 0);
+    }
+
+    function test_disableMidnightMake_blocksFundFillAndFlipsTheView() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+
+        _disableMake();
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/make-not-enabled");
+        controller.midnight_fundFill(marketId, true, 1e18, 1e18, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/make-not-enabled");
+        controller.midnight_fundFill(marketId, false, 1e18, 1e18, 0);
+    }
+
+    function test_disableMidnightMake_onlyTheAdminReEnables() public {
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        _disableMake();
+
         vm.prank(freezer);
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
             freezer,
             DEFAULT_ADMIN_ROLE
         ));
-        controller.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
-    }
+        controller.setMidnightMarketConfig(
+            _market(), MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max, MAX_OFFER_SIZE
+        );
 
-    function test_setMidnightMakeConfig_relayerCannotDisableMake() public {
         _enableMake();
 
-        vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSignature(
-            "AccessControlUnauthorizedAccount(address,bytes32)",
-            relayer,
-            DEFAULT_ADMIN_ROLE
-        ));
-        controller.setMidnightMakeConfig(marketId, 0);
-    }
-
-    function test_setMidnightMakeConfig_adminCanStillDisableMake() public {
-        _enableMake();
-
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, 0);
-
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, 0);
-    }
-
-    function test_setMidnightMakeConfig_disabledMakeBlocksFundFill() public {
-        _enableMake();
-        _setLimits(MAX_OFFER_SIZE);
-        _onboardStrategy(MAX_OFFER_SIZE);
-
-        vm.prank(freezer);
-        controller.setMidnightMakeConfig(marketId, 0);
-
-        vm.prank(strategy);
-        vm.expectRevert("MidnightLib/make-not-enabled");
-        controller.midnight_fundFill(marketId, true, 1e18, 1e18, 0);
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
     }
 
 }
-
 contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
     function test_midnightPeripherySelectors() public pure {
         assertEq(ForeignController.midnight_fundFill.selector,          bytes4(0xfb9e2099));
         assertEq(ForeignController.midnight_isCallbackAllowed.selector, bytes4(0x5c0f4590));
+    }
+
+    function test_midnightConfigSelectorsAndTopics() public pure {
+        assertEq(ForeignController.setMidnightMarketConfig.selector, bytes4(0x58870eb3));
+        assertEq(ForeignController.disableMidnightMake.selector,     bytes4(0x881e4d84));
+        assertEq(ForeignController.midnightMarketConfigs.selector,   bytes4(0x8000ad90));
+
+        assertEq(
+            MidnightLib.MidnightMarketConfigSet.selector,
+            0x284a24bcaff75572bcc183e25df42a627752d04ea48010f22d3412784815375d
+        );
+        assertEq(
+            ForeignController.MidnightMakeDisabled.selector,
+            0xe52b976e8352922cbd082842e7bc4497979a5a01536c7ce29c79c3e74080720e
+        );
+    }
+
+    function test_midnightPreviousConfigSettersAreGone() public {
+        vm.startPrank(admin);
+
+        ( bool makeOk, ) = address(controller).call(
+            abi.encodeWithSelector(bytes4(0x48f79a8a), marketId, uint256(0))
+        );
+
+        ( bool marketOk, ) = address(controller).call(abi.encodeWithSelector(
+            bytes4(0x15801813), marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 0
+        ));
+
+        vm.stopPrank();
+
+        assertFalse(makeOk);
+        assertFalse(marketOk);
     }
 
     function test_midnightGroupDesignationIsGone() public {
@@ -755,8 +1113,8 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
         _closeBuyEntry();
 
-        assertEq(controller.midnightMarketConfigs(marketId).maxBuyTick,   0);
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
+        assertEq(controller.midnightMarketConfigs(marketId).maxBuyTick,       0);
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, MAX_OFFER_SIZE);
 
         assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
     }
@@ -775,10 +1133,7 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
     }
 
     function _closeBuyEntry() internal {
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, 0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
-        );
+        _setConfig(0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max);
     }
 
 }
@@ -804,8 +1159,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     }
 
     function test_midnight_fundFill_makeNotEnabled() public {
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, 0);
+        _disableMake();
 
         _setLimits(MAX_OFFER_SIZE);
 
@@ -833,10 +1187,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_buyLiveContinuousFeeAboveCeiling() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, type(uint128).max
-        );
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, type(uint128).max);
 
         uint256 ceiling = MidnightLib._continuousFeePerSecond(10);
 
@@ -1052,10 +1403,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_buyChecksTheFeeBeforeTheLossFactor() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, 100
-        );
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 10, 100);
 
         venue.setContinuousFee(marketId, MidnightLib._continuousFeePerSecond(10) + 1);
         venue.setLossFactor(marketId, 101);
@@ -1068,10 +1416,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_lossFactorTooHigh() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 100
-        );
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 100);
 
         venue.setLossFactor(marketId, 101);
 
@@ -1111,12 +1456,9 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_zeroMaxBuyTickRefusesEveryBuy() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, 0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max
-        );
+        _setConfig(0, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, type(uint128).max);
 
-        assertEq(controller.midnightMarketConfigs(marketId).maxOfferSize, MAX_OFFER_SIZE);
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, MAX_OFFER_SIZE);
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/fill-price-too-high");
@@ -1136,10 +1478,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_yieldBoundCanBind() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 5000, MAX_SELL_YIELD, 0, type(uint128).max
-        );
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 5000, MAX_SELL_YIELD, 0, type(uint128).max);
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
@@ -1197,10 +1536,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
     function test_midnight_fundFill_sellSkipsTheLossFactorGate() public {
         _setLimits(MAX_OFFER_SIZE);
 
-        vm.prank(admin);
-        controller.setMidnightMarketConfig(
-            marketId, MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 100
-        );
+        _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, MAX_SELL_YIELD, 0, 100);
 
         venue.setLossFactor(marketId, 101);
 
@@ -1217,15 +1553,13 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, assets - 1);
+        _setMakeOfferSize(assets - 1);
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/offer-size-too-large");
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
 
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, assets);
+        _setMakeOfferSize(assets);
 
         vm.prank(strategy);
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
@@ -1238,8 +1572,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         uint256 assets = _parAssets(UNITS);
 
-        vm.prank(admin);
-        controller.setMidnightMakeConfig(marketId, assets - 1);
+        _setMakeOfferSize(assets - 1);
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/offer-size-too-large");
@@ -1359,7 +1692,7 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
     function testFuzz_midnightIsCallbackAllowed_matchesTheFundFillGates(
         address            callback,
         bool               buy,
-        uint256            maxOfferSize,
+        uint256            maxMakeOfferSize,
         uint256[4] memory  keyAmounts,
         uint8              zeroMask
     )
@@ -1368,7 +1701,7 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
         vm.assume(callback != address(0));
         assumeNotForgeAddress(callback);
 
-        maxOfferSize = zeroMask & 1 == 0 ? bound(maxOfferSize, 1, type(uint128).max) : 0;
+        maxMakeOfferSize = zeroMask & 1 == 0 ? bound(maxMakeOfferSize, 1, type(uint128).max) : 0;
 
         bool zeroMaxBuyTick = zeroMask & 32 != 0;
 
@@ -1377,15 +1710,15 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
         }
 
         vm.startPrank(admin);
-        controller.setMidnightMakeConfig(marketId, maxOfferSize);
         controller.setMidnightMarketConfig(
-            marketId,
+            _market(),
             zeroMaxBuyTick ? 0 : MAX_BUY_TICK,
             MIN_SELL_TICK,
             0,
             MAX_SELL_YIELD,
             0,
-            type(uint128).max
+            type(uint128).max,
+            maxMakeOfferSize
         );
         rateLimits.setRateLimitData(_strategyBuyKey(callback),  keyAmounts[0], 0);
         rateLimits.setRateLimitData(_strategySellKey(callback), keyAmounts[1], 0);

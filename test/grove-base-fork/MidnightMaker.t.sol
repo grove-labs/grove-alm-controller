@@ -148,8 +148,9 @@ contract MidnightMakerTestBase is MidnightTestBase {
             MIDNIGHT, address(almProxy), address(foreignController)
         );
 
+        _enableMake(MAX_OFFER_SIZE);
+
         vm.startPrank(GROVE_EXECUTOR);
-        foreignController.setMidnightMakeConfig(marketId, MAX_OFFER_SIZE);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
         rateLimits.setRateLimitData(_strategyBuyKey(address(strategy)),  5_000_000e18, 0);
         rateLimits.setRateLimitData(_strategySellKey(address(strategy)), 5_000_000e18, 0);
@@ -219,9 +220,26 @@ contract MidnightMakerTestBase is MidnightTestBase {
         return units * MidnightTickLib.tickToPrice(tick) / 1e18;
     }
 
-    function _enableMake(uint256 maxOfferSize) internal {
+    // Restates the current bounds, since the setter writes every field.
+    function _enableMake(uint256 maxMakeOfferSize) internal {
+        MidnightLib.MarketConfig memory config = foreignController.midnightMarketConfigs(marketId);
+
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMakeConfig(marketId, maxOfferSize);
+        foreignController.setMidnightMarketConfig(
+            market,
+            config.maxBuyTick,
+            config.minSellTick,
+            config.minBuyYield,
+            config.maxSellYield,
+            config.maxContinuousFee,
+            config.maxLossFactor,
+            maxMakeOfferSize
+        );
+    }
+
+    function _disableMake() internal {
+        vm.prank(ALM_FREEZER);
+        foreignController.disableMidnightMake(marketId);
     }
 
     function _strategyBuyKey(address strategy_) internal view returns (bytes32) {
@@ -251,7 +269,7 @@ contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBas
     function test_makerBuy_dustFillNeverReachesTheController() public {
         assertEq(_makerBuyerAssets(1, MAKER_BUY_TICK), 0);
 
-        _enableMake(0);
+        _disableMake();
         _onboardStrategy(address(strategy), 0);
 
         Offer memory offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
@@ -444,7 +462,7 @@ contract ForeignControllerMidnightMakerSellLifecycleTests is MidnightMakerTestBa
     }
 
     function test_makerSell_disabledMakeMakesTheAskUnfillable() public {
-        _enableMake(0);
+        _disableMake();
 
         _expectTakeRevert(
             _makerOffer(false, TICK_98, uint128(400_000e18)),
@@ -485,7 +503,7 @@ contract ForeignControllerMidnightMakerRetroactivityTests is MidnightMakerTestBa
     function test_retroactivity_disablingMake() public {
         Offer memory offer = _restingBuyOffer();
 
-        _enableMake(0);
+        _disableMake();
 
         _expectTakeRevert(offer, PROBE_UNITS, "MidnightLib/make-not-enabled");
     }
@@ -611,7 +629,7 @@ contract ForeignControllerMidnightMakerKillSwitchTests is MidnightMakerTestBase 
     }
 
     function test_killSwitch_makeDisable() public {
-        _enableMake(0);
+        _disableMake();
 
         _expectFreshOfferRejected("MidnightLib/make-not-enabled");
     }
@@ -624,7 +642,7 @@ contract ForeignControllerMidnightMakerKillSwitchTests is MidnightMakerTestBase 
     }
 
     function test_killSwitch_makeDisableLeavesTheTakerPathWorking() public {
-        _enableMake(0);
+        _disableMake();
 
         _expectFreshOfferRejected("MidnightLib/make-not-enabled");
 
@@ -1309,9 +1327,15 @@ contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBas
             RateLimitHelpers.makeBytes32Key(MidnightLib.LIMIT_MIDNIGHT_BUY, idB), 5_000_000e18, 0
         );
         foreignController.setMidnightMarketConfig(
-            idB, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+            marketB,
+            TICK_99,
+            TICK_98,
+            MIN_BUY_YIELD,
+            MAX_SELL_YIELD,
+            MAX_CONTINUOUS_FEE_CBP,
+            0,
+            MAX_OFFER_SIZE
         );
-        foreignController.setMidnightMakeConfig(idB, MAX_OFFER_SIZE);
         vm.stopPrank();
 
         vm.prank(taker);

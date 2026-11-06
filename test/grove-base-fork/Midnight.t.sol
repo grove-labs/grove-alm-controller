@@ -212,7 +212,7 @@ contract MidnightTestBase is ForkTestBase {
         rateLimits.setRateLimitData(redeemKey, 5_000_000 * loanUnit, (1_000_000 * loanUnit) / 1 days);
 
         foreignController.setMidnightMarketConfig(
-            marketId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+            market, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0, 0
         );
 
         vm.stopPrank();
@@ -326,15 +326,19 @@ contract MidnightTestBase is ForkTestBase {
     )
         internal
     {
+        // The setter writes every field, so the current maxMakeOfferSize is restated.
+        uint256 maxMakeOfferSize = foreignController.midnightMarketConfigs(marketId).maxMakeOfferSize;
+
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightMarketConfig(
-            marketId,
+            market,
             maxBuyTick,
             minSellTick,
             minBuyYield,
             maxSellYield,
             maxContinuousFee,
-            maxLossFactor
+            maxLossFactor,
+            maxMakeOfferSize
         );
     }
 
@@ -437,22 +441,11 @@ contract ForeignControllerMidnightBuyFailureTests is MidnightTestBase {
     }
 
     function test_buyMidnight_invalidMidnight() public {
-        Market memory otherMarket = market;
-        otherMarket.midnight = makeAddr("otherMidnight");
-
-        bytes32 otherId = MidnightIdLib.toId(otherMarket);
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            otherId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
-        );
-
         Offer memory offer = _offer(false, TICK_98, 1e18);
-        offer.market = otherMarket;
+        offer.market.midnight = makeAddr("otherMidnight");
 
-        vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/invalid-midnight");
-        foreignController.buyMidnight(otherId, offer, new bytes(0), 1e18, 1e18);
+        _buy(offer, 1e18, 1e18);
     }
 
     function test_buyMidnight_invalidOfferDirection() public {
@@ -571,18 +564,24 @@ contract ForeignControllerMidnightBuyFailureTests is MidnightTestBase {
         bytes32 untouchedId = MidnightIdLib.toId(untouched);
 
         vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
         foreignController.setMidnightMarketConfig(
-            untouchedId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
+            untouched, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0, 0
         );
 
         Offer memory offer = _offer(false, TICK_98, 1e18);
         offer.market = untouched;
 
         vm.prank(ALM_RELAYER);
-        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
+        vm.expectRevert("MidnightLib/buy-not-enabled");
         foreignController.buyMidnight(untouchedId, offer, new bytes(0), 1e18, 1e18);
 
         assertEq(harness.touchMarket(untouched), untouchedId);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setMidnightMarketConfig(
+            untouched, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0, 0
+        );
 
         vm.prank(maker);
         harness.supplyCollateral(untouched, 0, 1_000_000e18, maker);
@@ -764,22 +763,11 @@ contract ForeignControllerMidnightSellFailureTests is MidnightSellTestBase {
     }
 
     function test_sellMidnight_invalidMidnight() public {
-        Market memory otherMarket = market;
-        otherMarket.midnight = makeAddr("otherMidnight");
-
-        bytes32 otherId = MidnightIdLib.toId(otherMarket);
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            otherId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
-        );
-
         Offer memory offer = _offer(true, TICK_99, 1e18);
-        offer.market = otherMarket;
+        offer.market.midnight = makeAddr("otherMidnight");
 
-        vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/invalid-midnight");
-        foreignController.sellMidnight(otherId, offer, new bytes(0), 1e18, 1);
+        _sell(offer, 1e18, 1);
     }
 
     function test_sellMidnight_invalidOfferDirection() public {
@@ -1209,6 +1197,33 @@ contract ForeignControllerMidnightSellFloorFeeTests is MidnightTestBase {
 
 }
 
+contract ForeignControllerMidnightMarketConfigTests is MidnightTestBase {
+
+    function test_setMidnightMarketConfig_marketNotCreated() public {
+        Market memory unknown = market;
+        unknown.maturity = market.maturity + 1 days;
+
+        vm.prank(GROVE_EXECUTOR);
+        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
+        foreignController.setMidnightMarketConfig(
+            unknown, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0, 1
+        );
+
+        assertEq(foreignController.midnightMarketConfigs(MidnightIdLib.toId(unknown)).minSellTick, 0);
+    }
+
+    function test_setMidnightMarketConfig_cachesTheVenueMarket() public view {
+        MidnightLib.MarketConfig memory config = foreignController.midnightMarketConfigs(marketId);
+
+        assertEq(config.maxBuyTick,       TICK_99);
+        assertEq(config.minSellTick,      TICK_98);
+        assertEq(config.maxMakeOfferSize, 0);
+        assertEq(config.maturity,         midnight.toMarket(marketId).maturity);
+        assertEq(config.loanToken,        midnight.toMarket(marketId).loanToken);
+    }
+
+}
+
 contract MidnightRedeemTestBase is MidnightTestBase {
 
     uint256 constant SEEDED_UNITS = 1_000_000e18;
@@ -1288,19 +1303,6 @@ contract ForeignControllerMidnightRedeemFailureTests is MidnightRedeemTestBase {
         vm.prank(ALM_RELAYER);
         vm.expectRevert("MidnightLib/market-not-onboarded");
         foreignController.redeemMidnight(MidnightIdLib.toId(otherMarket), 1e18, 0);
-    }
-
-    function test_redeemMidnight_marketNotCreated() public {
-        bytes32 unknownId = keccak256("unknown");
-
-        vm.prank(GROVE_EXECUTOR);
-        foreignController.setMidnightMarketConfig(
-            unknownId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
-        );
-
-        vm.prank(ALM_RELAYER);
-        vm.expectRevert(abi.encodeWithSignature("MarketNotCreated()"));
-        foreignController.redeemMidnight(unknownId, 1e18, 1);
     }
 
     function test_redeemMidnight_debtReported() public {
