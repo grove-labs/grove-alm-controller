@@ -17,6 +17,7 @@ import "../UnitTestBase.t.sol";
 contract MainnetControllerAdminTestBase is UnitTestBase {
 
     event LayerZeroRecipientSet(uint32 indexed destinationDomain, bytes32 layerZeroRecipient);
+    event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event UniswapV3PoolMaxTickDeltaSet(address indexed pool, uint24 maxTickDelta);
@@ -227,6 +228,109 @@ contract MainnetControllerSetMaxSlippageTests is MainnetControllerAdminTestBase 
         vm.expectRevert("MC/max-slippage-oob");
         mainnetController.setMaxSlippage(makeAddr("pool"), 1e18 + 1);
     }
+}
+
+contract MainnetControllerSetMaxExchangeRateTests is MainnetControllerAdminTestBase {
+
+    address token1 = makeAddr("token1");
+    address token2 = makeAddr("token2");
+
+    function test_setMaxExchangeRate_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        mainnetController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+    }
+
+    function test_setMaxExchangeRate_zeroTokenAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("MC/token-zero-address");
+        mainnetController.setMaxExchangeRate(address(0), 1e18, 1.2e18);
+    }
+
+    function test_setMaxExchangeRate_zeroSharesNonZeroAssets() public {
+        vm.prank(admin);
+        vm.expectRevert("ERC4626Lib/zero-shares");
+        mainnetController.setMaxExchangeRate(token1, 0, 1);
+    }
+
+    function test_setMaxExchangeRate_zeroSharesZeroAssets() public {
+        // Zero assets always yields a zero rate, which disables deposits for the token.
+        vm.prank(admin);
+        mainnetController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 1.2e36);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MaxExchangeRateSet(token1, 0);
+        mainnetController.setMaxExchangeRate(token1, 0, 0);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 0);
+    }
+
+    function test_setMaxExchangeRate_nonZeroSharesZeroAssets() public {
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MaxExchangeRateSet(token1, 0);
+        mainnetController.setMaxExchangeRate(token1, 1e18, 0);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 0);
+    }
+
+    function test_setMaxExchangeRate() public {
+        assertEq(mainnetController.maxExchangeRates(token1), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MaxExchangeRateSet(token1, 1.2e36);
+        mainnetController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 1.2e36);
+
+        // Overwrites the previous value.
+        vm.prank(admin);
+        vm.expectEmit(address(mainnetController));
+        emit MaxExchangeRateSet(token1, 1.5e36);
+        mainnetController.setMaxExchangeRate(token1, 2e18, 3e18);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 1.5e36);
+    }
+
+    function test_setMaxExchangeRate_roundsDown() public {
+        // 1e36 * 1 / 3 = 333...333.33, which must be floored.
+        vm.prank(admin);
+        mainnetController.setMaxExchangeRate(token1, 3, 1);
+
+        assertEq(mainnetController.maxExchangeRates(token1), uint256(1e36) / 3);
+    }
+
+    function test_setMaxExchangeRate_isolatedPerToken() public {
+        vm.startPrank(admin);
+        mainnetController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+        mainnetController.setMaxExchangeRate(token2, 1e18, 2e18);
+        vm.stopPrank();
+
+        assertEq(mainnetController.maxExchangeRates(token1), 1.2e36);
+        assertEq(mainnetController.maxExchangeRates(token2), 2e36);
+
+        vm.prank(admin);
+        mainnetController.setMaxExchangeRate(token1, 0, 0);
+
+        assertEq(mainnetController.maxExchangeRates(token1), 0);
+        assertEq(mainnetController.maxExchangeRates(token2), 2e36);
+    }
+
 }
 
 contract MainnetControllerSetUniswapV3PoolMaxTickDeltaTests is MainnetControllerAdminTestBase {
@@ -490,6 +594,7 @@ contract ForeignControllerAdminTestBase is UnitTestBase {
 
     event MaxAaveV4DeficitSet(address indexed hub, uint16 indexed assetId, uint256 maxDeficit);
     event MaxAaveV4SlippageSet(address indexed spoke, uint256 indexed reserveId, uint256 maxSlippage);
+    event MaxExchangeRateSet(address indexed token, uint256 maxExchangeRate);
     event MaxSlippageSet(address indexed pool, uint256 maxSlippage);
     event LayerZeroRecipientSet(uint32 indexed destinationDomain, bytes32 layerZeroRecipient);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
@@ -696,6 +801,109 @@ contract ForeignControllerSetMaxSlippageTests is ForeignControllerAdminTestBase 
         vm.expectRevert("FC/max-slippage-oob");
         foreignController.setMaxSlippage(makeAddr("pool"), 1e18 + 1);
     }
+}
+
+contract ForeignControllerSetMaxExchangeRateTests is ForeignControllerAdminTestBase {
+
+    address token1 = makeAddr("token1");
+    address token2 = makeAddr("token2");
+
+    function test_setMaxExchangeRate_unauthorizedAccount() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+    }
+
+    function test_setMaxExchangeRate_zeroTokenAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/token-zero-address");
+        foreignController.setMaxExchangeRate(address(0), 1e18, 1.2e18);
+    }
+
+    function test_setMaxExchangeRate_zeroSharesNonZeroAssets() public {
+        vm.prank(admin);
+        vm.expectRevert("ERC4626Lib/zero-shares");
+        foreignController.setMaxExchangeRate(token1, 0, 1);
+    }
+
+    function test_setMaxExchangeRate_zeroSharesZeroAssets() public {
+        // Zero assets always yields a zero rate, which disables deposits for the token.
+        vm.prank(admin);
+        foreignController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        assertEq(foreignController.maxExchangeRates(token1), 1.2e36);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxExchangeRateSet(token1, 0);
+        foreignController.setMaxExchangeRate(token1, 0, 0);
+
+        assertEq(foreignController.maxExchangeRates(token1), 0);
+    }
+
+    function test_setMaxExchangeRate_nonZeroSharesZeroAssets() public {
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxExchangeRateSet(token1, 0);
+        foreignController.setMaxExchangeRate(token1, 1e18, 0);
+
+        assertEq(foreignController.maxExchangeRates(token1), 0);
+    }
+
+    function test_setMaxExchangeRate() public {
+        assertEq(foreignController.maxExchangeRates(token1), 0);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxExchangeRateSet(token1, 1.2e36);
+        foreignController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+
+        assertEq(foreignController.maxExchangeRates(token1), 1.2e36);
+
+        // Overwrites the previous value.
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MaxExchangeRateSet(token1, 1.5e36);
+        foreignController.setMaxExchangeRate(token1, 2e18, 3e18);
+
+        assertEq(foreignController.maxExchangeRates(token1), 1.5e36);
+    }
+
+    function test_setMaxExchangeRate_roundsDown() public {
+        // 1e36 * 1 / 3 = 333...333.33, which must be floored.
+        vm.prank(admin);
+        foreignController.setMaxExchangeRate(token1, 3, 1);
+
+        assertEq(foreignController.maxExchangeRates(token1), uint256(1e36) / 3);
+    }
+
+    function test_setMaxExchangeRate_isolatedPerToken() public {
+        vm.startPrank(admin);
+        foreignController.setMaxExchangeRate(token1, 1e18, 1.2e18);
+        foreignController.setMaxExchangeRate(token2, 1e18, 2e18);
+        vm.stopPrank();
+
+        assertEq(foreignController.maxExchangeRates(token1), 1.2e36);
+        assertEq(foreignController.maxExchangeRates(token2), 2e36);
+
+        vm.prank(admin);
+        foreignController.setMaxExchangeRate(token1, 0, 0);
+
+        assertEq(foreignController.maxExchangeRates(token1), 0);
+        assertEq(foreignController.maxExchangeRates(token2), 2e36);
+    }
+
 }
 
 contract ForeignControllerSetMaxAaveV4SlippageTests is ForeignControllerAdminTestBase {
