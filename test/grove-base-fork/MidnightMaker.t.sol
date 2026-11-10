@@ -346,7 +346,7 @@ contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBas
         _take(_makerOffer(true, 4296, 1_000e18), 1_000e18);
 
         _expectTakeRevert(
-            _makerOffer(true, 4300, 2_000e18), 1_000e18, "MidnightLib/fill-price-too-high"
+            _makerOffer(true, 4300, 2_000e18), 1_000e18, "MidnightLib/fill-yield-too-low"
         );
     }
 
@@ -369,7 +369,7 @@ contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBas
         _setConfig(uint16(aboveTick), TICK_98, MAX_CONTINUOUS_FEE_CBP);
 
         _expectTakeRevert(
-            _makerOffer(true, aboveTick, 1_000e18), 1_000e18, "MidnightLib/fill-price-too-high"
+            _makerOffer(true, aboveTick, 1_000e18), 1_000e18, "MidnightLib/fill-yield-too-low"
         );
 
         Offer memory offer = _makerOffer(true, betweenTick, 2_000e18);
@@ -380,7 +380,7 @@ contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBas
 
         _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
 
-        _expectTakeRevert(offer, 1_000e18, "MidnightLib/fill-price-too-high");
+        _expectTakeRevert(offer, 1_000e18, "MidnightLib/fill-yield-too-low");
     }
 
     function test_makerBuy_settlementFeeFallsEntirelyOnTheTaker() public {
@@ -1166,7 +1166,7 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         assertLt(tick, _zeroFeeFloorTick());
 
         _expectTakeRevert(
-            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-price-too-low"
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-yield-too-high"
         );
 
         uint256 sellBefore         = rateLimits.getCurrentRateLimit(sellKey);
@@ -1188,7 +1188,7 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         uint256 units = 400_000e18;
         uint256 tick  = _positionFloorTick();
 
-        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-price-too-low");
+        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-yield-too-high");
 
         ( , uint256 sellerAssets ) = _take(_inflatedAsk(tick, units), units);
 
@@ -1203,7 +1203,7 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         assertLt(_positionFloorTick(), tick);
 
         _expectTakeRevert(
-            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-price-too-low"
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-yield-too-high"
         );
 
         ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
@@ -1218,7 +1218,7 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         uint256 units = _credit();
         uint256 tick  = _zeroFeeFloorTick();
 
-        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-price-too-low");
+        _expectTakeRevert(_inflatedAsk(tick - TICK_SPACING, units), units, "MidnightLib/fill-yield-too-high");
 
         _take(_inflatedAsk(tick, units), units);
 
@@ -1284,7 +1284,7 @@ contract ForeignControllerMidnightMakerNestedFillTests is MidnightMakerSellFeeTe
         // A floor read from the post-fill position alone would clear this ask.
         assertGe(MidnightTickLib.tickToPrice(tick), _floorAtFeePerUnit(_liveFeePerUnit()));
 
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         _nestedTake(tick);
     }
 

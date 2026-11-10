@@ -375,11 +375,14 @@ library MidnightLib {
         ( uint256 tickBound, uint256 yieldBound ) =
             _buyBounds(config, timeToMaturity, continuousFee);
 
-        uint256 bound = tickBound;
-
-        if (yieldBound < bound) bound = yieldBound;
-
-        require(params.assets * WAD <= params.units * bound, "MidnightLib/fill-price-too-high");
+        require(
+            params.assets * WAD <= params.units * tickBound,
+            "MidnightLib/fill-price-too-high"
+        );
+        require(
+            params.assets * WAD <= params.units * yieldBound,
+            "MidnightLib/fill-yield-too-low"
+        );
 
         _decreaseStrategyLimit(
             params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_BUY, params.strategy, marketId, params.assets
@@ -405,11 +408,14 @@ library MidnightLib {
 
         ( uint256 tickBound, uint256 yieldBound ) = _sellBounds(config, timeToMaturity, feePerUnit);
 
-        uint256 floor = tickBound;
-
-        if (yieldBound > floor) floor = yieldBound;
-
-        require(params.assets * WAD >= params.units * floor, "MidnightLib/fill-price-too-low");
+        require(
+            params.assets * WAD >= params.units * tickBound,
+            "MidnightLib/fill-price-too-low"
+        );
+        require(
+            params.assets * WAD >= params.units * yieldBound,
+            "MidnightLib/fill-yield-too-high"
+        );
 
         _requireDebtFree(params.midnight, marketId, address(params.proxy));
 

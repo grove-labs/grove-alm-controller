@@ -1223,7 +1223,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         assertGt(assets * WAD, UNITS * ceilingBound);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-high");
+        vm.expectRevert("MidnightLib/fill-yield-too-low");
         controller.midnight_fundFill(marketId, true, assets + 1, UNITS, 0);
 
         vm.prank(strategy);
@@ -1234,7 +1234,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         venue.setContinuousFee(marketId, MidnightLib._continuousFeePerSecond(1_00_00));
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-high");
+        vm.expectRevert("MidnightLib/fill-yield-too-low");
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
@@ -1244,7 +1244,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         uint256 minAssets = _minSellAssets(UNITS, POSITION_CREDIT, 0);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, 0);
 
         vm.prank(strategy);
@@ -1263,7 +1263,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         // The position carries no fee yet, so the reported fee alone cannot lower the floor.
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         controller.midnight_fundFill(marketId, false, withFee, UNITS, reportedFee);
 
         venue.setPosition(marketId, address(proxy), uint128(POSITION_CREDIT), uint128(carriedFee));
@@ -1282,7 +1282,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         uint256 minAssets = _minSellAssets(UNITS, POSITION_CREDIT, carriedFee);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, UNITS);
 
         vm.prank(strategy);
@@ -1302,7 +1302,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         assertGt(minAssets, _minSellAssets(UNITS, POSITION_CREDIT, carriedFee));
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, reportedFee);
 
         vm.prank(strategy);
@@ -1320,7 +1320,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         assertGt(minAssets, _minSellAssets(UNITS, UNITS, UNITS / 100));
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
+        vm.expectRevert("MidnightLib/fill-yield-too-high");
         controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, UNITS / 100);
 
         vm.prank(strategy);
@@ -1518,7 +1518,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
 
         vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-high");
+        vm.expectRevert("MidnightLib/fill-yield-too-low");
         controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
     }
 
@@ -1742,7 +1742,8 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         assertEq(funded, assets * WAD <= units * combined);
 
-        if (!funded) assertEq(reason, _errorData("MidnightLib/fill-price-too-high"));
+        if (!funded) assertEq(reason, _fillRevert(true, assets, units, tickBound));
+
     }
 
     function testFuzz_fundFillSell_passesIffCombinedBound(
@@ -1780,7 +1781,8 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         assertEq(funded, assets * WAD >= units * combined);
 
-        if (!funded) assertEq(reason, _errorData("MidnightLib/fill-price-too-low"));
+        if (!funded) assertEq(reason, _fillRevert(false, assets, units, tickBound));
+
     }
 
     // The higher of the two position floors is the floor at the lower of the two fee rates.
@@ -1825,6 +1827,25 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         return address(controller).call(abi.encodeCall(
             ForeignController.midnight_fundFill, (marketId, buy, assets, units, pendingFee)
         ));
+    }
+
+    // The tick check runs first, so it names the revert whenever the tick bound fails.
+    function _fillRevert(bool buy, uint256 assets, uint256 units, uint256 tickBound)
+        internal pure returns (bytes memory)
+    {
+        if (buy) {
+            return _errorData(
+                assets * WAD > units * tickBound
+                    ? "MidnightLib/fill-price-too-high"
+                    : "MidnightLib/fill-yield-too-low"
+            );
+        }
+
+        return _errorData(
+            assets * WAD < units * tickBound
+                ? "MidnightLib/fill-price-too-low"
+                : "MidnightLib/fill-yield-too-high"
+        );
     }
 
     function _errorData(string memory message) internal pure returns (bytes memory) {
