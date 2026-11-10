@@ -230,6 +230,7 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
+        // Deltas around take() are measurable only here; a make callback has no pre-fill hook.
         assetsSpent = balanceBefore - IERC20(market.loanToken).balanceOf(address(params.proxy));
 
         // An inflow during the callback nets against the spend, so Midnight's figure is the floor.
@@ -261,6 +262,7 @@ library MidnightLib {
 
         uint256 timeToMaturity = _timeToMaturity(params.config.maturity);
 
+        // The position before trading; a make callback only sees it after the fill.
         ( uint256 creditBefore, uint256 pendingFee ) =
             _position(market, params.marketId, address(params.proxy));
 
@@ -375,6 +377,7 @@ library MidnightLib {
         ( uint256 tickBound, uint256 yieldBound ) =
             _buyBounds(config, timeToMaturity, continuousFee);
 
+        // Already booked: check the all-in price paid; a take prices the offer tick first.
         require(
             params.assets * WAD <= params.units * tickBound,
             "MidnightLib/fill-price-too-high"
@@ -403,11 +406,13 @@ library MidnightLib {
             _getMarket(params.midnight, marketId), marketId, address(params.proxy)
         );
 
+        // Post-fill position only, capped by the reported fee; a take reads the position first.
         uint256 feePerUnit =
             _sellFeePerUnit(creditPost, carriedFee, params.units, params.pendingFee);
 
         ( uint256 tickBound, uint256 yieldBound ) = _sellBounds(config, timeToMaturity, feePerUnit);
 
+        // Already booked: check the net price received; a take prices the offer tick first.
         require(
             params.assets * WAD >= params.units * tickBound,
             "MidnightLib/fill-price-too-low"
