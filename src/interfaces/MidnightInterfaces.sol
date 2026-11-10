@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Morpho Association
+// SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.21;
+// Copyright (c) 2026 Morpho Association
 
 // Modified from https://github.com/morpho-org/midnight/blob/70607569ac348e9880b512ffd3b574be55405932/src/interfaces/IMidnight.sol
 // Structs verbatim: the market id hashes abi.encode(market).
@@ -54,6 +54,10 @@ interface IMidnight {
     ) external returns (uint256 buyerAssets, uint256 sellerAssets);
 
     function withdraw(Market memory market, uint256 units, address onBehalf, address receiver) external;
+
+    function setConsumed(bytes32 group, uint128 amount, address onBehalf) external;
+
+    function setIsAuthorized(address authorized, bool newIsAuthorized, address onBehalf) external;
 
     function updatePositionView(Market memory market, bytes32 id, address user)
         external view returns (uint128 newCredit, uint128 newPendingFee, uint128 accruedFee);
