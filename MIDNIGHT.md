@@ -5,7 +5,7 @@
 - **Taker mode** (`RELAYER`): `buyMidnight`, `sellMidnight` and `redeemMidnight` take other makers' offers and redeem at maturity.
 - **Maker mode**: the proxy publishes its own offers. A third party fills them by calling `midnight.take` directly, so none of our transactions is in the call stack. Two immutable periphery contracts (`grove-morpho-midnight-periphery`) act for the controller in that stack. A **ratifier** decides whether an offer is live. A **funding strategy**, named as the offer's `callback`, calls `midnight_fundFill` from inside `onBuy` / `onSell`.
 
-The logic lives in `MidnightLib`, and the controller holds the configuration and the role checks. The same periphery also serves the diamond-pau `MidnightFacet`, through the same two selectors with the same semantics.
+The logic lives in `MidnightLib`, and the controller holds the configuration and the role checks. The same periphery also serves the diamond `MidnightFacet`, through the same two selectors with the same semantics.
 
 ## Periphery-facing surface
 
