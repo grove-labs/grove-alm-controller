@@ -1708,6 +1708,129 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         assertEq(loanToken.balanceOf(strategy), assets);
     }
 
+    function testFuzz_fundFillBuy_passesIffCombinedBound(
+        uint256 assets,
+        uint256 units,
+        uint16  maxBuyTick,
+        uint16  minBuyYield,
+        uint256 liveFee,
+        bool    nearEdge
+    )
+        public
+    {
+        units      = bound(units, 1, 1_000_000e18);
+        maxBuyTick = uint16(bound(maxBuyTick, 0, MIDNIGHT_MAX_TICK));
+        liveFee    = bound(liveFee, 0, MidnightLib.MAX_CONTINUOUS_FEE);
+
+        _setLimits(type(uint128).max);
+
+        _setConfig(
+            maxBuyTick, MIN_SELL_TICK, minBuyYield, MAX_SELL_YIELD, 1_00_00, type(uint128).max
+        );
+
+        venue.setContinuousFee(marketId, liveFee);
+
+        uint256 timeToMaturity = maturity - block.timestamp;
+
+        uint256 tickBound  = MidnightTickLib.tickToPrice(maxBuyTick);
+        uint256 yieldBound = MidnightLib._maxBuyPrice(minBuyYield, timeToMaturity, liveFee);
+        uint256 combined   = tickBound < yieldBound ? tickBound : yieldBound;
+
+        assets = _assetsAround(assets, units * combined / WAD, nearEdge);
+
+        ( bool funded, bytes memory reason ) = _tryFundFill(true, assets, units, 0);
+
+        assertEq(funded, assets * WAD <= units * combined);
+
+        if (!funded) assertEq(reason, _errorData("MidnightLib/fill-price-too-high"));
+    }
+
+    function testFuzz_fundFillSell_passesIffCombinedBound(
+        uint256           assets,
+        uint256           units,
+        uint16            minSellTick,
+        uint16            maxSellYield,
+        uint256[3] memory position,
+        bool              nearEdge
+    )
+        public
+    {
+        units        = bound(units, 1, 1_000_000e18);
+        minSellTick  = uint16(bound(minSellTick, 1, MIDNIGHT_MAX_TICK));
+        maxSellYield = uint16(bound(maxSellYield, 1, type(uint16).max));
+
+        // creditPost, carriedFee, reportedFee
+        position[0] = bound(position[0], 0, POSITION_CREDIT);
+        position[1] = bound(position[1], 0, position[0]);
+        position[2] = bound(position[2], 0, type(uint128).max);
+
+        _setLimits(type(uint128).max);
+
+        _setConfig(MAX_BUY_TICK, minSellTick, 0, maxSellYield, 0, type(uint128).max);
+
+        venue.setPosition(marketId, address(proxy), uint128(position[0]), uint128(position[1]));
+
+        uint256 tickBound  = MidnightTickLib.tickToPrice(minSellTick);
+        uint256 yieldBound = _positionSellYieldBound(maxSellYield, units, position);
+        uint256 combined   = tickBound > yieldBound ? tickBound : yieldBound;
+
+        assets = _assetsAround(assets, (units * combined + WAD - 1) / WAD, nearEdge);
+
+        ( bool funded, bytes memory reason ) = _tryFundFill(false, assets, units, position[2]);
+
+        assertEq(funded, assets * WAD >= units * combined);
+
+        if (!funded) assertEq(reason, _errorData("MidnightLib/fill-price-too-low"));
+    }
+
+    // The higher of the two position floors is the floor at the lower of the two fee rates.
+    function _positionSellYieldBound(
+        uint256           maxSellYield,
+        uint256           units,
+        uint256[3] memory position
+    )
+        internal view returns (uint256)
+    {
+        uint256 timeToMaturity = maturity - block.timestamp;
+
+        if (position[0] == 0) return MidnightLib._minSellPrice(maxSellYield, timeToMaturity, 1, 0);
+
+        uint256 carried =
+            MidnightLib._minSellPrice(maxSellYield, timeToMaturity, position[0], position[1]);
+
+        // A reported rate above par sits above the carried one, so the carried floor binds.
+        if (position[2] > units) return carried;
+
+        uint256 reported =
+            MidnightLib._minSellPrice(maxSellYield, timeToMaturity, units, position[2]);
+
+        return carried > reported ? carried : reported;
+    }
+
+    function _assetsAround(uint256 seed, uint256 edge, bool nearEdge)
+        internal pure returns (uint256)
+    {
+        if (!nearEdge) return bound(seed, 1, MAX_OFFER_SIZE);
+
+        uint256 hi = edge + 2 < MAX_OFFER_SIZE ? edge + 2 : MAX_OFFER_SIZE;
+        uint256 lo = edge > 2 ? edge - 2 : 1;
+
+        return bound(seed, lo < hi ? lo : hi, hi);
+    }
+
+    function _tryFundFill(bool buy, uint256 assets, uint256 units, uint256 pendingFee)
+        internal returns (bool, bytes memory)
+    {
+        vm.prank(strategy);
+        return address(controller).call(abi.encodeCall(
+            ForeignController.midnight_fundFill, (marketId, buy, assets, units, pendingFee)
+        ));
+    }
+
+    function _errorData(string memory message) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature("Error(string)", message);
+    }
+
 }
 
 contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMakerTestBase {
