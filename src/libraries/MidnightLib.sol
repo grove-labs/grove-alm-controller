@@ -273,8 +273,10 @@ library MidnightLib {
 
         uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
 
+        uint256 feePerUnit = pendingFee * WAD / creditBefore;
+
         ( uint256 tickBound, uint256 yieldBound ) =
-            _sellBounds(params.config, timeToMaturity, pendingFee * WAD / creditBefore);
+            _sellBounds(params.config, timeToMaturity, feePerUnit);
 
         TakeContext memory ctx = TakeContext({
             selling       : true,
@@ -582,7 +584,7 @@ library MidnightLib {
         return roundUp ? (numerator + denominator - 1) / denominator : numerator / denominator;
     }
 
-    // The market arrives in calldata and feeds the yield bounds, so bind it to the id first.
+    // The market arrives in calldata and feeds the position and balance reads, so bind it first.
     function _requireMarketId(Market memory market, bytes32 marketId) internal pure {
         require(MidnightIdLib.toId(market) == marketId, "MidnightLib/market-mismatch");
     }
