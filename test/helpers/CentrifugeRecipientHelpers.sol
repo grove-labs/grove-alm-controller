@@ -7,7 +7,6 @@ library CentrifugeRecipientHelpers {
         return bytes32(bytes20(account));
     }
 
-    // Same check as Centrifuge CastLib.toAddress, which the destination applies to the recipient.
     function centrifugeRecipientToAddress(bytes32 recipient) internal pure returns (address) {
         require(uint96(uint256(recipient)) == 0, "Input should be 20 bytes");
         return address(bytes20(recipient));
