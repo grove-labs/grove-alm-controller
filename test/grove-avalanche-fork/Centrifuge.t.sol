@@ -8,6 +8,8 @@ import { ERC7540Lib }    from "../../src/libraries/ERC7540Lib.sol";
 
 import "./ForkTestBase.t.sol";
 
+import { CentrifugeRecipientHelpers } from "../helpers/CentrifugeRecipientHelpers.sol";
+
 interface ICentrifugeV3ShareLike is IERC20 {
     function mint(address to, uint256 value) external;
     function hook() external view returns (address);
@@ -1102,8 +1104,10 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
 
         vm.prank(ALM_RELAYER);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -1111,8 +1115,10 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
         vm.startPrank(GROVE_EXECUTOR);
-        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        foreignController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
         rateLimits.setRateLimitData(
             keccak256(abi.encode(CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER, CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
             10_000_000e6,
@@ -1128,7 +1134,7 @@ contract ForeignControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     function test_transferSharesCentrifuge_rateLimitedBoundary() external {
         vm.startPrank(GROVE_EXECUTOR);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
 
         rateLimits.setRateLimitData(
             transferKey,
@@ -1199,7 +1205,7 @@ contract ForeignControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
     function test_transferSharesCentrifuge() external {
         vm.startPrank(GROVE_EXECUTOR);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
 
         rateLimits.setRateLimitData(
             transferKey,
