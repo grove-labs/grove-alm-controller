@@ -55,12 +55,12 @@ library MidnightLib {
 
     struct MarketConfig {
         uint16  maxBuyTick;
-        uint16  minSellTick;       // non-zero marks the market as onboarded
+        uint16  minSellTick;
         uint16  minBuyYield;       // basis points a year
         uint16  maxSellYield;      // basis points a year
         uint16  maxContinuousFee;  // centi-basis points a year
         uint128 maxLossFactor;     // fraction of type(uint128).max
-        uint128 maxMakeOfferSize;  // non-zero marks the market as make-enabled, and caps each fill
+        uint128 maxMakeOfferSize;
         uint64  maturity;
         address loanToken;
     }
@@ -169,7 +169,6 @@ library MidnightLib {
             "MidnightLib/max-continuous-fee-oob"
         );
 
-        // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
 
         require(maxMakeOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
@@ -230,10 +229,8 @@ library MidnightLib {
 
         ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
 
-        // Deltas around take() are measurable only here; a make callback has no pre-fill hook.
         assetsSpent = balanceBefore - IERC20(market.loanToken).balanceOf(address(params.proxy));
 
-        // An inflow during the callback nets against the spend, so Midnight's figure is the floor.
         if (assetsSpent < buyerAssets) assetsSpent = buyerAssets;
 
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
@@ -262,11 +259,9 @@ library MidnightLib {
 
         uint256 timeToMaturity = _timeToMaturity(params.config.maturity);
 
-        // The position before trading; a make callback only sees it after the fill.
         ( uint256 creditBefore, uint256 pendingFee ) =
             _position(market, params.marketId, address(params.proxy));
 
-        // Credit drifts down with fee accrual and slashing; the excess would be naked debt.
         if (params.units > creditBefore) params.units = creditBefore;
 
         require(params.units != 0, "MidnightLib/no-credit-to-sell");
@@ -379,7 +374,6 @@ library MidnightLib {
         ( uint256 tickBound, uint256 yieldBound ) =
             _buyBounds(config, timeToMaturity, continuousFee);
 
-        // Already booked: check the all-in price paid; a take prices the offer tick first.
         require(
             params.assets * WAD <= params.units * tickBound,
             "MidnightLib/fill-price-too-high"
@@ -403,18 +397,15 @@ library MidnightLib {
 
         bytes32 marketId = params.marketId;
 
-        // Midnight has already moved the sold units and their fee out of the position.
         ( uint256 creditPost, uint256 carriedFee ) = _position(
             _getMarket(params.midnight, marketId), marketId, address(params.proxy)
         );
 
-        // Post-fill position only, capped by the reported fee; a take reads the position first.
         uint256 feePerUnit =
             _sellFeePerUnit(creditPost, carriedFee, params.units, params.pendingFee);
 
         ( uint256 tickBound, uint256 yieldBound ) = _sellBounds(config, timeToMaturity, feePerUnit);
 
-        // Already booked: check the net price received; a take prices the offer tick first.
         require(
             params.assets * WAD >= params.units * tickBound,
             "MidnightLib/fill-price-too-low"
@@ -448,7 +439,6 @@ library MidnightLib {
         uint256 price = MidnightTickLib.tickToPrice(offer.tick);
 
         if (ctx.selling) {
-            // The fee is taken out of the proceeds, so both floors bind on the gross price.
             require(
                 price >= ctx.tickBound + ctx.settlementFee,
                 "MidnightLib/sell-price-too-low"
@@ -458,7 +448,6 @@ library MidnightLib {
                 "MidnightLib/sell-yield-too-high"
             );
         } else {
-            // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
             require(
                 price + ctx.settlementFee <= ctx.tickBound,
                 "MidnightLib/buy-price-too-high"
@@ -468,7 +457,7 @@ library MidnightLib {
                 "MidnightLib/buy-yield-too-low"
             );
 
-            // Paying ourselves would net the transfer to zero, hiding the spend from the rate limit.
+            // Paying the proxy would net out the transfer and hide the spend from the rate limit.
             require(
                 offer.receiverIfMakerIsSeller != address(params.proxy),
                 "MidnightLib/invalid-offer-receiver"
@@ -550,7 +539,6 @@ library MidnightLib {
         return _yieldPrice(maxYield, timeToMaturity, pendingFee * WAD / credit, true);
     }
 
-    // The lower of the reported and carried rates, so a reported fee can only raise the floor.
     function _sellFeePerUnit(
         uint256 creditPost,
         uint256 carriedFee,
@@ -568,7 +556,6 @@ library MidnightLib {
         if (reportedFeePerUnit < feePerUnit) feePerUnit = reportedFeePerUnit;
     }
 
-    // Rounds against the caller: down for the buy ceiling, up for the sell floor.
     function _yieldPrice(
         uint256 yieldBp,
         uint256 timeToMaturity,
@@ -577,19 +564,16 @@ library MidnightLib {
     )
         private pure returns (uint256)
     {
-        // Midnight caps maturity and the continuous fee, so the pending fee stays below par.
         uint256 numerator   = (WAD - pendingFeePerUnit) * YEAR * WAD;
         uint256 denominator = YEAR * WAD + yieldBp * YIELD_BP_RATE * timeToMaturity;
 
         return roundUp ? (numerator + denominator - 1) / denominator : numerator / denominator;
     }
 
-    // The market arrives in calldata and feeds the position and balance reads, so bind it first.
     function _requireMarketId(Market memory market, bytes32 marketId) internal pure {
         require(MidnightIdLib.toId(market) == marketId, "MidnightLib/market-mismatch");
     }
 
-    // Reverts for an id Midnight never created.
     function _getMarket(address midnight, bytes32 marketId) internal view returns (Market memory) {
         return IMidnight(midnight).toMarket(marketId);
     }
@@ -629,7 +613,6 @@ library MidnightLib {
         );
     }
 
-    // An unset key reverts, so funding a (strategy, market) key is what onboards a strategy.
     function _decreaseStrategyLimit(
         IRateLimits rateLimits,
         bytes32     rateLimitId,

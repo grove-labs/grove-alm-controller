@@ -749,7 +749,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /// @dev Groups are operator-managed: any number and any id, per market or across markets.
     ///      Retiring a group is permanent.
     function cancelMidnightOfferGroup(bytes32 group) external nonReentrant {
-        // Cancelling is a safety action the freezer may also take; any other caller needs RELAYER.
         if (!hasRole(FREEZER, msg.sender)) _checkRole(RELAYER);
 
         proxy.doCall(
@@ -764,7 +763,6 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     /*** Midnight maker funding                                                                 ***/
     /**********************************************************************************************/
 
-    // Deliberately roleless: a funded (market, strategy) rate limit is the authorization.
     function midnight_fundFill(
         bytes32 marketId,
         bool    buy,
@@ -799,7 +797,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     function midnight_isCallbackAllowed(bytes32 marketId, address callback, bool buy)
         external view returns (bool)
     {
-        // Hard-coded, so a key funded for the zero address by mistake cannot ratify an unmetered offer.
+        // Hard-coded: a key funded for address(0) by mistake would let unmetered offers through.
         if (callback == address(0)) return false;
 
         MidnightLib.MarketConfig storage config = _midnightMarketConfigs[marketId];

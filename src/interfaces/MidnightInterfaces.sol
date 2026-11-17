@@ -3,7 +3,6 @@ pragma solidity ^0.8.21;
 // Copyright (c) 2026 Morpho Association
 
 // Modified from https://github.com/morpho-org/midnight/blob/70607569ac348e9880b512ffd3b574be55405932/src/interfaces/IMidnight.sol
-// Structs verbatim: the market id hashes abi.encode(market).
 
 struct CollateralParams {
     address token;
