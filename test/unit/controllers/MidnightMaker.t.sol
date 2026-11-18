@@ -114,6 +114,7 @@ contract MidnightMakerTestBase is UnitTestBase {
     );
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
+    event MidnightStrategySet(address indexed strategy, bool enabled);
 
     uint16 constant MAX_BUY_TICK   = 4000;
     uint16 constant MIN_SELL_TICK  = 3000;
@@ -163,6 +164,7 @@ contract MidnightMakerTestBase is UnitTestBase {
         rateLimits.grantRole(rateLimits.CONTROLLER(), address(controller));
         controller.grantRole(RELAYER, relayer);
         controller.grantRole(FREEZER, freezer);
+        controller.setStrategy(strategy, true);
         vm.stopPrank();
     }
 
@@ -1097,6 +1099,9 @@ contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
         assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
 
+        vm.prank(admin);
+        controller.setStrategy(makeAddr("other"), true);
+
         assertFalse(controller.midnight_isCallbackAllowed(marketId, makeAddr("other"), true));
         assertFalse(
             controller.midnight_isCallbackAllowed(keccak256("otherMarket"), strategy, true)
@@ -1658,6 +1663,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         _setLimits(MAX_OFFER_SIZE);
 
         vm.startPrank(admin);
+        controller.setStrategy(allowed, true);
         rateLimits.setRateLimitData(_strategyBuyKey(allowed),  MAX_OFFER_SIZE, 0);
         rateLimits.setRateLimitData(_strategySellKey(allowed), MAX_OFFER_SIZE, 0);
         vm.stopPrank();
@@ -1883,12 +1889,14 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
         maxMakeOfferSize = zeroMask & 1 == 0 ? bound(maxMakeOfferSize, 1, type(uint128).max) : 0;
 
         bool zeroMaxBuyTick = zeroMask & 32 != 0;
+        bool enabled        = zeroMask & 64 == 0;
 
         for (uint256 i; i < 4; ++i) {
             keyAmounts[i] = zeroMask & (2 << i) == 0 ? bound(keyAmounts[i], 1, type(uint256).max) : 0;
         }
 
         vm.startPrank(admin);
+        controller.setStrategy(callback, enabled);
         controller.setMidnightMarketConfig(
             _market(),
             zeroMaxBuyTick ? 0 : MAX_BUY_TICK,
@@ -1918,6 +1926,7 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
             bytes32 reasonHash = keccak256(reason);
 
             assertTrue(
+                reasonHash == keccak256(_revertReason("FC/strategy-not-enabled")) ||
                 reasonHash == keccak256(_revertReason("MidnightLib/make-not-enabled")) ||
                 reasonHash == keccak256(_revertReason("RateLimits/zero-maxAmount")) ||
                 (

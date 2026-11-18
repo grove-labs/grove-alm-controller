@@ -152,6 +152,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
+        foreignController.setStrategy(address(strategy), true);
         rateLimits.setRateLimitData(_strategyBuyKey(address(strategy)),  5_000_000e18, 0);
         rateLimits.setRateLimitData(_strategySellKey(address(strategy)), 5_000_000e18, 0);
         vm.stopPrank();
@@ -256,6 +257,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
     function _onboardStrategy(address strategy_, uint256 maxAmount) internal {
         vm.startPrank(GROVE_EXECUTOR);
+        foreignController.setStrategy(strategy_, true);
         rateLimits.setRateLimitData(_strategyBuyKey(strategy_),  maxAmount, 0);
         rateLimits.setRateLimitData(_strategySellKey(strategy_), maxAmount, 0);
         vm.stopPrank();
@@ -744,6 +746,13 @@ contract ForeignControllerMidnightMakerAttackTests is MidnightMakerTestBase {
 
     function test_attack_directFundFillFromAnUnfundedAddress() public {
         vm.prank(attacker);
+        vm.expectRevert("FC/strategy-not-enabled");
+        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setStrategy(attacker, true);
+
+        vm.prank(attacker);
         vm.expectRevert("RateLimits/zero-maxAmount");
         foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
     }
@@ -1013,6 +1022,13 @@ contract ForeignControllerMidnightMakerReentrancyTests is MidnightMakerTestBase 
 
     function test_midnight_fundFill_unfundedCallerIsRejectedOutrightAnyway() public {
         address stranger = makeAddr("stranger");
+
+        vm.prank(stranger);
+        vm.expectRevert("FC/strategy-not-enabled");
+        foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setStrategy(stranger, true);
 
         vm.prank(stranger);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -1530,6 +1546,9 @@ contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBas
         MirrorFundingStrategy other = new MirrorFundingStrategy(
             MIDNIGHT, address(almProxy), address(foreignController)
         );
+
+        vm.prank(GROVE_EXECUTOR);
+        foreignController.setStrategy(address(other), true);
 
         _setStrategyKeys(address(other), 2_000_000e18, 2_000_000e18);
 

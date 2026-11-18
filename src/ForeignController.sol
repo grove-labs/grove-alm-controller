@@ -58,6 +58,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     event MidnightMakeDisabled(bytes32 indexed marketId);
     event MidnightOfferGroupCancelled(bytes32 indexed group);
     event MidnightRatifierAuthorizationSet(address indexed ratifier, bool authorized);
+    event MidnightStrategySet(address indexed strategy, bool enabled);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -94,6 +95,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     mapping(address pool => UniswapV3Lib.UniswapV3PoolParams params) public uniswapV3PoolParams;
 
     mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
+
+    mapping(address strategy => bool enabled) public isStrategyEnabled;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -271,6 +274,14 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit MidnightRatifierAuthorizationSet(ratifier, authorized);
     }
 
+    function setStrategy(address strategy, bool enabled) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        isStrategyEnabled[strategy] = enabled;
+
+        emit MidnightStrategySet(strategy, enabled);
+    }
+
     function setMaxExchangeRate(address token, uint256 shares, uint256 maxExpectedAssets) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
@@ -297,6 +308,14 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _midnightMarketConfigs[marketId].maxMakeOfferSize = 0;
 
         emit MidnightMakeDisabled(marketId);
+    }
+
+    function disableStrategy(address strategy) external {
+        _checkRole(FREEZER);
+
+        isStrategyEnabled[strategy] = false;
+
+        emit MidnightStrategySet(strategy, false);
     }
 
     /**********************************************************************************************/
@@ -772,6 +791,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     )
         external nonReentrant
     {
+        require(isStrategyEnabled[msg.sender], "FC/strategy-not-enabled");
+
         MidnightLib.fundFill(MidnightLib.FundFillParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
@@ -799,6 +820,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     {
         // Hard-coded: a key funded for address(0) by mistake would let unmetered offers through.
         if (callback == address(0)) return false;
+
+        if (!isStrategyEnabled[callback]) return false;
 
         MidnightLib.MarketConfig storage config = _midnightMarketConfigs[marketId];
 
