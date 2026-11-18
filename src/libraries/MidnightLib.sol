@@ -55,7 +55,7 @@ library MidnightLib {
 
     struct MarketConfig {
         uint16  maxBuyTick;
-        uint16  minSellTick;
+        uint16  minSellTick;       // non-zero marks the market as onboarded
         uint16  minBuyYield;       // basis points a year
         uint16  maxSellYield;      // basis points a year
         uint16  maxContinuousFee;  // centi-basis points a year
@@ -169,6 +169,7 @@ library MidnightLib {
             "MidnightLib/max-continuous-fee-oob"
         );
 
+        // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
 
         require(maxMakeOfferSize <= type(uint128).max, "MidnightLib/max-offer-size-oob");
@@ -231,6 +232,7 @@ library MidnightLib {
 
         assetsSpent = balanceBefore - IERC20(market.loanToken).balanceOf(address(params.proxy));
 
+        // An inflow during the callback nets against the spend, so Midnight's figure is the floor.
         if (assetsSpent < buyerAssets) assetsSpent = buyerAssets;
 
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
@@ -262,6 +264,7 @@ library MidnightLib {
         ( uint256 creditBefore, uint256 pendingFee ) =
             _position(market, params.marketId, address(params.proxy));
 
+        // Credit drifts down with fee accrual and slashing; the excess would be naked debt.
         if (params.units > creditBefore) params.units = creditBefore;
 
         require(params.units != 0, "MidnightLib/no-credit-to-sell");
@@ -439,6 +442,7 @@ library MidnightLib {
         uint256 price = MidnightTickLib.tickToPrice(offer.tick);
 
         if (ctx.selling) {
+            // The fee is taken out of the proceeds, so both floors bind on the gross price.
             require(
                 price >= ctx.tickBound + ctx.settlementFee,
                 "MidnightLib/sell-price-too-low"
@@ -448,6 +452,7 @@ library MidnightLib {
                 "MidnightLib/sell-yield-too-high"
             );
         } else {
+            // The fee is paid on top of the price, so both ceilings bind on the all-in cost.
             require(
                 price + ctx.settlementFee <= ctx.tickBound,
                 "MidnightLib/buy-price-too-high"
@@ -457,7 +462,7 @@ library MidnightLib {
                 "MidnightLib/buy-yield-too-low"
             );
 
-            // Paying the proxy would net out the transfer and hide the spend from the rate limit.
+            // Paying ourselves would net the transfer to zero, hiding the spend from the rate limit.
             require(
                 offer.receiverIfMakerIsSeller != address(params.proxy),
                 "MidnightLib/invalid-offer-receiver"
@@ -556,6 +561,7 @@ library MidnightLib {
         if (reportedFeePerUnit < feePerUnit) feePerUnit = reportedFeePerUnit;
     }
 
+    // Rounds against the caller: down for the buy ceiling, up for the sell floor.
     function _yieldPrice(
         uint256 yieldBp,
         uint256 timeToMaturity,
@@ -564,12 +570,14 @@ library MidnightLib {
     )
         private pure returns (uint256)
     {
+        // Midnight caps maturity and the continuous fee, so the pending fee stays below par.
         uint256 numerator   = (WAD - pendingFeePerUnit) * YEAR * WAD;
         uint256 denominator = YEAR * WAD + yieldBp * YIELD_BP_RATE * timeToMaturity;
 
         return roundUp ? (numerator + denominator - 1) / denominator : numerator / denominator;
     }
 
+    // The market arrives in calldata and feeds the yield bounds, so bind it to the id first.
     function _requireMarketId(Market memory market, bytes32 marketId) internal pure {
         require(MidnightIdLib.toId(market) == marketId, "MidnightLib/market-mismatch");
     }
