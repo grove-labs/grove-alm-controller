@@ -10,6 +10,8 @@ import { MainnetControllerDeploy } from "../../deploy/ControllerDeploy.sol";
 
 import { MainnetControllerInit as Init } from "../../deploy/MainnetControllerInit.sol";
 
+import { CentrifugeRecipientHelpers } from "../helpers/CentrifugeRecipientHelpers.sol";
+
 // Necessary to get error message assertions to work
 contract LibraryWrapper {
 
@@ -116,7 +118,9 @@ contract MainnetControllerInitAndUpgradeTestBase is ForkTestBase {
 
         centrifugeRecipients[0] = Init.CentrifugeRecipient({
             destinationCentrifugeId : destinationCentrifugeId,
-            recipient               : bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))))
+            recipient               : CentrifugeRecipientHelpers.addressToCentrifugeRecipient(
+                makeAddr("centrifugeRecipient")
+            )
         });
     }
 
@@ -618,8 +622,25 @@ contract MainnetControllerUpgradeControllerSuccessTests is MainnetControllerInit
 
         assertEq(
             newController.centrifugeRecipients(destinationCentrifugeId),
-            bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))))
+            CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"))
         );
+    }
+
+    function test_upgradeController_centrifugeRecipientDecodesOnDestination() public {
+        vm.startPrank(GROVE_PROXY);
+        wrapper.upgradeController(
+            controllerInst,
+            configAddresses,
+            checkAddresses,
+            mintRecipients,
+            layerZeroRecipients,
+            centrifugeRecipients
+        );
+        vm.stopPrank();
+
+        bytes32 recipient = newController.centrifugeRecipients(destinationCentrifugeId);
+
+        assertEq(CentrifugeRecipientHelpers.centrifugeRecipientToAddress(recipient), makeAddr("centrifugeRecipient"));
     }
 
 }
