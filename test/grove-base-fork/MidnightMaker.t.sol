@@ -243,6 +243,11 @@ contract MidnightMakerTestBase is MidnightTestBase {
         foreignController.disableMidnightMake(marketId);
     }
 
+    function _disableStrategy(address strategy_) internal {
+        vm.prank(ALM_FREEZER);
+        foreignController.disableStrategy(strategy_);
+    }
+
     function _strategyBuyKey(address strategy_) internal view returns (bytes32) {
         return RateLimitHelpers.makeAddressBytes32Key(
             MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, strategy_, marketId
@@ -537,6 +542,14 @@ contract ForeignControllerMidnightMakerRetroactivityTests is MidnightMakerTestBa
         _expectTakeRevert(offer, PROBE_UNITS, "RateLimits/zero-maxAmount");
     }
 
+    function test_retroactivity_disablingTheStrategy() public {
+        Offer memory offer = _restingBuyOffer();
+
+        _disableStrategy(address(strategy));
+
+        _expectTakeRevert(offer, PROBE_UNITS, "FC/strategy-not-enabled");
+    }
+
     function test_retroactivity_disablingMake() public {
         Offer memory offer = _restingBuyOffer();
 
@@ -663,6 +676,15 @@ contract ForeignControllerMidnightMakerKillSwitchTests is MidnightMakerTestBase 
         _onboardStrategy(address(strategy), 0);
 
         _expectFreshOfferRejected("RateLimits/zero-maxAmount");
+    }
+
+    function test_killSwitch_strategyDisable() public {
+        _disableStrategy(address(strategy));
+
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+
+        _expectFreshOfferRejected("FC/strategy-not-enabled");
     }
 
     function test_killSwitch_makeDisable() public {
@@ -1569,6 +1591,46 @@ contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBas
 
         _assertLimits(_limits(address(strategy)), expected);
         _assertLimits(_limits(address(other)),    otherExpected);
+    }
+
+    function test_keys_disablingTheStrategyClosesEveryMarket() public {
+        _seedCredit(SEEDED_UNITS);
+
+        ( Market memory marketB, bytes32 idB ) = _onboardSecondMarket();
+
+        vm.prank(GROVE_EXECUTOR);
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAddressBytes32Key(
+                MidnightLib.LIMIT_MIDNIGHT_STRATEGY_BUY, address(strategy), idB
+            ),
+            5_000_000e18,
+            0
+        );
+
+        Offer memory bidB = _bid(UNITS);
+        bidB.market = marketB;
+
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+        assertTrue(foreignController.midnight_isCallbackAllowed(idB,      address(strategy), true));
+
+        _disableStrategy(address(strategy));
+
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
+        assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
+        assertFalse(foreignController.midnight_isCallbackAllowed(idB,      address(strategy), true));
+
+        Limits memory before = _limits(address(strategy));
+
+        _expectTakeRevert(_bid(SEEDED_UNITS), UNITS, "FC/strategy-not-enabled");
+        _expectTakeRevert(_ask(SEEDED_UNITS), UNITS, "FC/strategy-not-enabled");
+        _expectTakeRevert(bidB,               UNITS, "FC/strategy-not-enabled");
+
+        vm.prank(address(strategy));
+        vm.expectRevert("FC/strategy-not-enabled");
+        foreignController.midnight_fundFill(marketId, true, 1_000e18, 1_000_000e18, 0);
+
+        _assertLimits(_limits(address(strategy)), before);
     }
 
     function test_keys_zeroingTheStrategyKeysOffboardsAndFlipsTheView() public {

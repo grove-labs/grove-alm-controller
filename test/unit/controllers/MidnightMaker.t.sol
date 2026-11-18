@@ -961,6 +961,251 @@ contract ForeignControllerDisableMidnightMakeTests is MidnightMakerTestBase {
     }
 
 }
+
+contract ForeignControllerMidnightStrategyTests is MidnightMakerTestBase {
+
+    uint256 constant UNITS = 1_000e18;
+
+    address other = makeAddr("otherStrategy");
+
+    function setUp() public override {
+        super.setUp();
+
+        _onboardTake();
+        _enableMake();
+        _setLimits(MAX_OFFER_SIZE);
+        _onboardStrategy(MAX_OFFER_SIZE);
+
+        vm.startPrank(admin);
+        rateLimits.setRateLimitData(_strategyBuyKey(other),  MAX_OFFER_SIZE, 0);
+        rateLimits.setRateLimitData(_strategySellKey(other), MAX_OFFER_SIZE, 0);
+        vm.stopPrank();
+
+        venue.setPosition(marketId, address(proxy), uint128(1_000_000e18), 0);
+
+        loanToken.mint(address(proxy), 10_000_000e18);
+    }
+
+    function _unauthorized(address account, bytes32 role) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            account,
+            role
+        );
+    }
+
+    function _disableStrategy(address strategy_) internal {
+        vm.prank(freezer);
+        controller.disableStrategy(strategy_);
+    }
+
+    function test_midnightStrategySelectorsAndTopic() public view {
+        assertEq(ForeignController.setStrategy.selector,     bytes4(0xbaa82a34));
+        assertEq(ForeignController.disableStrategy.selector, bytes4(0x98425ee1));
+        assertEq(controller.isStrategyEnabled.selector,      bytes4(0xea49ba97));
+
+        assertEq(
+            ForeignController.MidnightStrategySet.selector,
+            0x0792fbfd61d328d854018d20d2c34e988b53befd7d8cc708d30fe0433e638cef
+        );
+    }
+
+    function test_setStrategy_unauthorizedAccount() public {
+        vm.expectRevert(_unauthorized(address(this), DEFAULT_ADMIN_ROLE));
+        controller.setStrategy(other, true);
+
+        vm.prank(freezer);
+        vm.expectRevert(_unauthorized(freezer, DEFAULT_ADMIN_ROLE));
+        controller.setStrategy(other, true);
+
+        vm.prank(relayer);
+        vm.expectRevert(_unauthorized(relayer, DEFAULT_ADMIN_ROLE));
+        controller.setStrategy(other, true);
+
+        vm.prank(other);
+        vm.expectRevert(_unauthorized(other, DEFAULT_ADMIN_ROLE));
+        controller.setStrategy(other, true);
+
+        assertFalse(controller.isStrategyEnabled(other));
+    }
+
+    function test_setStrategy() public {
+        assertFalse(controller.isStrategyEnabled(other));
+
+        vm.prank(admin);
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(other, true);
+        controller.setStrategy(other, true);
+
+        assertTrue(controller.isStrategyEnabled(other));
+
+        vm.prank(admin);
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(other, false);
+        controller.setStrategy(other, false);
+
+        assertFalse(controller.isStrategyEnabled(other));
+        assertTrue(controller.isStrategyEnabled(strategy));
+    }
+
+    function test_disableStrategy_unauthorizedAccount() public {
+        vm.expectRevert(_unauthorized(address(this), FREEZER));
+        controller.disableStrategy(strategy);
+
+        vm.prank(admin);
+        vm.expectRevert(_unauthorized(admin, FREEZER));
+        controller.disableStrategy(strategy);
+
+        vm.prank(relayer);
+        vm.expectRevert(_unauthorized(relayer, FREEZER));
+        controller.disableStrategy(strategy);
+
+        vm.prank(strategy);
+        vm.expectRevert(_unauthorized(strategy, FREEZER));
+        controller.disableStrategy(strategy);
+
+        assertTrue(controller.isStrategyEnabled(strategy));
+    }
+
+    function test_disableStrategy() public {
+        assertTrue(controller.isStrategyEnabled(strategy));
+
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(strategy, false);
+        controller.disableStrategy(strategy);
+
+        assertFalse(controller.isStrategyEnabled(strategy));
+    }
+
+    function test_disableStrategy_onlySetsFalse() public {
+        assertFalse(controller.isStrategyEnabled(other));
+
+        vm.prank(freezer);
+        vm.expectEmit(address(controller));
+        emit MidnightStrategySet(other, false);
+        controller.disableStrategy(other);
+
+        assertFalse(controller.isStrategyEnabled(other));
+
+        _disableStrategy(strategy);
+        _disableStrategy(strategy);
+
+        assertFalse(controller.isStrategyEnabled(strategy));
+    }
+
+    function test_disableStrategy_onlyTheAdminReEnables() public {
+        _disableStrategy(strategy);
+
+        vm.prank(freezer);
+        vm.expectRevert(_unauthorized(freezer, DEFAULT_ADMIN_ROLE));
+        controller.setStrategy(strategy, true);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+
+        vm.prank(admin);
+        controller.setStrategy(strategy, true);
+
+        assertTrue(controller.isStrategyEnabled(strategy));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+    }
+
+    function test_disableStrategy_leavesTheKeysAndOtherStrategies() public {
+        vm.prank(admin);
+        controller.setStrategy(other, true);
+
+        MidnightLib.MarketConfig memory before = controller.midnightMarketConfigs(marketId);
+
+        _disableStrategy(strategy);
+
+        assertEq(rateLimits.getRateLimitData(_strategyBuyKey(strategy)).maxAmount,  MAX_OFFER_SIZE);
+        assertEq(rateLimits.getRateLimitData(_strategySellKey(strategy)).maxAmount, MAX_OFFER_SIZE);
+
+        assertEq(controller.midnightMarketConfigs(marketId).maxMakeOfferSize, before.maxMakeOfferSize);
+
+        assertTrue(controller.isStrategyEnabled(other));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, other, true));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, other, false));
+    }
+
+    function test_midnight_fundFill_strategyNotEnabled() public {
+        vm.prank(other);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+
+        vm.prank(other);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
+    }
+
+    function test_midnight_fundFill_strategyCheckRunsFirst() public {
+        _disableMake();
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/make-not-enabled");
+        controller.midnight_fundFill(marketId, true, 0, 0, 0);
+
+        vm.prank(other);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, true, 0, 0, 0);
+    }
+
+    function test_midnight_fundFill_disabledStrategyIsRejected() public {
+        uint256 assets = _honestAssets(UNITS, MAX_BUY_TICK);
+
+        vm.prank(strategy);
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        _disableStrategy(strategy);
+
+        uint256 proxyBalance = loanToken.balanceOf(address(proxy));
+        uint256 buyLimit     = rateLimits.getCurrentRateLimit(_buyKey());
+        uint256 sellLimit    = rateLimits.getCurrentRateLimit(_sellKey());
+
+        vm.prank(strategy);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, true, assets, UNITS, 0);
+
+        vm.prank(strategy);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, false, _parAssets(UNITS), UNITS, 0);
+
+        assertEq(loanToken.balanceOf(address(proxy)),        proxyBalance);
+        assertEq(rateLimits.getCurrentRateLimit(_buyKey()),  buyLimit);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), sellLimit);
+    }
+
+    function test_midnight_fundFill_adminDisabledStrategyIsRejected() public {
+        vm.prank(admin);
+        controller.setStrategy(strategy, false);
+
+        vm.prank(strategy);
+        vm.expectRevert("FC/strategy-not-enabled");
+        controller.midnight_fundFill(marketId, true, 1, UNITS, 0);
+    }
+
+    function test_midnightIsCallbackAllowed_requiresAnEnabledStrategy() public {
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, other, true));
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, other, false));
+
+        vm.prank(admin);
+        controller.setStrategy(other, true);
+
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, other, true));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, other, false));
+    }
+
+    function test_midnightIsCallbackAllowed_disabledStrategy() public {
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+        assertTrue(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+
+        _disableStrategy(strategy);
+
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, true));
+        assertFalse(controller.midnight_isCallbackAllowed(marketId, strategy, false));
+    }
+
+}
 contract ForeignControllerMidnightPeripheryViewTests is MidnightMakerTestBase {
 
     function test_midnightPeripherySelectors() public pure {
