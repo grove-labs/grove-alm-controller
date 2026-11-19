@@ -2591,7 +2591,6 @@ contract UniswapV3ValueBoundTestBase is UniswapV3TestBase {
         assertGt(liquidity, 0);
     }
 
-    // A one-sided target drives the TWAP-derived minimums to zero, so only the value bound stands.
     function _assertOneSidedAddReverts(
         uint256           tokenId,
         UniswapV3Lib.Tick memory tick,
