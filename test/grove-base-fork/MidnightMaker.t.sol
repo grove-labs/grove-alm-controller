@@ -152,7 +152,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
         vm.startPrank(GROVE_EXECUTOR);
         foreignController.setMidnightRatifierAuthorization(address(makerRatifier), true);
-        foreignController.setStrategy(address(strategy), true);
+        foreignController.setMidnightStrategy(address(strategy), true);
         rateLimits.setRateLimitData(_strategyBuyKey(address(strategy)),  5_000_000e18, 0);
         rateLimits.setRateLimitData(_strategySellKey(address(strategy)), 5_000_000e18, 0);
         vm.stopPrank();
@@ -243,9 +243,9 @@ contract MidnightMakerTestBase is MidnightTestBase {
         foreignController.disableMidnightMake(marketId);
     }
 
-    function _disableStrategy(address strategy_) internal {
+    function _disableMidnightStrategy(address strategy_) internal {
         vm.prank(ALM_FREEZER);
-        foreignController.disableStrategy(strategy_);
+        foreignController.disableMidnightStrategy(strategy_);
     }
 
     function _strategyBuyKey(address strategy_) internal view returns (bytes32) {
@@ -262,7 +262,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
     function _onboardStrategy(address strategy_, uint256 maxAmount) internal {
         vm.startPrank(GROVE_EXECUTOR);
-        foreignController.setStrategy(strategy_, true);
+        foreignController.setMidnightStrategy(strategy_, true);
         rateLimits.setRateLimitData(_strategyBuyKey(strategy_),  maxAmount, 0);
         rateLimits.setRateLimitData(_strategySellKey(strategy_), maxAmount, 0);
         vm.stopPrank();
@@ -545,7 +545,7 @@ contract ForeignControllerMidnightMakerRetroactivityTests is MidnightMakerTestBa
     function test_retroactivity_disablingTheStrategy() public {
         Offer memory offer = _restingBuyOffer();
 
-        _disableStrategy(address(strategy));
+        _disableMidnightStrategy(address(strategy));
 
         _expectTakeRevert(offer, PROBE_UNITS, "FC/strategy-not-enabled");
     }
@@ -679,7 +679,7 @@ contract ForeignControllerMidnightMakerKillSwitchTests is MidnightMakerTestBase 
     }
 
     function test_killSwitch_strategyDisable() public {
-        _disableStrategy(address(strategy));
+        _disableMidnightStrategy(address(strategy));
 
         assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
         assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
@@ -772,7 +772,7 @@ contract ForeignControllerMidnightMakerAttackTests is MidnightMakerTestBase {
         foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
 
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setStrategy(attacker, true);
+        foreignController.setMidnightStrategy(attacker, true);
 
         vm.prank(attacker);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -1050,7 +1050,7 @@ contract ForeignControllerMidnightMakerReentrancyTests is MidnightMakerTestBase 
         foreignController.midnight_fundFill(marketId, true, 1, 1_000e18, 0);
 
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setStrategy(stranger, true);
+        foreignController.setMidnightStrategy(stranger, true);
 
         vm.prank(stranger);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -1570,7 +1570,7 @@ contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBas
         );
 
         vm.prank(GROVE_EXECUTOR);
-        foreignController.setStrategy(address(other), true);
+        foreignController.setMidnightStrategy(address(other), true);
 
         _setStrategyKeys(address(other), 2_000_000e18, 2_000_000e18);
 
@@ -1614,7 +1614,7 @@ contract ForeignControllerMidnightMakerRateLimitKeyTests is MidnightMakerTestBas
         assertTrue(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));
         assertTrue(foreignController.midnight_isCallbackAllowed(idB,      address(strategy), true));
 
-        _disableStrategy(address(strategy));
+        _disableMidnightStrategy(address(strategy));
 
         assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), true));
         assertFalse(foreignController.midnight_isCallbackAllowed(marketId, address(strategy), false));

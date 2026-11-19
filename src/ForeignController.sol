@@ -96,7 +96,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
 
     mapping(bytes32 marketId => MidnightLib.MarketConfig config) internal _midnightMarketConfigs;
 
-    mapping(address strategy => bool enabled) public isStrategyEnabled;
+    mapping(address strategy => bool enabled) public isMidnightStrategyEnabled;
 
     mapping(address spoke => mapping(uint256 reserveId => uint256 maxSlippage)) public maxAaveV4Slippages;  // 1e18 precision
     mapping(address hub   => mapping(uint16  assetId   => uint256 maxDeficit))  public maxAaveV4Deficits;   // RAY (1e27) of the asset's own units
@@ -274,10 +274,10 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit MidnightRatifierAuthorizationSet(ratifier, authorized);
     }
 
-    function setStrategy(address strategy, bool enabled) external {
+    function setMidnightStrategy(address strategy, bool enabled) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
-        isStrategyEnabled[strategy] = enabled;
+        isMidnightStrategyEnabled[strategy] = enabled;
 
         emit MidnightStrategySet(strategy, enabled);
     }
@@ -310,10 +310,10 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit MidnightMakeDisabled(marketId);
     }
 
-    function disableStrategy(address strategy) external {
+    function disableMidnightStrategy(address strategy) external {
         _checkRole(FREEZER);
 
-        isStrategyEnabled[strategy] = false;
+        isMidnightStrategyEnabled[strategy] = false;
 
         emit MidnightStrategySet(strategy, false);
     }
@@ -791,7 +791,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     )
         external nonReentrant
     {
-        require(isStrategyEnabled[msg.sender], "FC/strategy-not-enabled");
+        require(isMidnightStrategyEnabled[msg.sender], "FC/strategy-not-enabled");
 
         MidnightLib.fundFill(MidnightLib.FundFillParams({
             proxy        : proxy,
@@ -821,7 +821,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         // Hard-coded: a key funded for address(0) by mistake would let unmetered offers through.
         if (callback == address(0)) return false;
 
-        if (!isStrategyEnabled[callback]) return false;
+        if (!isMidnightStrategyEnabled[callback]) return false;
 
         MidnightLib.MarketConfig storage config = _midnightMarketConfigs[marketId];
 
