@@ -215,6 +215,10 @@ library MidnightLib {
         bytes32       marketId = params.marketId;
         Market memory market   = IMidnight(params.midnight).toMarket(marketId);
 
+        require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
+
+        _requireMarketId(market, marketId);
+
         ( uint256 credit, ) = _position(market, marketId, address(params.proxy));
 
         uint256 units        = params.units;
