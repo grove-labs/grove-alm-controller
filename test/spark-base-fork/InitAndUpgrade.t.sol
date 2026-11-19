@@ -8,6 +8,8 @@ import { ForeignControllerDeploy } from "../../deploy/ControllerDeploy.sol";
 
 import { ForeignControllerInit as Init } from "../../deploy/ForeignControllerInit.sol";
 
+import { CentrifugeRecipientHelpers } from "../helpers/CentrifugeRecipientHelpers.sol";
+
 // Necessary to get error message assertions to work
 contract LibraryWrapper {
 
@@ -106,7 +108,9 @@ contract ForeignControllerInitAndUpgradeTestBase is ForkTestBase {
 
         centrifugeRecipients[0] = Init.CentrifugeRecipient({
             destinationCentrifugeId : destinationCentrifugeId,
-            recipient               : bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
+            recipient               : CentrifugeRecipientHelpers.addressToCentrifugeRecipient(
+                makeAddr("ethereumAlmProxy")
+            )
         });
     }
 
@@ -787,8 +791,25 @@ contract ForeignControllerUpgradeControllerSuccessTests is ForeignControllerInit
 
         assertEq(
             newController.centrifugeRecipients(destinationCentrifugeId),
-            bytes32(uint256(uint160(makeAddr("ethereumAlmProxy"))))
+            CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("ethereumAlmProxy"))
         );
+    }
+
+    function test_upgradeController_centrifugeRecipientDecodesOnDestination() public {
+        vm.startPrank(Base.SPARK_EXECUTOR);
+        wrapper.upgradeController(
+            controllerInst,
+            configAddresses,
+            checkAddresses,
+            mintRecipients,
+            layerZeroRecipients,
+            centrifugeRecipients
+        );
+        vm.stopPrank();
+
+        bytes32 recipient = newController.centrifugeRecipients(destinationCentrifugeId);
+
+        assertEq(CentrifugeRecipientHelpers.centrifugeRecipientToAddress(recipient), makeAddr("ethereumAlmProxy"));
     }
 
 }

@@ -5,6 +5,8 @@ import { ForeignController } from "../../../src/ForeignController.sol";
 import { MainnetController } from "../../../src/MainnetController.sol";
 import { UniswapV3Lib }      from "../../../src/libraries/UniswapV3Lib.sol";
 
+import { CentrifugeRecipientHelpers } from "../../helpers/CentrifugeRecipientHelpers.sol";
+
 import { MockDaiUsds } from "../mocks/MockDaiUsds.sol";
 import { MockPSM }     from "../mocks/MockPSM.sol";
 import { MockVault }   from "../mocks/MockVault.sol";
@@ -99,13 +101,16 @@ contract MainnetControllerSetCentrifugeRecipientTests is MainnetControllerAdminT
 
     event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
 
+    bytes32 centrifugeRecipient =
+        CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
     function test_setCentrifugeRecipient_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
             address(this),
             DEFAULT_ADMIN_ROLE
         ));
-        mainnetController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+        mainnetController.setCentrifugeRecipient(1, centrifugeRecipient);
     }
 
     function test_setCentrifugeRecipient_zeroRecipient() public {
@@ -114,15 +119,38 @@ contract MainnetControllerSetCentrifugeRecipientTests is MainnetControllerAdminT
         mainnetController.setCentrifugeRecipient(1, bytes32(0));
     }
 
+    function test_setCentrifugeRecipient_leftPaddedRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("MC/invalid-recipient");
+        mainnetController.setCentrifugeRecipient(1, bytes32(uint256(uint160(makeAddr("centrifugeRecipient")))));
+    }
+
+    function test_setCentrifugeRecipient_highestLowBitNotZero() public {
+        vm.prank(admin);
+        vm.expectRevert("MC/invalid-recipient");
+        mainnetController.setCentrifugeRecipient(1, centrifugeRecipient | bytes32(uint256(1) << 95));
+    }
+
+    function testFuzz_setCentrifugeRecipient_lowBytesNotZero(address account, uint96 lowBytes) public {
+        vm.assume(lowBytes != 0);
+
+        bytes32 recipient =
+            CentrifugeRecipientHelpers.addressToCentrifugeRecipient(account) | bytes32(uint256(lowBytes));
+
+        vm.prank(admin);
+        vm.expectRevert("MC/invalid-recipient");
+        mainnetController.setCentrifugeRecipient(1, recipient);
+    }
+
     function test_setCentrifugeRecipient() public {
         assertEq(mainnetController.centrifugeRecipients(1), bytes32(0));
 
         vm.prank(admin);
         vm.expectEmit(address(mainnetController));
-        emit CentrifugeRecipientSet(1, bytes32(uint256(1)));
-        mainnetController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+        emit CentrifugeRecipientSet(1, centrifugeRecipient);
+        mainnetController.setCentrifugeRecipient(1, centrifugeRecipient);
 
-        assertEq(mainnetController.centrifugeRecipients(1), bytes32(uint256(1)));
+        assertEq(mainnetController.centrifugeRecipients(1), centrifugeRecipient);
     }
 
 }
@@ -568,13 +596,16 @@ contract ForeignControllerSetCentrifugeRecipientTests is ForeignControllerAdminT
 
     event CentrifugeRecipientSet(uint16 indexed centrifugeId, bytes32 recipient);
 
+    bytes32 centrifugeRecipient =
+        CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
     function test_setCentrifugeRecipient_unauthorizedAccount() public {
         vm.expectRevert(abi.encodeWithSignature(
             "AccessControlUnauthorizedAccount(address,bytes32)",
             address(this),
             DEFAULT_ADMIN_ROLE
         ));
-        foreignController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+        foreignController.setCentrifugeRecipient(1, centrifugeRecipient);
     }
 
     function test_setCentrifugeRecipient_zeroRecipient() public {
@@ -583,15 +614,38 @@ contract ForeignControllerSetCentrifugeRecipientTests is ForeignControllerAdminT
         foreignController.setCentrifugeRecipient(1, bytes32(0));
     }
 
+    function test_setCentrifugeRecipient_leftPaddedRecipient() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-recipient");
+        foreignController.setCentrifugeRecipient(1, bytes32(uint256(uint160(makeAddr("centrifugeRecipient")))));
+    }
+
+    function test_setCentrifugeRecipient_highestLowBitNotZero() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-recipient");
+        foreignController.setCentrifugeRecipient(1, centrifugeRecipient | bytes32(uint256(1) << 95));
+    }
+
+    function testFuzz_setCentrifugeRecipient_lowBytesNotZero(address account, uint96 lowBytes) public {
+        vm.assume(lowBytes != 0);
+
+        bytes32 recipient =
+            CentrifugeRecipientHelpers.addressToCentrifugeRecipient(account) | bytes32(uint256(lowBytes));
+
+        vm.prank(admin);
+        vm.expectRevert("FC/invalid-recipient");
+        foreignController.setCentrifugeRecipient(1, recipient);
+    }
+
     function test_setCentrifugeRecipient() public {
         assertEq(foreignController.centrifugeRecipients(1), bytes32(0));
 
         vm.prank(admin);
         vm.expectEmit(address(foreignController));
-        emit CentrifugeRecipientSet(1, bytes32(uint256(1)));
-        foreignController.setCentrifugeRecipient(1, bytes32(uint256(1)));
+        emit CentrifugeRecipientSet(1, centrifugeRecipient);
+        foreignController.setCentrifugeRecipient(1, centrifugeRecipient);
 
-        assertEq(foreignController.centrifugeRecipients(1), bytes32(uint256(1)));
+        assertEq(foreignController.centrifugeRecipients(1), centrifugeRecipient);
     }
 
 }

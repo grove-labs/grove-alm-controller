@@ -218,7 +218,8 @@ contract MainnetController is AccessControl, ReentrancyGuard {
 
     function setCentrifugeRecipient(uint16 centrifugeId, bytes32 recipient) external {
         _checkRole(DEFAULT_ADMIN_ROLE);
-        require(recipient != bytes32(0), "MC/zero-recipient");
+        require(recipient != bytes32(0),         "MC/zero-recipient");
+        require(uint96(uint256(recipient)) == 0, "MC/invalid-recipient");
         centrifugeRecipients[centrifugeId] = recipient;
         emit CentrifugeRecipientSet(centrifugeId, recipient);
     }

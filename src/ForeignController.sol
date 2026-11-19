@@ -189,7 +189,8 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(recipient != bytes32(0), "FC/zero-recipient");
+        require(recipient != bytes32(0),         "FC/zero-recipient");
+        require(uint96(uint256(recipient)) == 0, "FC/invalid-recipient");
         centrifugeRecipients[destinationCentrifugeId] = recipient;
         emit CentrifugeRecipientSet(destinationCentrifugeId, recipient);
     }

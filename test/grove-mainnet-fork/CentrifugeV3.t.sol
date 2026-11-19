@@ -10,6 +10,8 @@ import { RateLimitHelpers } from "../../src/RateLimitHelpers.sol";
 import "./ForkTestBase.t.sol";
 import { CentrifugeLib } from "../../src/libraries/CentrifugeLib.sol";
 
+import { CentrifugeRecipientHelpers } from "../helpers/CentrifugeRecipientHelpers.sol";
+
 contract CentrifugeTestBase is ForkTestBase {
 
     address constant CENTRIFUGE_VAULT = 0x1121F4e21eD8B9BC1BB9A2952cDD8639aC897784; // DEJAAA_VAULT_USDC
@@ -66,8 +68,10 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_zeroMaxAmount() external {
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
         vm.prank(GROVE_PROXY);
-        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
@@ -75,8 +79,10 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     }
 
     function test_transferSharesCentrifuge_legacyKeyNotHonoured() external {
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
         vm.startPrank(GROVE_PROXY);
-        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
         rateLimits.setRateLimitData(
             keccak256(abi.encode(CentrifugeLib.LIMIT_CENTRIFUGE_TRANSFER, CENTRIFUGE_VAULT, DESTINATION_CENTRIFUGE_ID)),
             10_000_000e6,
@@ -92,7 +98,7 @@ contract MainnetControllerTransferSharesCentrifugeFailureTests is CentrifugeTest
     function test_transferSharesCentrifuge_rateLimitedBoundary() external {
         vm.startPrank(GROVE_PROXY);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
 
         rateLimits.setRateLimitData(
             transferKey,
@@ -163,7 +169,7 @@ contract MainnetControllerTransferSharesCentrifugeSuccessTests is CentrifugeTest
     function test_transferSharesCentrifuge() external {
         vm.startPrank(GROVE_PROXY);
 
-        bytes32 target = bytes32(uint256(uint160(makeAddr("centrifugeRecipient"))));
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
 
         rateLimits.setRateLimitData(
             transferKey,
@@ -231,8 +237,10 @@ contract MainnetControllerTransferSharesCentrifugeNoManagerGetterTests is ForkTe
 
     // Reaching the rate limit check proves the spoke was resolved from the vault.
     function test_transferSharesCentrifuge_vaultWithoutManagerGetter() external {
+        bytes32 target = CentrifugeRecipientHelpers.addressToCentrifugeRecipient(makeAddr("centrifugeRecipient"));
+
         vm.prank(GROVE_PROXY);
-        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, bytes32(uint256(1)));
+        mainnetController.setCentrifugeRecipient(DESTINATION_CENTRIFUGE_ID, target);
 
         vm.prank(relayer);
         vm.expectRevert("RateLimits/zero-maxAmount");
