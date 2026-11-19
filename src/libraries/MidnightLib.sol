@@ -80,7 +80,9 @@ library MidnightLib {
         require(config.maxBuyTick <= MAX_TICK, "MidnightLib/max-buy-tick-oob");
 
         require(
-            config.minSellTick != 0 && config.minSellTick <= MAX_TICK,
+            config.minSellTick != 0 &&
+            config.minSellTick <= MAX_TICK &&
+            MidnightTickLib.tickToPrice(config.minSellTick) != 0,
             "MidnightLib/min-sell-tick-oob"
         );
 
