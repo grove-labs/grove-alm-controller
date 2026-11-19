@@ -91,7 +91,6 @@ library MidnightLib {
             "MidnightLib/max-continuous-fee-oob"
         );
 
-        // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
     }
 
