@@ -7,8 +7,8 @@ import { IERC20Metadata } from "openzeppelin-contracts/contracts/interfaces/IERC
 import { ERC20Lib } from "./common/ERC20Lib.sol";
 import { MathLib }  from "./common/MathLib.sol";
 
-import { UniV3UtilsLib, TickMath, LiquidityAmounts, FullMath } from "./uniswap-v3/UniV3UtilsLib.sol";
-import { UniswapV3OracleLib }                                  from "./uniswap-v3/UniV3OracleLib.sol";
+import { UniV3UtilsLib, TickMath, LiquidityAmounts, FullMath, FixedPoint96 } from "./uniswap-v3/UniV3UtilsLib.sol";
+import { UniswapV3OracleLib }                                                from "./uniswap-v3/UniV3OracleLib.sol";
 
 import { IALMProxy }                                                    from "../interfaces/IALMProxy.sol";
 import { IRateLimits }                                                  from "../interfaces/IRateLimits.sol";
@@ -128,15 +128,13 @@ library UniswapV3Lib {
         require(params.twapSecondsAgo != 0, "UniswapV3Lib/zero-twap-seconds");
         require(params.maxTickDelta != 0,   "UniswapV3Lib/max-tick-delta-not-set");
 
-        IUniswapV3PoolLike pool = IUniswapV3PoolLike(context.pool);
-
-        address token0 = pool.token0();
-        address token1 = pool.token1();
+        address token0 = IUniswapV3PoolLike(context.pool).token0();
+        address token1 = IUniswapV3PoolLike(context.pool).token1();
 
         ERC20Lib.approve(context.proxy, token0, address(params.positionManager), params.target.amount0);
         ERC20Lib.approve(context.proxy, token1, address(params.positionManager), params.target.amount1);
 
-        _validateAddLiquidityBounds(context, params);
+        uint160 sqrtTwapPriceX96 = _validateAddLiquidityBounds(context, params);
 
         uint256 startingBalance0 = IERC20(token0).balanceOf(address(context.proxy));
         uint256 startingBalance1 = IERC20(token1).balanceOf(address(context.proxy));
@@ -162,6 +160,8 @@ library UniswapV3Lib {
         // An inflow mid-call shrinks the measured spend, so never charge less than was reported.
         if (reported0 > amount0) amount0 = reported0;
         if (reported1 > amount1) amount1 = reported1;
+
+        _validateAddLiquidityValue(params, sqrtTwapPriceX96, liquidity, amount0, amount1);
 
         _decreaseRateLimits(context, LIMIT_UNISWAP_V3_DEPOSIT, token0, token1, amount0, amount1);
     }
@@ -390,7 +390,11 @@ library UniswapV3Lib {
         }
     }
 
-    function _validateAddLiquidityBounds(UniV3Context calldata context, AddLiquidityParams calldata params) internal view {
+    function _validateAddLiquidityBounds(UniV3Context calldata context, AddLiquidityParams calldata params)
+        internal
+        view
+        returns (uint160)
+    {
         // Fetch twap tick
         (int24 twapTick, ) = UniswapV3OracleLib.consult(context.pool, params.twapSecondsAgo);
 
@@ -449,6 +453,79 @@ library UniswapV3Lib {
 
         _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
         _validateMinAmount(params.min.amount1, expectedAmount1, params.maxSlippage);
+
+        return sqrtTwapPriceX96;
+    }
+
+    function _validateAddLiquidityValue(
+        AddLiquidityParams calldata params,
+        uint160                     sqrtTwapPriceX96,
+        uint128                     liquidity,
+        uint256                     amount0,
+        uint256                     amount1
+    )
+        internal
+        pure
+    {
+        uint160 sqrtRatioLowerX96 = TickMath.getSqrtRatioAtTick(params.tick.lower);
+        uint160 sqrtRatioUpperX96 = TickMath.getSqrtRatioAtTick(params.tick.upper);
+
+        uint256 mintedAmount0;
+        uint256 mintedAmount1;
+
+        if (sqrtTwapPriceX96 <= sqrtRatioLowerX96) {
+            mintedAmount0 = UniV3UtilsLib.getAmount0Delta(
+                sqrtRatioLowerX96,
+                sqrtRatioUpperX96,
+                liquidity,
+                false
+            );
+        } else if (sqrtTwapPriceX96 >= sqrtRatioUpperX96) {
+            mintedAmount1 = UniV3UtilsLib.getAmount1Delta(
+                sqrtRatioLowerX96,
+                sqrtRatioUpperX96,
+                liquidity,
+                false
+            );
+        } else {
+            mintedAmount0 = UniV3UtilsLib.getAmount0Delta(
+                sqrtTwapPriceX96,
+                sqrtRatioUpperX96,
+                liquidity,
+                false
+            );
+
+            mintedAmount1 = UniV3UtilsLib.getAmount1Delta(
+                sqrtRatioLowerX96,
+                sqrtTwapPriceX96,
+                liquidity,
+                false
+            );
+        }
+
+        uint256 valueMinted = _toToken1Value(mintedAmount0, sqrtTwapPriceX96, false) + mintedAmount1;
+        uint256 valueSpent  = _toToken1Value(amount0,       sqrtTwapPriceX96, true)  + amount1;
+
+        require(
+            valueMinted >= FullMath.mulDivRoundingUp(valueSpent, params.maxSlippage, 1e18),
+            "UniswapV3Lib/value-below-bound"
+        );
+    }
+
+    function _toToken1Value(uint256 amount0, uint160 sqrtPriceX96, bool roundUp) internal pure returns (uint256) {
+        if (roundUp) {
+            return FullMath.mulDivRoundingUp(
+                FullMath.mulDivRoundingUp(amount0, sqrtPriceX96, FixedPoint96.Q96),
+                sqrtPriceX96,
+                FixedPoint96.Q96
+            );
+        }
+
+        return FullMath.mulDiv(
+            FullMath.mulDiv(amount0, sqrtPriceX96, FixedPoint96.Q96),
+            sqrtPriceX96,
+            FixedPoint96.Q96
+        );
     }
 
     function _validateMinAmount(uint256 minAmount, uint256 expectedAmount, uint256 maxSlippage) internal pure {
