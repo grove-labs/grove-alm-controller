@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.sol";
+import { IPendleMarket, ISY, IYT, TokenOutput } from "../../src/interfaces/PendleInterfaces.sol";
 
 import "./ForkTestBase.t.sol";
 import { PendleLib } from "../../src/libraries/PendleLib.sol";
+
+contract MockPendleRouter {
+
+    uint256 immutable shortfall;
+
+    constructor(uint256 shortfall_) {
+        shortfall = shortfall_;
+    }
+
+    function redeemPyToToken(address receiver, address, uint256, TokenOutput calldata output)
+        external returns (uint256 netTokenOut)
+    {
+        netTokenOut = output.minTokenOut - shortfall;
+        IERC20(output.tokenOut).transfer(receiver, netTokenOut);
+    }
+
+}
 
 contract PendleTestBase is ForkTestBase {
 
@@ -162,6 +179,27 @@ contract MainnetControllerRedeemFailurePendleTests is PendleTestBase {
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, exactAmountOut);
 
+    }
+
+    function test_redeemPendlePT_minTokenOutNotMet() public {
+        (address sy,, address yt) = pendleMarket.readTokens();
+
+        vm.warp(pendleMarket.expiry());
+
+        uint256 minTokenOut = 1_000_000e18 * 1e18 / IYT(yt).pyIndexCurrent() - 5;
+
+        deal(ISY(sy).yieldToken(), Ethereum.PENDLE_ROUTER, minTokenOut);
+
+        vm.etch(Ethereum.PENDLE_ROUTER, address(new MockPendleRouter(1)).code);
+
+        vm.prank(relayer);
+        vm.expectRevert("PendleLib/min-token-out-not-met");
+        mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, 1);
+
+        vm.etch(Ethereum.PENDLE_ROUTER, address(new MockPendleRouter(0)).code);
+
+        vm.prank(relayer);
+        mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, 1);
     }
 
 }

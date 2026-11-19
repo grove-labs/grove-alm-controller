@@ -1,10 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.sol";
+import { IPendleMarket, ISY, IYT, TokenOutput } from "../../src/interfaces/PendleInterfaces.sol";
 
 import "./ForkTestBase.t.sol";
 import { PendleLib } from "../../src/libraries/PendleLib.sol";
+
+contract MockPendleRouter {
+
+    uint256 immutable shortfall;
+
+    constructor(uint256 shortfall_) {
+        shortfall = shortfall_;
+    }
+
+    function redeemPyToToken(address receiver, address, uint256, TokenOutput calldata output)
+        external returns (uint256 netTokenOut)
+    {
+        netTokenOut = output.minTokenOut - shortfall;
+        IERC20(output.tokenOut).transfer(receiver, netTokenOut);
+    }
+
+}
 
 contract PendleTestBase is ForkTestBase {
 
@@ -155,6 +172,27 @@ contract ForeignControllerRedeemFailurePendleTests is PendleTestBase {
         vm.prank(ALM_RELAYER);
         foreignController.redeemPendlePT(address(pendleMarket), 100_000e18, exactAmountOut);
 
+    }
+
+    function test_redeemPendlePT_minTokenOutNotMet() public {
+        (address sy,, address yt) = pendleMarket.readTokens();
+
+        vm.warp(pendleMarket.expiry());
+
+        uint256 minTokenOut = 100_000e18 * 1e18 / IYT(yt).pyIndexCurrent() - 5;
+
+        deal(ISY(sy).yieldToken(), PENDLE_ROUTER_BASE, minTokenOut);
+
+        vm.etch(PENDLE_ROUTER_BASE, address(new MockPendleRouter(1)).code);
+
+        vm.prank(ALM_RELAYER);
+        vm.expectRevert("PendleLib/min-token-out-not-met");
+        foreignController.redeemPendlePT(address(pendleMarket), 100_000e18, 1);
+
+        vm.etch(PENDLE_ROUTER_BASE, address(new MockPendleRouter(0)).code);
+
+        vm.prank(ALM_RELAYER);
+        foreignController.redeemPendlePT(address(pendleMarket), 100_000e18, 1);
     }
 
 }
