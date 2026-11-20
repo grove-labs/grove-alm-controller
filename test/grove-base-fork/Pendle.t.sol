@@ -1,27 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
-import { IPendleMarket, ISY, IYT, TokenOutput } from "../../src/interfaces/PendleInterfaces.sol";
+import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.sol";
 
 import "./ForkTestBase.t.sol";
 import { PendleLib } from "../../src/libraries/PendleLib.sol";
 
-contract MockPendleRouter {
-
-    uint256 immutable shortfall;
-
-    constructor(uint256 shortfall_) {
-        shortfall = shortfall_;
-    }
-
-    function redeemPyToToken(address receiver, address, uint256, TokenOutput calldata output)
-        external returns (uint256 netTokenOut)
-    {
-        netTokenOut = output.minTokenOut - shortfall;
-        IERC20(output.tokenOut).transfer(receiver, netTokenOut);
-    }
-
-}
+import { MockPendleRouter } from "../unit/mocks/MockPendleRouter.sol";
 
 contract PendleTestBase is ForkTestBase {
 
