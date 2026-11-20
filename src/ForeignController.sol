@@ -56,6 +56,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
+    event MidnightTakeBufferSet(address indexed buffer);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -84,6 +85,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     IERC20      public usdc;
     address     public pendleRouter;
     address     public midnight;
+    address     public midnightTakeBuffer;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
@@ -227,6 +229,15 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         require(twapSecondsAgo < uint32(type(int32).max), "FC/twap-seconds-ago-oob");
         params.twapSecondsAgo = twapSecondsAgo;
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
+    }
+
+    function setMidnightTakeBuffer(address buffer) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(buffer != address(0), "FC/midnight-take-buffer-zero-address");
+
+        midnightTakeBuffer = buffer;
+        emit MidnightTakeBufferSet(buffer);
     }
 
     function setMidnightMarketConfig(

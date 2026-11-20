@@ -1126,6 +1126,56 @@ contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAd
 
 }
 
+contract ForeignControllerSetMidnightTakeBufferTests is ForeignControllerAdminTestBase {
+
+    event MidnightTakeBufferSet(address indexed buffer);
+
+    function test_setMidnightTakeBuffer_unauthorized() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnightTakeBuffer(makeAddr("buffer"));
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnightTakeBuffer(makeAddr("buffer"));
+    }
+
+    function test_setMidnightTakeBuffer_zeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/midnight-take-buffer-zero-address");
+        foreignController.setMidnightTakeBuffer(address(0));
+    }
+
+    function test_setMidnightTakeBuffer() public {
+        address buffer1 = makeAddr("buffer1");
+        address buffer2 = makeAddr("buffer2");
+
+        assertEq(foreignController.midnightTakeBuffer(), address(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightTakeBufferSet(buffer1);
+        foreignController.setMidnightTakeBuffer(buffer1);
+
+        assertEq(foreignController.midnightTakeBuffer(), buffer1);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightTakeBufferSet(buffer2);
+        foreignController.setMidnightTakeBuffer(buffer2);
+
+        assertEq(foreignController.midnightTakeBuffer(), buffer2);
+    }
+
+}
+
 contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdminTestBase {
 
     event MidnightMarketConfigSet(
