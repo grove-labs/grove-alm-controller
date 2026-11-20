@@ -647,7 +647,9 @@ contract ForeignControllerMidnightMakerSellLifecycleTests is MidnightMakerTestBa
         uint256 strategySellBefore = rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)));
 
         vm.expectEmit(address(foreignController));
-        emit MidnightFillFunded(marketId, address(strategy), false, _makerSellerAssets(units, TICK_98), units);
+        emit MidnightFillFunded(
+            marketId, address(strategy), false, _makerSellerAssets(units, TICK_98) + donation, units
+        );
 
         ( , uint256 sellerAssets ) = _take(_makerOffer(false, TICK_98, uint128(units)), units);
 

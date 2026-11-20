@@ -2020,7 +2020,7 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
 
         vm.prank(strategy);
         vm.expectEmit(address(controller));
-        emit MidnightFillFunded(marketId, strategy, false, assets, UNITS);
+        emit MidnightFillFunded(marketId, strategy, false, assets + donation, UNITS);
         controller.midnight_fundFill(marketId, false, assets, UNITS, 0);
 
         assertEq(loanToken.balanceOf(strategy),       0);

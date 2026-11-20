@@ -344,7 +344,7 @@ library MidnightLib {
     /*** Maker functions                                                                        ***/
     /**********************************************************************************************/
 
-    function fundFill(FundFillParams memory params) external {
+    function fundFill(FundFillParams memory params) external returns (uint256 assetsFunded) {
         MarketConfig memory config = params.config;
 
         require(config.maxMakeOfferSize != 0, "MidnightLib/make-not-enabled");
@@ -360,8 +360,9 @@ library MidnightLib {
 
         if (params.buy) {
             _fundFillBuy(params, timeToMaturity);
+            assetsFunded = params.assets;
         } else {
-            _fundFillSell(params, timeToMaturity);
+            assetsFunded = _fundFillSell(params, timeToMaturity);
         }
     }
 
@@ -395,12 +396,14 @@ library MidnightLib {
         ERC20Lib.transfer(params.proxy, config.loanToken, params.strategy, params.assets);
     }
 
-    function _fundFillSell(FundFillParams memory params, uint256 timeToMaturity) internal {
+    function _fundFillSell(FundFillParams memory params, uint256 timeToMaturity)
+        internal returns (uint256 measured)
+    {
         MarketConfig memory config = params.config;
 
         bytes32 marketId = params.marketId;
 
-        uint256 measured = IERC20(config.loanToken).balanceOf(params.strategy);
+        measured = IERC20(config.loanToken).balanceOf(params.strategy);
 
         require(measured >= params.assets, "MidnightLib/proceeds-below-reported");
 
