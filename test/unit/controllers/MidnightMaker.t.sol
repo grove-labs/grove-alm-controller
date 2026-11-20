@@ -2298,8 +2298,8 @@ contract ForeignControllerMidnightCallbackAllowedEquivalenceTests is MidnightMak
 
     // Excluded checks, held passing by a 1-wei fill on a fee-free, debt-free market with a funded
     // proxy and strategy: zero-assets, zero-units, offer-size-too-large, rate-limit-exceeded,
-    // continuous fee, loss factor, price other than a zero maxBuyTick, debt, proceeds, transfer. The zero callback is also
-    // excluded: the view hard-codes false for it.
+    // continuous fee, loss factor, price other than a zero maxBuyTick, debt, proceeds, transfer.
+    // The zero callback is also excluded: the view hard-codes false for it.
     function testFuzz_midnightIsCallbackAllowed_matchesTheFundFillGates(
         address            callback,
         bool               buy,
