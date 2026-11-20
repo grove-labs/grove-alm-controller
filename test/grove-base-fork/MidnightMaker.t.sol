@@ -4,6 +4,9 @@ pragma solidity ^0.8.21;
 import { IERC4626 }    from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 import { ERC4626Mock } from "openzeppelin-contracts/contracts/mocks/token/ERC4626Mock.sol";
 
+import { IERC20 as IERC20OZ } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 }          from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+
 import { IPool as IAavePool } from "aave-v3-origin/src/core/contracts/interfaces/IPool.sol";
 
 import { IRateLimits } from "../../src/interfaces/IRateLimits.sol";
@@ -41,6 +44,8 @@ contract PermissiveRatifier {
 // Mirrors the periphery's ProxyBasicFillStrategy, the callback shape production will use.
 contract MirrorFundingStrategy {
 
+    using SafeERC20 for IERC20OZ;
+
     bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
 
     address public immutable midnight;
@@ -67,13 +72,11 @@ contract MirrorFundingStrategy {
         require(msg.sender == midnight, "ProxyBasicFillStrategy/not-midnight");
         require(buyer      == proxy,    "ProxyBasicFillStrategy/buyer-not-proxy");
 
-        if (buyerAssets == 0) return CALLBACK_SUCCESS;
-
         IFundFillLike(controller).midnight_fundFill(
             marketId, true, buyerAssets, units, pendingFeeIncrease
         );
 
-        IERC20Like(market.loanToken).approve(midnight, buyerAssets);
+        IERC20OZ(market.loanToken).forceApprove(midnight, buyerAssets);
 
         return CALLBACK_SUCCESS;
     }
@@ -93,8 +96,6 @@ contract MirrorFundingStrategy {
         require(msg.sender == midnight, "ProxyBasicFillStrategy/not-midnight");
         require(seller     == proxy,    "ProxyBasicFillStrategy/seller-not-proxy");
         require(receiver   == proxy,    "ProxyBasicFillStrategy/receiver-not-proxy");
-
-        if (units == 0) return CALLBACK_SUCCESS;
 
         IFundFillLike(controller).midnight_fundFill(
             marketId, false, sellerAssets, units, pendingFeeDecrease
@@ -126,7 +127,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
     // Below both buy bounds at any live fee up to the configured ceiling.
     uint16 constant MAKER_BUY_TICK = TICK_98;
 
-    // A buy of one unit rounds to zero assets and never reaches the controller.
+    // A buy of one unit rounds to zero assets, which fundFill refuses before the checks under test.
     uint256 constant PROBE_UNITS = 1e18;
 
     uint256 constant MAX_OFFER_SIZE   = 2_000_000e18;
@@ -272,22 +273,14 @@ contract MidnightMakerTestBase is MidnightTestBase {
 
 contract ForeignControllerMidnightMakerBuyLifecycleTests is MidnightMakerTestBase {
 
-    // A buy rounding to zero assets short-circuits in the strategy, so no controller check runs.
-    function test_makerBuy_dustFillNeverReachesTheController() public {
+    function test_makerBuy_dustFillRevertsZeroAssets() public {
         assertEq(_makerBuyerAssets(1, MAKER_BUY_TICK), 0);
 
-        _disableMake();
-        _onboardStrategy(address(strategy), 0);
-
-        Offer memory offer = _makerOffer(true, MAKER_BUY_TICK, 1_000_000e18);
-
-        uint256 proxyBefore = loanToken.balanceOf(address(almProxy));
-        uint256 buyBefore   = rateLimits.getCurrentRateLimit(buyKey);
-
-        _take(offer, 1);
-
-        assertEq(loanToken.balanceOf(address(almProxy)), proxyBefore);
-        assertEq(rateLimits.getCurrentRateLimit(buyKey), buyBefore);
+        vm.expectCall(
+            address(foreignController),
+            abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector, marketId, true, 0, 1)
+        );
+        _expectTakeRevert(_makerOffer(true, MAKER_BUY_TICK, 1_000_000e18), 1, "MidnightLib/zero-assets");
     }
 
     function test_makerBuy_lifecycle() public {
@@ -1714,65 +1707,26 @@ contract ForeignControllerMidnightMakerZeroUnitTakeTests is MidnightMakerTestBas
 
     uint256 constant UNITS = 1_000_000e18;
 
-    struct Snapshot {
-        uint256 proxyBalance;
-        uint256 credit;
-        uint256 buy;
-        uint256 sell;
-        uint256 strategyBuy;
-        uint256 strategySell;
-    }
-
     function setUp() public override {
         super.setUp();
 
         _seedCredit(UNITS);
     }
 
-    function _snapshot() internal view returns (Snapshot memory) {
-        return Snapshot({
-            proxyBalance : loanToken.balanceOf(address(almProxy)),
-            credit       : _credit(),
-            buy          : rateLimits.getCurrentRateLimit(buyKey),
-            sell         : rateLimits.getCurrentRateLimit(sellKey),
-            strategyBuy  : rateLimits.getCurrentRateLimit(_strategyBuyKey(address(strategy))),
-            strategySell : rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)))
-        });
+    function test_zeroUnitTake_makerBuyRevertsZeroAssets() public {
+        vm.expectCall(
+            address(foreignController),
+            abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector, marketId, true, 0, 0)
+        );
+        _expectTakeRevert(_makerOffer(true, MAKER_BUY_TICK, uint128(UNITS)), 0, "MidnightLib/zero-assets");
     }
 
-    function _assertUnchanged(Snapshot memory before) internal view {
-        Snapshot memory current = _snapshot();
-
-        assertEq(current.proxyBalance, before.proxyBalance);
-        assertEq(current.credit,       before.credit);
-        assertEq(current.buy,          before.buy);
-        assertEq(current.sell,         before.sell);
-        assertEq(current.strategyBuy,  before.strategyBuy);
-        assertEq(current.strategySell, before.strategySell);
-    }
-
-    function test_zeroUnitTake_makerBuyMovesAndMetersNothing() public {
-        Snapshot memory before = _snapshot();
-
-        ( uint256 buyerAssets, uint256 sellerAssets ) =
-            _take(_makerOffer(true, MAKER_BUY_TICK, uint128(UNITS)), 0);
-
-        assertEq(buyerAssets,  0);
-        assertEq(sellerAssets, 0);
-
-        _assertUnchanged(before);
-    }
-
-    function test_zeroUnitTake_makerSellMovesAndMetersNothing() public {
-        Snapshot memory before = _snapshot();
-
-        ( uint256 buyerAssets, uint256 sellerAssets ) =
-            _take(_makerOffer(false, TICK_98, uint128(UNITS)), 0);
-
-        assertEq(buyerAssets,  0);
-        assertEq(sellerAssets, 0);
-
-        _assertUnchanged(before);
+    function test_zeroUnitTake_makerSellRevertsZeroAssets() public {
+        vm.expectCall(
+            address(foreignController),
+            abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector, marketId, false, 0, 0)
+        );
+        _expectTakeRevert(_makerOffer(false, TICK_98, uint128(UNITS)), 0, "MidnightLib/zero-assets");
     }
 
     // Holds because these offers cap maxUnits below type(uint128).max, the consumed amount a cancel sets.
