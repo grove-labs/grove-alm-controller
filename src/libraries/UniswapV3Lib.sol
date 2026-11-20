@@ -418,38 +418,12 @@ library UniswapV3Lib {
             params.target.amount1
         );
 
-        uint256 expectedAmount0;
-        uint256 expectedAmount1;
-
-        if (twapTick <= params.tick.lower) {
-            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-        } else if (twapTick >= params.tick.upper) {
-            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-        } else {
-            expectedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtTwapPriceX96,
-                sqrtRatioUpperX96,
-                expectedLiquidity,
-                false
-            );
-
-            expectedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtTwapPriceX96,
-                expectedLiquidity,
-                false
-            );
-        }
+        (uint256 expectedAmount0, uint256 expectedAmount1) = _getAmountsForLiquidity(
+            sqrtTwapPriceX96,
+            sqrtRatioLowerX96,
+            sqrtRatioUpperX96,
+            expectedLiquidity
+        );
 
         _validateMinAmount(params.min.amount0, expectedAmount0, params.maxSlippage);
         _validateMinAmount(params.min.amount1, expectedAmount1, params.maxSlippage);
@@ -470,38 +444,12 @@ library UniswapV3Lib {
         uint160 sqrtRatioLowerX96 = TickMath.getSqrtRatioAtTick(params.tick.lower);
         uint160 sqrtRatioUpperX96 = TickMath.getSqrtRatioAtTick(params.tick.upper);
 
-        uint256 mintedAmount0;
-        uint256 mintedAmount1;
-
-        if (sqrtTwapPriceX96 <= sqrtRatioLowerX96) {
-            mintedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                liquidity,
-                false
-            );
-        } else if (sqrtTwapPriceX96 >= sqrtRatioUpperX96) {
-            mintedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtRatioUpperX96,
-                liquidity,
-                false
-            );
-        } else {
-            mintedAmount0 = UniV3UtilsLib.getAmount0Delta(
-                sqrtTwapPriceX96,
-                sqrtRatioUpperX96,
-                liquidity,
-                false
-            );
-
-            mintedAmount1 = UniV3UtilsLib.getAmount1Delta(
-                sqrtRatioLowerX96,
-                sqrtTwapPriceX96,
-                liquidity,
-                false
-            );
-        }
+        (uint256 mintedAmount0, uint256 mintedAmount1) = _getAmountsForLiquidity(
+            sqrtTwapPriceX96,
+            sqrtRatioLowerX96,
+            sqrtRatioUpperX96,
+            liquidity
+        );
 
         uint256 valueMinted = _toToken1Value(mintedAmount0, sqrtTwapPriceX96, false) + mintedAmount1;
         uint256 valueSpent  = _toToken1Value(amount0,       sqrtTwapPriceX96, true)  + amount1;
@@ -510,6 +458,26 @@ library UniswapV3Lib {
             valueMinted >= FullMath.mulDivRoundingUp(valueSpent, params.maxSlippage, 1e18),
             "UniswapV3Lib/value-below-bound"
         );
+    }
+
+    function _getAmountsForLiquidity(
+        uint160 sqrtPriceX96,
+        uint160 sqrtRatioLowerX96,
+        uint160 sqrtRatioUpperX96,
+        uint128 liquidity
+    )
+        internal
+        pure
+        returns (uint256 amount0, uint256 amount1)
+    {
+        if (sqrtPriceX96 <= sqrtRatioLowerX96) {
+            amount0 = UniV3UtilsLib.getAmount0Delta(sqrtRatioLowerX96, sqrtRatioUpperX96, liquidity, false);
+        } else if (sqrtPriceX96 >= sqrtRatioUpperX96) {
+            amount1 = UniV3UtilsLib.getAmount1Delta(sqrtRatioLowerX96, sqrtRatioUpperX96, liquidity, false);
+        } else {
+            amount0 = UniV3UtilsLib.getAmount0Delta(sqrtPriceX96,      sqrtRatioUpperX96, liquidity, false);
+            amount1 = UniV3UtilsLib.getAmount1Delta(sqrtRatioLowerX96, sqrtPriceX96,      liquidity, false);
+        }
     }
 
     function _toToken1Value(uint256 amount0, uint160 sqrtPriceX96, bool roundUp) internal pure returns (uint256) {
