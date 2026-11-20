@@ -2102,8 +2102,6 @@ contract JitVaultFundingStrategy {
         require(msg.sender == midnight, "JitVaultFundingStrategy/not-midnight");
         require(buyer      == proxy,    "JitVaultFundingStrategy/buyer-not-proxy");
 
-        if (buyerAssets == 0) return CALLBACK_SUCCESS;
-
         IJitControllerLike(controller).withdrawERC4626(
             vault, buyerAssets, IERC4626(vault).previewWithdraw(buyerAssets)
         );
@@ -2198,6 +2196,18 @@ contract ForeignControllerMidnightMakerJitSourcingTests is MidnightMakerTestBase
         assertEq(rateLimits.getCurrentRateLimit(buyKey), 5_000_000e18 - buyerAssets);
     }
 
+    function test_jit_dustFillRevertsZeroAssets() public {
+        _grantRelayer();
+
+        assertEq(_makerBuyerAssets(1, MAKER_BUY_TICK), 0);
+
+        vm.expectCall(
+            address(foreignController),
+            abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector, marketId, true, 0, 1)
+        );
+        _expectTakeRevert(_jitBid(), 1, "MidnightLib/zero-assets");
+    }
+
     function test_jit_needsTheRelayerRole() public {
         _expectTakeRevert(
             _jitBid(),
@@ -2251,8 +2261,6 @@ contract JitAaveFundingStrategy {
     {
         require(msg.sender == midnight, "JitAaveFundingStrategy/not-midnight");
         require(buyer      == proxy,    "JitAaveFundingStrategy/buyer-not-proxy");
-
-        if (buyerAssets == 0) return CALLBACK_SUCCESS;
 
         IJitControllerLike(controller).withdrawAave(aToken, buyerAssets);
 
