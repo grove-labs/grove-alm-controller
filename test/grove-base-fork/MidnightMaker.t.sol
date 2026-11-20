@@ -2369,6 +2369,13 @@ contract ForeignControllerMidnightMakerAaveJitSourcingTests is MidnightMakerTest
         assertEq(rateLimits.getCurrentRateLimit(buyKey), buyBefore - buyerAssets);
     }
 
+    function test_jitAave_dustFillRevertsInSourcing() public {
+        assertEq(_makerBuyerAssets(1, MAKER_BUY_TICK), 0);
+
+        vm.expectCall(address(foreignController), abi.encodeWithSelector(IFundFillLike.midnight_fundFill.selector), 0);
+        _expectTakeRevert(_jitBid(), 1, abi.encodeWithSignature("InvalidAmount()"));
+    }
+
     function test_jitAave_isBoundByTheAaveWithdrawKey() public {
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(aaveWithdrawKey, _makerBuyerAssets(UNITS, MAKER_BUY_TICK) - 1, 0);
