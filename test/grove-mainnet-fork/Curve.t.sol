@@ -1437,6 +1437,7 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
 
         mainnetController.removeLiquidityCurve(CURVE_POOL, boundaryBurn, minWithdrawAmounts);
     }
+
     function test_e2e_addSwapAndRemoveLiquidityCurve() public {
         uint256 susdsAmount = susds.convertToShares(1_000_000e18);
 
