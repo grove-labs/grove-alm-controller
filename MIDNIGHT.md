@@ -25,7 +25,7 @@ The logic lives in `MidnightLib`, and the controller holds the configuration and
 | `setMidnightStrategy(strategy, enabled)` | admin | Enables or disables a funding strategy on every market at once; `isMidnightStrategyEnabled(strategy)` reads the flag. `midnight_fundFill` and `midnight_isCallbackAllowed` both require it, and the per-market strategy keys stay the size limits. Emits `MidnightStrategySet(strategy, enabled)`. |
 | `disableMidnightStrategy(strategy)` | `FREEZER` | Sets `isMidnightStrategyEnabled(strategy)` to false on every market at once and changes nothing else; it cannot enable a strategy. Reads nothing from Midnight. Emits `MidnightStrategySet(strategy, false)`. |
 | `setMidnightRatifierAuthorization(ratifier, authorized)` | admin | `midnight.setIsAuthorized(ratifier, authorized, proxy)`. A zero ratifier is rejected (`FC/ratifier-zero-address`). This is a blanket grant; see [Ratifier authorization is a blanket grant](#ratifier-authorization-is-a-blanket-grant). Keep exactly one ratifier authorized per proxy; see [One ratifier per proxy](#kill-switches-and-runbook). |
-| `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and the dust rule makes that a no-op. |
+| `cancelMidnightOfferGroup(group)` | `RELAYER` or `FREEZER` | `setConsumed(group, type(uint128).max, proxy)`. This retires the group for good. Because the group's consumed amount is then the `uint128` maximum, even a zero-unit take of an offer with a smaller `maxUnits` (or `maxAssets`, when set) reverts in Midnight before any callback. An offer capped at the `uint128` maximum still reaches its callback at zero units, and `fundFill` refuses zero amounts (`zero-assets`, `zero-units`), so that take reverts too and nothing moves. |
 
 Groups are operator-managed: any number and any id, per market or across markets. Retiring a group is permanent. Midnight counts consumption per group, so offers that share a group share its capacity and are cancelled together. Midnight keeps no list of groups and a cancel needs the exact id, so keep every group id the quoter has used on record off-chain. To make a market one-directional, leave the other direction's strategy keys unset. Midnight accepts a cancel for any group id, so a compromised canceller (`RELAYER` or `FREEZER`) can retire any group the quoter uses, including new ones; revoke the compromised role before quoting in new groups.
 
@@ -80,7 +80,7 @@ The call is roleless on purpose: the caller must be an enabled strategy, and its
 
 **Full and near-full exits.** A full exit (`creditPost == 0`) has no carried fee to read, so it prices at the zero-fee yield floor, not at par. A near-full exit whose carried fee rounds to zero gets the same floor, because Midnight rounds the fee a fill sheds up, so a position left with dust credit can carry no fee. Both cases only tighten the floor. A quoter that prices such an exit at the fee-adjusted floor will see the taker's fill revert with `fill-yield-too-high`.
 
-**Dust callbacks.** The strategy returns success without calling `fundFill` when `buyerAssets == 0` on a buy, or when `units == 0` on a sell or a zero-unit take. Nothing is metered and nothing moves. A zero-asset buy gives the proxy free dust credit. This is a conformance rule: `fundFill` refuses both cases, so a strategy that called it would fail an unrelated taker's transaction.
+**Dust callbacks.** The strategy calls `fundFill` on every callback, dust included. `fundFill` refuses zero assets (`zero-assets`) and zero units (`zero-units`), so a zero-asset buy, a zero-unit take and a sell whose assets round to zero all revert the taker's transaction, and nothing is metered and nothing moves. This is a conformance rule: never short-circuit a dust callback; let it reach `fundFill` and revert.
 
 **Sell dust.** A sell whose assets round to zero (`units > 0`, `sellerAssets == 0`) reverts by design with `MidnightLib/zero-assets`; strategies do not short-circuit it. Midnight has already taken the proxy's units when `onSell` runs, so a short-circuit would hand those units away with no floor and no meter; the revert costs only the dust taker.
 
@@ -93,7 +93,7 @@ Strategies are trusted code. The controller does not cross-check what a strategy
 - call `fundFill` with the callback's direction and exactly Midnight's `assets`, `units` and pending-fee value;
 - leave no allowance behind and no balance in the **strategy** itself;
 - never take amounts, venues or slippage parameters from callback data;
-- follow the dust rules above: short-circuit a zero-asset buy and a zero-unit sell, and pass a sell whose assets round to zero to `fundFill`, which reverts by design; strategies do not short-circuit it.
+- follow the dust rule above: never short-circuit a dust callback; pass it to `fundFill`, which reverts on zero assets or zero units.
 
 **Pass-through strategies (phase 2)**, such as `ProxyBasicFillStrategy`, hold no role.
 
