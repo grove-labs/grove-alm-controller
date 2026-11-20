@@ -400,6 +400,10 @@ library MidnightLib {
 
         bytes32 marketId = params.marketId;
 
+        uint256 measured = IERC20(config.loanToken).balanceOf(params.strategy);
+
+        require(measured >= params.assets, "MidnightLib/proceeds-below-reported");
+
         ( uint256 creditPost, uint256 carriedFee ) = _position(
             _getMarket(params.midnight, marketId), marketId, address(params.proxy)
         );
@@ -410,21 +414,23 @@ library MidnightLib {
         ( uint256 tickBound, uint256 yieldBound ) = _sellBounds(config, timeToMaturity, feePerUnit);
 
         require(
-            params.assets * WAD >= params.units * tickBound,
+            measured * WAD >= params.units * tickBound,
             "MidnightLib/fill-price-too-low"
         );
         require(
-            params.assets * WAD >= params.units * yieldBound,
+            measured * WAD >= params.units * yieldBound,
             "MidnightLib/fill-yield-too-high"
         );
 
         _requireDebtFree(params.midnight, marketId, address(params.proxy));
 
         _decreaseStrategyLimit(
-            params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_SELL, params.strategy, marketId, params.assets
+            params.rateLimits, LIMIT_MIDNIGHT_STRATEGY_SELL, params.strategy, marketId, measured
         );
 
-        _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_SELL, marketId, params.assets);
+        _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_SELL, marketId, measured);
+
+        ERC20Lib.transferFrom(params.proxy, config.loanToken, params.strategy, measured);
     }
 
     /**********************************************************************************************/
