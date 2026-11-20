@@ -12,6 +12,7 @@ import { IERC721 }            from "openzeppelin-contracts/contracts/token/ERC72
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3OracleLib }                              from "../../src/libraries/uniswap-v3/UniV3OracleLib.sol";
+import { UniV3UtilsLib }                                   from "../../src/libraries/uniswap-v3/UniV3UtilsLib.sol";
 
 import { ISwapRouter } from "../../src/interfaces/UniswapV3Interfaces.sol";
 
@@ -2798,6 +2799,49 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
         assertApproxEqAbs(int256(twapTick), int256(tick), 1);
     }
 
+    function _assertOneSidedAddPassesWithResidual(uint256 tokenId, int24 twapTarget) internal {
+        _moveTwapTo(twapTarget);
+
+        assertGt(twapTick, LOWER_TICK_BOUND);
+        assertLt(twapTick, UPPER_TICK_BOUND);
+
+        UniswapV3Lib.TokenAmounts memory target
+            = UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: _units(token1, DEPOSIT) });
+
+        _fundProxy(target.amount0, target.amount1);
+        _pushSpot(UPPER_TICK_BOUND + 1);
+
+        ( , uint128 liquidity, uint256 amount0Used, uint256 amount1Used) = _addLiquidity(
+            tokenId,
+            _spellRange(),
+            target,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 })
+        );
+
+        assertEq(amount0Used, 0);
+        assertGt(amount1Used, 0);
+
+        uint160 sqrtTwapPriceX96 = TickMath.getSqrtRatioAtTick(twapTick);
+
+        uint256 minted0 = UniV3UtilsLib.getAmount0Delta(
+            sqrtTwapPriceX96,
+            TickMath.getSqrtRatioAtTick(UPPER_TICK_BOUND),
+            liquidity,
+            false
+        );
+        uint256 minted1 = UniV3UtilsLib.getAmount1Delta(
+            TickMath.getSqrtRatioAtTick(LOWER_TICK_BOUND),
+            sqrtTwapPriceX96,
+            liquidity,
+            false
+        );
+
+        uint256 valueMinted = FullMath.mulDiv(minted0, _priceX192(sqrtTwapPriceX96), 1 << 192) + minted1;
+
+        assertLt(valueMinted, amount1Used);
+        assertLt((amount1Used - valueMinted) * 1000, amount1Used);
+    }
+
     function test_addLiquidityUniswapV3_ausdUsdc_smallDriftPasses_mint() public {
         _pushSpot(twapTick + 2);
 
@@ -2842,6 +2886,26 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
         ( , , , uint256 amount1Used) = _addAtSpotRatio(tokenId, _spellRange(), DEPOSIT);
 
         assertEq(amount1Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapMidRangeSpotPastFarEdgePasses_mint() public {
+        _assertOneSidedAddPassesWithResidual(0, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapMidRangeSpotPastFarEdgePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _assertOneSidedAddPassesWithResidual(tokenId, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapNearOppositeEdgeSpotPastFarEdgePasses_mint() public {
+        _assertOneSidedAddPassesWithResidual(0, LOWER_TICK_BOUND + 1);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapNearOppositeEdgeSpotPastFarEdgePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _assertOneSidedAddPassesWithResidual(tokenId, LOWER_TICK_BOUND + 1);
     }
 
 }
