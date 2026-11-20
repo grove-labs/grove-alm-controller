@@ -2742,7 +2742,6 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
         assertEq(address(token1), address(usdc));
 
         vm.startPrank(GROVE_PROXY);
-        mainnetController.setMaxSlippage(_getPool(), 0.999e18);
         mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
         mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 600);
         mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), LOWER_TICK_BOUND);
