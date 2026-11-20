@@ -147,7 +147,11 @@ library MidnightLib {
 
         ( uint256 bufferBefore, uint256 buyerAssets, ) = _take(params, ctx);
 
-        assetsSpent = bufferBefore - IERC20(market.loanToken).balanceOf(params.takeBuffer);
+        uint256 bufferAfter = IERC20(market.loanToken).balanceOf(params.takeBuffer);
+
+        require(bufferAfter <= bufferBefore, "MidnightLib/buffer-balance-increased");
+
+        assetsSpent = bufferBefore - bufferAfter;
 
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
         require(assetsSpent == buyerAssets,        "MidnightLib/buyer-assets-mismatch");

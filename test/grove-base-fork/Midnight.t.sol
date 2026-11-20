@@ -1965,6 +1965,17 @@ contract ForeignControllerMidnightCallbackTests is MidnightTestBase {
         _buy(offer, units, expected);
     }
 
+    function test_buyMidnight_bufferBalanceIncreasedDuringTakeReverts() public {
+        uint256 units    = 1_000e18;
+        uint256 expected = _buyerAssets(units, TICK_98);
+
+        Offer memory offer = _offer(false, TICK_98, uint128(units));
+        offer.callback     = address(_donor(address(takeBuffer), expected + 1));
+
+        vm.expectRevert("MidnightLib/buffer-balance-increased");
+        _buy(offer, units, expected);
+    }
+
     function test_sellMidnight_bufferDonationDuringTakeReverts() public {
         uint256 units = 1_000e18;
 
