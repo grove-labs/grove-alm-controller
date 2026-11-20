@@ -2063,44 +2063,43 @@ contract ForeignControllerMidnightFundFillTests is MidnightMakerTestBase {
         controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, 0);
     }
 
-    function test_midnight_fundFill_sellFloorIsCheckedOnTheMeasuredAmount() public {
+    function test_midnight_fundFill_sellYieldFloorIsCheckedOnTheReportedAssets() public {
         _setLimits(MAX_OFFER_SIZE);
 
         uint256 minAssets = _minSellAssets(UNITS, POSITION_CREDIT, 0);
 
-        _stockStrategy(minAssets - 1);
+        _stockStrategy(minAssets + 1);
 
         vm.prank(strategy);
         vm.expectRevert("MidnightLib/fill-yield-too-high");
-        controller.midnight_fundFill(marketId, false, minAssets - 2, UNITS, 0);
-
-        _stockStrategy(minAssets);
+        controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, 0);
 
         vm.prank(strategy);
-        controller.midnight_fundFill(marketId, false, minAssets - 2, UNITS, 0);
+        controller.midnight_fundFill(marketId, false, minAssets, UNITS, 0);
 
-        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - minAssets);
+        assertEq(loanToken.balanceOf(strategy),              0);
+        assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - minAssets - 1);
     }
 
-    function test_midnight_fundFill_sellTickFloorIsCheckedOnTheMeasuredAmount() public {
+    function test_makerSell_floorUsesReportedAssetsBoundary() public {
         _setLimits(MAX_OFFER_SIZE);
 
         _setConfig(MAX_BUY_TICK, MIN_SELL_TICK, 0, type(uint16).max, 0, type(uint128).max);
 
         uint256 minAssets = (UNITS * MidnightTickLib.tickToPrice(MIN_SELL_TICK) + WAD - 1) / WAD;
 
-        _stockStrategy(minAssets - 1);
-
-        vm.prank(strategy);
-        vm.expectRevert("MidnightLib/fill-price-too-low");
-        controller.midnight_fundFill(marketId, false, 1, UNITS, 0);
-
         _stockStrategy(minAssets);
 
         vm.prank(strategy);
-        controller.midnight_fundFill(marketId, false, 1, UNITS, 0);
+        controller.midnight_fundFill(marketId, false, minAssets, UNITS, 0);
 
         assertEq(rateLimits.getCurrentRateLimit(_sellKey()), MAX_OFFER_SIZE - minAssets);
+
+        _stockStrategy(minAssets + 1);
+
+        vm.prank(strategy);
+        vm.expectRevert("MidnightLib/fill-price-too-low");
+        controller.midnight_fundFill(marketId, false, minAssets - 1, UNITS, 0);
     }
 
     function test_midnight_fundFill_sellNeedsTheProxyRole() public {

@@ -417,11 +417,11 @@ library MidnightLib {
         ( uint256 tickBound, uint256 yieldBound ) = _sellBounds(config, timeToMaturity, feePerUnit);
 
         require(
-            measured * WAD >= params.units * tickBound,
+            params.assets * WAD >= params.units * tickBound,
             "MidnightLib/fill-price-too-low"
         );
         require(
-            measured * WAD >= params.units * yieldBound,
+            params.assets * WAD >= params.units * yieldBound,
             "MidnightLib/fill-yield-too-high"
         );
 

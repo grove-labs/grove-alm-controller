@@ -664,6 +664,20 @@ contract ForeignControllerMidnightMakerSellLifecycleTests is MidnightMakerTestBa
         );
     }
 
+    function test_makerSell_donationDoesNotRelaxTickFloor() public {
+        uint256 units = 400_000e18;
+        uint256 tick  = TICK_98 - TICK_SPACING;
+
+        uint256 floorAssets = (units * MidnightTickLib.tickToPrice(TICK_98) + 1e18 - 1) / 1e18;
+        uint256 reported    = _makerSellerAssets(units, tick);
+
+        assertLt(reported, floorAssets);
+
+        loanToken.mint(address(strategy), floorAssets - reported);
+
+        _expectTakeRevert(_makerOffer(false, tick, uint128(units)), units, "MidnightLib/fill-price-too-low");
+    }
+
     function test_makerSell_overReportedProceedsRevert() public {
         OverReportingStrategy liar = new OverReportingStrategy(address(foreignController), address(almProxy));
 
@@ -1435,20 +1449,20 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         );
     }
 
-    function test_makerSell_aStrategyDonationCountsTowardTheFloor() public {
-        uint256 units = 400_000e18;
-        uint256 tick  = _positionFloorTick() - TICK_SPACING;
-
-        Offer memory offer = _makerOffer(false, tick, uint128(units));
-
-        _expectTakeRevert(offer, units, "MidnightLib/fill-yield-too-high");
-
-        uint256 donation   = units / 100;
-        uint256 sellBefore = rateLimits.getCurrentRateLimit(sellKey);
+    function test_makerSell_donationDoesNotRelaxYieldFloor() public {
+        uint256 units    = 400_000e18;
+        uint256 tick     = _positionFloorTick();
+        uint256 donation = units / 100;
 
         loanToken.mint(address(strategy), donation);
 
-        ( , uint256 sellerAssets ) = _take(offer, units);
+        _expectTakeRevert(
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-yield-too-high"
+        );
+
+        uint256 sellBefore = rateLimits.getCurrentRateLimit(sellKey);
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
 
         assertEq(sellerAssets, _makerSellerAssets(units, tick));
         assertEq(_credit(),    SEEDED_UNITS - units);
