@@ -91,13 +91,13 @@ Strategies are trusted code. The controller does not cross-check what a strategy
 - be callable only by the Midnight singleton;
 - check that the buyer, seller or receiver it is told about is the proxy;
 - call `fundFill` with the callback's direction and exactly Midnight's `assets`, `units` and pending-fee value;
-- leave no allowance behind and no balance in the **strategy** itself;
+- leave no allowance and add no balance of its own; anyone can `rescue` a buy's leftover or a donation to the proxy;
 - never take amounts, venues or slippage parameters from callback data;
 - follow the dust rule above: never short-circuit a dust callback; pass it to `fundFill`, which reverts on zero assets or zero units.
 
 **Pass-through strategies (phase 2)**, such as `ProxyBasicFillStrategy`, hold no role.
 
-**Operator-role strategies (phase 3)** source liquidity inside `onBuy`, for example `withdrawAave` then `midnight_fundFill`, and hold `RELAYER` on this controller. Midnight pays a sell's proceeds to the proxy before `onSell`, so a sell strategy can also redeploy them in the same callback; the periphery proves this with configuration only. Each must be immutable, run one hardcoded sourcing sequence, and be audited on its own. Governance onboards one by enabling it with `setMidnightStrategy` and then setting its strategy key per (market, direction), and the FC admin grants it `RELAYER`. To offboard it, disable it, zero its keys and have the FC admin revoke `RELAYER`. The FC `FREEZER` can also call `removeRelayer`. Sourcing may leave residual dust **on the proxy**, or run a cleanup step after `fundFill`. Either way, the strategy itself must end empty. No core change is needed: the fork suite fills a real maker buy from the live Aave V3 USDC reserve on Base, and from an ERC4626 vault, with deployment and configuration only.
+**Operator-role strategies (phase 3)** source liquidity inside `onBuy`, for example `withdrawAave` then `midnight_fundFill`, and hold `RELAYER` on this controller. Midnight pays a sell's proceeds to the proxy before `onSell`, so a sell strategy can also redeploy them in the same callback; the periphery proves this with configuration only. Each must be immutable, run one hardcoded sourcing sequence, and be audited on its own. Governance onboards one by enabling it with `setMidnightStrategy` and then setting its strategy key per (market, direction), and the FC admin grants it `RELAYER`. To offboard it, disable it, zero its keys and have the FC admin revoke `RELAYER`. The FC `FREEZER` can also call `removeRelayer`. Sourcing may leave residual dust **on the proxy**, or run a cleanup step after `fundFill`. Either way, the strategy itself must end every callback holding no more than it held before; a leftover or a donation stays in it until anyone calls `rescue`, which sweeps it to the proxy. No core change is needed: the fork suite fills a real maker buy from the live Aave V3 USDC reserve on Base, and from an ERC4626 vault, with deployment and configuration only.
 
 `RELAYER` gives the strategy the whole relayer surface, not only the sequence its code runs. There are two separate bounds:
 
