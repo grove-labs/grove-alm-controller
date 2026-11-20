@@ -97,8 +97,8 @@ contract MirrorFundingStrategy {
         require(seller     == proxy,         "ProxyBasicFillStrategy/seller-not-proxy");
         require(receiver   == address(this), "ProxyBasicFillStrategy/receiver-not-strategy");
 
-        IERC20Like(market.loanToken).approve(
-            proxy, IERC20Like(market.loanToken).balanceOf(address(this))
+        IERC20OZ(market.loanToken).forceApprove(
+            proxy, IERC20OZ(market.loanToken).balanceOf(address(this))
         );
 
         IFundFillLike(controller).midnight_fundFill(
