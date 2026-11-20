@@ -83,7 +83,7 @@ contract MirrorFundingStrategy {
 
     function onSell(
         bytes32 marketId,
-        Market  memory,
+        Market  memory market,
         uint256 sellerAssets,
         uint256 units,
         uint256 pendingFeeDecrease,
@@ -91,11 +91,15 @@ contract MirrorFundingStrategy {
         address receiver,
         bytes   memory
     )
-        external returns (bytes32)
+        public virtual returns (bytes32)
     {
-        require(msg.sender == midnight, "ProxyBasicFillStrategy/not-midnight");
-        require(seller     == proxy,    "ProxyBasicFillStrategy/seller-not-proxy");
-        require(receiver   == proxy,    "ProxyBasicFillStrategy/receiver-not-proxy");
+        require(msg.sender == midnight,      "ProxyBasicFillStrategy/not-midnight");
+        require(seller     == proxy,         "ProxyBasicFillStrategy/seller-not-proxy");
+        require(receiver   == address(this), "ProxyBasicFillStrategy/receiver-not-strategy");
+
+        IERC20OZ(market.loanToken).forceApprove(
+            proxy, IERC20OZ(market.loanToken).balanceOf(address(this))
+        );
 
         IFundFillLike(controller).midnight_fundFill(
             marketId, false, sellerAssets, units, pendingFeeDecrease
@@ -110,6 +114,98 @@ contract MirrorFundingStrategy {
         require(amount != 0, "ProxyBasicFillStrategy/nothing-to-rescue");
 
         IERC20Like(token).transfer(proxy, amount);
+    }
+
+}
+
+contract ProbingFundingStrategy is MirrorFundingStrategy {
+
+    uint256 public proxyBalanceAtOnSell;
+    uint256 public strategyBalanceAtOnSell;
+
+    constructor(address midnight_, address proxy_, address controller_)
+        MirrorFundingStrategy(midnight_, proxy_, controller_) {}
+
+    function onSell(
+        bytes32 marketId,
+        Market  memory market,
+        uint256 sellerAssets,
+        uint256 units,
+        uint256 pendingFeeDecrease,
+        address seller,
+        address receiver,
+        bytes   memory data
+    )
+        public override returns (bytes32)
+    {
+        proxyBalanceAtOnSell    = IERC20Like(market.loanToken).balanceOf(proxy);
+        strategyBalanceAtOnSell = IERC20Like(market.loanToken).balanceOf(address(this));
+
+        return super.onSell(
+            marketId, market, sellerAssets, units, pendingFeeDecrease, seller, receiver, data
+        );
+    }
+
+}
+
+contract OverReportingStrategy {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable controller;
+    address public immutable proxy;
+
+    constructor(address controller_, address proxy_) {
+        controller = controller_;
+        proxy      = proxy_;
+    }
+
+    function onSell(
+        bytes32 marketId, Market memory market, uint256 sellerAssets, uint256 units, uint256 pendingFeeDecrease, address, address, bytes memory
+    )
+        external returns (bytes32)
+    {
+        IERC20Like(market.loanToken).approve(proxy, IERC20Like(market.loanToken).balanceOf(address(this)));
+
+        IFundFillLike(controller).midnight_fundFill(marketId, false, sellerAssets + 1, units, pendingFeeDecrease);
+
+        return CALLBACK_SUCCESS;
+    }
+
+}
+
+contract ProxyDonatingTaker {
+
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+
+    address public immutable midnight;
+    address public immutable proxy;
+    address public immutable loanToken;
+
+    uint256 public donation;
+
+    constructor(address midnight_, address proxy_, address loanToken_) {
+        midnight  = midnight_;
+        proxy     = proxy_;
+        loanToken = loanToken_;
+
+        IERC20Like(loanToken_).approve(midnight_, type(uint256).max);
+    }
+
+    function take(Offer memory ask, uint256 units, uint256 donation_) external returns (uint256, uint256) {
+        donation = donation_;
+
+        return IMidnight(midnight).take(ask, "", units, address(this), address(0), address(this), "");
+    }
+
+    function onBuy(bytes32, Market memory, uint256, uint256, uint256, address, bytes memory)
+        external returns (bytes32)
+    {
+        require(msg.sender == midnight, "ProxyDonatingTaker/not-midnight");
+
+        IERC20Like(loanToken).transfer(proxy, donation);
+
+        return CALLBACK_SUCCESS;
     }
 
 }
@@ -192,7 +288,7 @@ contract MidnightMakerTestBase is MidnightTestBase {
             group                   : group,
             callback                : address(strategy),
             callbackData            : new bytes(0),
-            receiverIfMakerIsSeller : buy ? address(0) : address(almProxy),
+            receiverIfMakerIsSeller : buy ? address(0) : address(strategy),
             ratifier                : address(makerRatifier),
             reduceOnly              : !buy,
             maxUnits                : maxUnits,
@@ -467,12 +563,125 @@ contract ForeignControllerMidnightMakerSellLifecycleTests is MidnightMakerTestBa
         _expectTakeRevert(_makerOffer(false, 0, uint128(400_000e18)), 1, "MidnightLib/zero-assets");
     }
 
-    function test_makerSell_strategyMovesNoAssets() public {
+    function test_makerSell_strategyEndsEmptyWithNoAllowance() public {
         _take(_makerOffer(false, TICK_98, uint128(400_000e18)), 400_000e18);
 
-        assertEq(loanToken.balanceOf(address(strategy)),           0);
-        assertEq(loanToken.allowance(address(strategy), MIDNIGHT), 0);
-        assertEq(loanToken.allowance(address(almProxy), MIDNIGHT), 0);
+        assertEq(loanToken.balanceOf(address(strategy)),                     0);
+        assertEq(loanToken.allowance(address(strategy), address(almProxy)), 0);
+        assertEq(loanToken.allowance(address(strategy), MIDNIGHT),          0);
+        assertEq(loanToken.allowance(address(almProxy), MIDNIGHT),          0);
+    }
+
+    function test_makerSell_proceedsLandInTheStrategyNotTheProxy() public {
+        ProbingFundingStrategy probe = new ProbingFundingStrategy(
+            MIDNIGHT, address(almProxy), address(foreignController)
+        );
+
+        _onboardStrategy(address(probe), 5_000_000e18);
+
+        uint256 units = 400_000e18;
+
+        Offer memory offer = _makerOffer(false, TICK_98, uint128(units));
+
+        offer.callback                = address(probe);
+        offer.receiverIfMakerIsSeller = address(probe);
+
+        uint256 proxyBefore = loanToken.balanceOf(address(almProxy));
+
+        ( , uint256 sellerAssets ) = _take(offer, units);
+
+        assertGt(sellerAssets, 0);
+
+        assertEq(probe.proxyBalanceAtOnSell(),    proxyBefore);
+        assertEq(probe.strategyBalanceAtOnSell(), sellerAssets);
+
+        assertEq(loanToken.balanceOf(address(probe)),                     0);
+        assertEq(loanToken.allowance(address(probe), address(almProxy)), 0);
+        assertEq(loanToken.balanceOf(address(almProxy)),                  proxyBefore + sellerAssets);
+
+        assertEq(rateLimits.getCurrentRateLimit(sellKey),                         5_000_000e18 - sellerAssets);
+        assertEq(rateLimits.getCurrentRateLimit(_strategySellKey(address(probe))), 5_000_000e18 - sellerAssets);
+    }
+
+    function test_makerSell_proxyInflowDuringTheFillIsNotCounted() public {
+        ProxyDonatingTaker donor = new ProxyDonatingTaker(MIDNIGHT, address(almProxy), address(loanToken));
+
+        loanToken.mint(address(donor), 10_000_000e18);
+
+        uint256 units    = 400_000e18;
+        uint256 donation = 123_456e18;
+
+        uint256 proxyBefore        = loanToken.balanceOf(address(almProxy));
+        uint256 sellBefore         = rateLimits.getCurrentRateLimit(sellKey);
+        uint256 strategySellBefore = rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)));
+
+        ( , uint256 sellerAssets ) = donor.take(_makerOffer(false, TICK_98, uint128(units)), units, donation);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, TICK_98));
+
+        assertEq(loanToken.balanceOf(address(almProxy)), proxyBefore + donation + sellerAssets);
+        assertEq(loanToken.balanceOf(address(strategy)), 0);
+
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), sellBefore - sellerAssets);
+        assertEq(
+            rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy))),
+            strategySellBefore - sellerAssets
+        );
+    }
+
+    function test_makerSell_donationInTheStrategyIsCounted() public {
+        uint256 units    = 400_000e18;
+        uint256 donation = 1_000e18;
+
+        loanToken.mint(address(strategy), donation);
+
+        uint256 proxyBefore        = loanToken.balanceOf(address(almProxy));
+        uint256 sellBefore         = rateLimits.getCurrentRateLimit(sellKey);
+        uint256 strategySellBefore = rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy)));
+
+        vm.expectEmit(address(foreignController));
+        emit MidnightFillFunded(
+            marketId, address(strategy), false, _makerSellerAssets(units, TICK_98) + donation, units
+        );
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, TICK_98, uint128(units)), units);
+
+        assertEq(loanToken.balanceOf(address(strategy)),                     0);
+        assertEq(loanToken.allowance(address(strategy), address(almProxy)), 0);
+        assertEq(loanToken.balanceOf(address(almProxy)),                     proxyBefore + sellerAssets + donation);
+
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), sellBefore - sellerAssets - donation);
+        assertEq(
+            rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy))),
+            strategySellBefore - sellerAssets - donation
+        );
+    }
+
+    function test_makerSell_donationDoesNotRelaxTickFloor() public {
+        uint256 units = 400_000e18;
+        uint256 tick  = TICK_98 - TICK_SPACING;
+
+        uint256 floorAssets = (units * MidnightTickLib.tickToPrice(TICK_98) + 1e18 - 1) / 1e18;
+        uint256 reported    = _makerSellerAssets(units, tick);
+
+        assertLt(reported, floorAssets);
+
+        loanToken.mint(address(strategy), floorAssets - reported);
+
+        _expectTakeRevert(_makerOffer(false, tick, uint128(units)), units, "MidnightLib/fill-price-too-low");
+    }
+
+    function test_makerSell_overReportedProceedsRevert() public {
+        OverReportingStrategy liar = new OverReportingStrategy(address(foreignController), address(almProxy));
+
+        _onboardStrategy(address(liar), 5_000_000e18);
+
+        Offer memory offer = _makerOffer(false, TICK_98, uint128(400_000e18));
+
+        offer.callback                = address(liar);
+        offer.receiverIfMakerIsSeller = address(liar);
+
+        _expectTakeRevert(offer, 400_000e18, "MidnightLib/proceeds-below-reported");
     }
 
     function test_makerSell_exhaustedSellLimitMakesTheAskUnfillable() public {
@@ -797,13 +1006,26 @@ contract ForeignControllerMidnightMakerAttackTests is MidnightMakerTestBase {
         vm.prank(GROVE_EXECUTOR);
         rateLimits.setRateLimitData(buyKey, 5_000_000e18, 0, 1_000_000e18, block.timestamp);
 
-        vm.prank(address(strategy));
+        loanToken.mint(address(strategy), 500_000e18);
+
+        uint256 proxyBalanceBefore = loanToken.balanceOf(address(almProxy));
+
+        vm.startPrank(address(strategy));
+        loanToken.approve(address(almProxy), 500_000e18);
         foreignController.midnight_fundFill(marketId, false, 500_000e18, 500_000e18, 0);
+        vm.stopPrank();
 
         assertEq(loanToken.balanceOf(address(strategy)), 0);
+        assertEq(loanToken.balanceOf(address(almProxy)), proxyBalanceBefore + 500_000e18);
 
         assertEq(rateLimits.getCurrentRateLimit(buyKey),  1_000_000e18);
         assertEq(rateLimits.getCurrentRateLimit(sellKey), 5_000_000e18 - 500_000e18);
+    }
+
+    function test_attack_directSellFillFromAnEmptyStrategyReverts() public {
+        vm.prank(address(strategy));
+        vm.expectRevert("MidnightLib/proceeds-below-reported");
+        foreignController.midnight_fundFill(marketId, false, 500_000e18, 500_000e18, 0);
     }
 
     function test_attack_noOpTakePokeOnAConsumedOffer() public {
@@ -1058,16 +1280,20 @@ contract FeeInflatingStrategy {
     bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
 
     address public immutable controller;
+    address public immutable proxy;
 
-    constructor(address controller_) {
+    constructor(address controller_, address proxy_) {
         controller = controller_;
+        proxy      = proxy_;
     }
 
     function onSell(
-        bytes32 marketId, Market memory, uint256 sellerAssets, uint256 units, uint256, address, address, bytes memory
+        bytes32 marketId, Market memory market, uint256 sellerAssets, uint256 units, uint256, address, address, bytes memory
     )
         external returns (bytes32)
     {
+        IERC20Like(market.loanToken).approve(proxy, IERC20Like(market.loanToken).balanceOf(address(this)));
+
         IFundFillLike(controller).midnight_fundFill(marketId, false, sellerAssets, units, units);
 
         return CALLBACK_SUCCESS;
@@ -1167,7 +1393,7 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
         _setFees(0, 0, MidnightLib.MAX_CONTINUOUS_FEE);
         _seedCredit(SEEDED_UNITS);
 
-        inflatingStrategy = new FeeInflatingStrategy(address(foreignController));
+        inflatingStrategy = new FeeInflatingStrategy(address(foreignController), address(almProxy));
 
         _onboardStrategy(address(inflatingStrategy), 5_000_000e18);
     }
@@ -1187,7 +1413,8 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
     function _inflatedAsk(uint256 tick, uint256 units) internal view returns (Offer memory offer) {
         offer = _makerOffer(false, tick, uint128(units));
 
-        offer.callback = address(inflatingStrategy);
+        offer.callback                = address(inflatingStrategy);
+        offer.receiverIfMakerIsSeller = address(inflatingStrategy);
     }
 
     function test_makerSell_partialExitClearsAtThePositionFeeFloor() public {
@@ -1213,6 +1440,28 @@ contract ForeignControllerMidnightMakerSellPendingFeeTests is MidnightMakerSellF
             rateLimits.getCurrentRateLimit(_strategySellKey(address(strategy))),
             strategySellBefore - sellerAssets
         );
+    }
+
+    function test_makerSell_donationDoesNotRelaxYieldFloor() public {
+        uint256 units    = 400_000e18;
+        uint256 tick     = _positionFloorTick();
+        uint256 donation = units / 100;
+
+        loanToken.mint(address(strategy), donation);
+
+        _expectTakeRevert(
+            _makerOffer(false, tick - TICK_SPACING, uint128(units)), units, "MidnightLib/fill-yield-too-high"
+        );
+
+        uint256 sellBefore = rateLimits.getCurrentRateLimit(sellKey);
+
+        ( , uint256 sellerAssets ) = _take(_makerOffer(false, tick, uint128(units)), units);
+
+        assertEq(sellerAssets, _makerSellerAssets(units, tick));
+        assertEq(_credit(),    SEEDED_UNITS - units);
+
+        assertEq(loanToken.balanceOf(address(strategy)),  0);
+        assertEq(rateLimits.getCurrentRateLimit(sellKey), sellBefore - sellerAssets - donation);
     }
 
     function test_makerSell_partialExitIgnoresAnInflatedReportedFee() public {
