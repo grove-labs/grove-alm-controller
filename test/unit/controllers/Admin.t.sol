@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+import { MockERC20 } from "erc20-helpers/MockERC20.sol";
+
 import { ForeignController } from "../../../src/ForeignController.sol";
 import { MainnetController } from "../../../src/MainnetController.sol";
 import { MidnightLib }       from "../../../src/libraries/MidnightLib.sol";
 import { UniswapV3Lib }      from "../../../src/libraries/UniswapV3Lib.sol";
+
+import { IMidnight, Market } from "../../../src/interfaces/MidnightInterfaces.sol";
 
 import { MidnightTickLib, MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
@@ -13,6 +17,8 @@ import { CentrifugeRecipientHelpers } from "../../helpers/CentrifugeRecipientHel
 import { MockDaiUsds } from "../mocks/MockDaiUsds.sol";
 import { MockPSM }     from "../mocks/MockPSM.sol";
 import { MockVault }   from "../mocks/MockVault.sol";
+
+import { MidnightTakeBuffer } from "../../mocks/MidnightTakeBuffer.sol";
 
 import "../UnitTestBase.t.sol";
 
@@ -1195,6 +1201,24 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     uint16 constant MAX_SELL_YIELD = 10_00;
 
     bytes32 marketId = keccak256("market");
+
+    function setUp() public override {
+        super.setUp();
+
+        Market memory market;
+        market.loanToken = address(new MockERC20("Loan", "LOAN", 18));
+
+        vm.mockCall(
+            makeAddr("midnight"),
+            abi.encodeWithSelector(IMidnight.toMarket.selector),
+            abi.encode(market)
+        );
+
+        MidnightTakeBuffer takeBuffer = new MidnightTakeBuffer(makeAddr("almProxy"), makeAddr("midnight"));
+
+        vm.prank(admin);
+        foreignController.setMidnightTakeBuffer(address(takeBuffer));
+    }
 
     function _setConfig(bytes32 marketId_, MidnightLib.MarketConfig memory config) internal {
         foreignController.setMidnightMarketConfig(

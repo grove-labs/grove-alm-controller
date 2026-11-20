@@ -263,6 +263,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         });
 
         MidnightLib.validateMarketConfig(config);
+        MidnightLib.approveTakeBuffer(midnight, midnightTakeBuffer, marketId);
 
         midnightMarketConfigs[marketId] = config;
 
@@ -737,6 +738,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             units        : units,
@@ -886,6 +888,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             offer        : offer,
