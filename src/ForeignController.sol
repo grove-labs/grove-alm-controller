@@ -56,6 +56,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
+    event MidnightTakeBufferSet(address indexed buffer);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -84,6 +85,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     IERC20      public usdc;
     address     public pendleRouter;
     address     public midnight;
+    address     public midnightTakeBuffer;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
@@ -229,6 +231,15 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
+    function setMidnightTakeBuffer(address buffer) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(buffer != address(0), "FC/midnight-take-buffer-zero-address");
+
+        midnightTakeBuffer = buffer;
+        emit MidnightTakeBufferSet(buffer);
+    }
+
     function setMidnightMarketConfig(
         bytes32 marketId,
         uint16  maxBuyTick,
@@ -252,6 +263,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         });
 
         MidnightLib.validateMarketConfig(config);
+        MidnightLib.approveTakeBuffer(midnight, midnightTakeBuffer, marketId);
 
         midnightMarketConfigs[marketId] = config;
 
@@ -726,6 +738,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             units        : units,
@@ -875,6 +888,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             offer        : offer,

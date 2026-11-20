@@ -62,4 +62,22 @@ library ERC20Lib {
             "ERC20Lib/transfer-failed"
         );
     }
+
+    function transferFrom(
+        IALMProxy proxy,
+        address   token,
+        address   from,
+        address   to,
+        uint256   amount
+    ) external {
+        bytes memory returnData = proxy.doCall(
+            token,
+            abi.encodeCall(IERC20(token).transferFrom, (from, to, amount))
+        );
+
+        require(
+            returnData.length == 0 || abi.decode(returnData, (bool)),
+            "ERC20Lib/transfer-from-failed"
+        );
+    }
 }

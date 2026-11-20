@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.21;
 
+import { MockERC20 } from "erc20-helpers/MockERC20.sol";
+
 import { ForeignController } from "../../../src/ForeignController.sol";
 import { MainnetController } from "../../../src/MainnetController.sol";
 import { MidnightLib }       from "../../../src/libraries/MidnightLib.sol";
 import { UniswapV3Lib }      from "../../../src/libraries/UniswapV3Lib.sol";
+
+import { IMidnight, Market } from "../../../src/interfaces/MidnightInterfaces.sol";
 
 import { MidnightTickLib, MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
@@ -13,6 +17,8 @@ import { CentrifugeRecipientHelpers } from "../../helpers/CentrifugeRecipientHel
 import { MockDaiUsds } from "../mocks/MockDaiUsds.sol";
 import { MockPSM }     from "../mocks/MockPSM.sol";
 import { MockVault }   from "../mocks/MockVault.sol";
+
+import { MidnightTakeBuffer } from "../../mocks/MidnightTakeBuffer.sol";
 
 import "../UnitTestBase.t.sol";
 
@@ -1126,6 +1132,56 @@ contract ForeignControllerSetUniswapV3TwapSecondsAgoTests is ForeignControllerAd
 
 }
 
+contract ForeignControllerSetMidnightTakeBufferTests is ForeignControllerAdminTestBase {
+
+    event MidnightTakeBufferSet(address indexed buffer);
+
+    function test_setMidnightTakeBuffer_unauthorized() public {
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            address(this),
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnightTakeBuffer(makeAddr("buffer"));
+
+        vm.prank(freezer);
+        vm.expectRevert(abi.encodeWithSignature(
+            "AccessControlUnauthorizedAccount(address,bytes32)",
+            freezer,
+            DEFAULT_ADMIN_ROLE
+        ));
+        foreignController.setMidnightTakeBuffer(makeAddr("buffer"));
+    }
+
+    function test_setMidnightTakeBuffer_zeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert("FC/midnight-take-buffer-zero-address");
+        foreignController.setMidnightTakeBuffer(address(0));
+    }
+
+    function test_setMidnightTakeBuffer() public {
+        address buffer1 = makeAddr("buffer1");
+        address buffer2 = makeAddr("buffer2");
+
+        assertEq(foreignController.midnightTakeBuffer(), address(0));
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightTakeBufferSet(buffer1);
+        foreignController.setMidnightTakeBuffer(buffer1);
+
+        assertEq(foreignController.midnightTakeBuffer(), buffer1);
+
+        vm.prank(admin);
+        vm.expectEmit(address(foreignController));
+        emit MidnightTakeBufferSet(buffer2);
+        foreignController.setMidnightTakeBuffer(buffer2);
+
+        assertEq(foreignController.midnightTakeBuffer(), buffer2);
+    }
+
+}
+
 contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdminTestBase {
 
     event MidnightMarketConfigSet(
@@ -1145,6 +1201,24 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
     uint16 constant MAX_SELL_YIELD = 10_00;
 
     bytes32 marketId = keccak256("market");
+
+    function setUp() public override {
+        super.setUp();
+
+        Market memory market;
+        market.loanToken = address(new MockERC20("Loan", "LOAN", 18));
+
+        vm.mockCall(
+            makeAddr("midnight"),
+            abi.encodeWithSelector(IMidnight.toMarket.selector),
+            abi.encode(market)
+        );
+
+        MidnightTakeBuffer takeBuffer = new MidnightTakeBuffer(makeAddr("almProxy"), makeAddr("midnight"));
+
+        vm.prank(admin);
+        foreignController.setMidnightTakeBuffer(address(takeBuffer));
+    }
 
     function _setConfig(bytes32 marketId_, MidnightLib.MarketConfig memory config) internal {
         foreignController.setMidnightMarketConfig(
