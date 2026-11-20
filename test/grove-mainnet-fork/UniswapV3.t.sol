@@ -2573,7 +2573,7 @@ contract UniswapV3ValueBoundTestBase is UniswapV3TestBase {
         );
     }
 
-    function _honestAdd(uint256 tokenId, UniswapV3Lib.Tick memory tick, uint256 amount)
+    function _addAtSpotRatio(uint256 tokenId, UniswapV3Lib.Tick memory tick, uint256 amount)
         internal
         returns (uint256 tokenId_, uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
     {
@@ -2623,32 +2623,32 @@ contract UniswapV3ValueBoundTestBase is UniswapV3TestBase {
 
 contract MainnetControllerAddLiquidityValueBoundTests is UniswapV3ValueBoundTestBase {
 
-    function test_addLiquidityUniswapV3_valueBound_honestDriftPasses_mint() public {
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses_mint() public {
         _pushSpot(twapTick + 2);
 
-        _honestAdd(0, _range(-10, 10), DEPOSIT);
+        _addAtSpotRatio(0, _range(-10, 10), DEPOSIT);
     }
 
-    function test_addLiquidityUniswapV3_valueBound_honestDriftPasses_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _range(-10, 10), DEPOSIT);
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(-10, 10), DEPOSIT);
 
         _pushSpot(twapTick - 2);
 
-        _honestAdd(tokenId, _range(-10, 10), DEPOSIT);
+        _addAtSpotRatio(tokenId, _range(-10, 10), DEPOSIT);
     }
 
-    function test_addLiquidityUniswapV3_valueBound_honestDriftPasses(int256 drift, uint256 amount, bool increase)
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses(int256 drift, uint256 amount, bool increase)
         public
     {
         drift  = bound(drift,  -2,    2);
         amount = bound(amount, 1_000, 400_000);
 
         uint256 tokenId;
-        if (increase) (tokenId,,,) = _honestAdd(0, _range(-10, 10), amount);
+        if (increase) (tokenId,,,) = _addAtSpotRatio(0, _range(-10, 10), amount);
 
         _pushSpot(twapTick + int24(drift));
 
-        _honestAdd(tokenId, _range(-10, 10), amount);
+        _addAtSpotRatio(tokenId, _range(-10, 10), amount);
     }
 
     function test_addLiquidityUniswapV3_valueBound_twapInRangeSpotAboveRange_mint() public {
@@ -2660,7 +2660,7 @@ contract MainnetControllerAddLiquidityValueBoundTests is UniswapV3ValueBoundTest
     function test_addLiquidityUniswapV3_valueBound_twapInRangeSpotAboveRange_increase() public {
         UniswapV3Lib.Tick memory tick = _range(-100, 100);
 
-        (uint256 tokenId,,,) = _honestAdd(0, tick, DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
 
         _assertOneSidedAddReverts(tokenId, tick, tick.upper + 1, false);
     }
@@ -2674,7 +2674,7 @@ contract MainnetControllerAddLiquidityValueBoundTests is UniswapV3ValueBoundTest
     function test_addLiquidityUniswapV3_valueBound_twapBelowRangeSpotAboveRange_increase() public {
         UniswapV3Lib.Tick memory tick = _range(20, 40);
 
-        (uint256 tokenId,,,) = _honestAdd(0, tick, DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
 
         _assertOneSidedAddReverts(tokenId, tick, tick.upper + 1, false);
     }
@@ -2688,35 +2688,35 @@ contract MainnetControllerAddLiquidityValueBoundTests is UniswapV3ValueBoundTest
     function test_addLiquidityUniswapV3_valueBound_twapAboveRangeSpotBelowRange_increase() public {
         UniswapV3Lib.Tick memory tick = _range(-40, -20);
 
-        (uint256 tokenId,,,) = _honestAdd(0, tick, DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
 
         _assertOneSidedAddReverts(tokenId, tick, tick.lower - 1, true);
     }
 
     function test_addLiquidityUniswapV3_valueBound_oneSidedTwapAboveRangePasses_mint() public {
-        ( , , uint256 amount0Used, ) = _honestAdd(0, _range(-30, -10), DEPOSIT);
+        ( , , uint256 amount0Used, ) = _addAtSpotRatio(0, _range(-30, -10), DEPOSIT);
 
         assertEq(amount0Used, 0);
     }
 
     function test_addLiquidityUniswapV3_valueBound_oneSidedTwapAboveRangePasses_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _range(-30, -10), DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(-30, -10), DEPOSIT);
 
-        ( , , uint256 amount0Used, ) = _honestAdd(tokenId, _range(-30, -10), DEPOSIT);
+        ( , , uint256 amount0Used, ) = _addAtSpotRatio(tokenId, _range(-30, -10), DEPOSIT);
 
         assertEq(amount0Used, 0);
     }
 
     function test_addLiquidityUniswapV3_valueBound_oneSidedTwapBelowRangePasses_mint() public {
-        ( , , , uint256 amount1Used) = _honestAdd(0, _range(10, 30), DEPOSIT);
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(0, _range(10, 30), DEPOSIT);
 
         assertEq(amount1Used, 0);
     }
 
     function test_addLiquidityUniswapV3_valueBound_oneSidedTwapBelowRangePasses_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _range(10, 30), DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(10, 30), DEPOSIT);
 
-        ( , , , uint256 amount1Used) = _honestAdd(tokenId, _range(10, 30), DEPOSIT);
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(tokenId, _range(10, 30), DEPOSIT);
 
         assertEq(amount1Used, 0);
     }
@@ -2799,18 +2799,18 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
         assertApproxEqAbs(int256(twapTick), int256(tick), 1);
     }
 
-    function test_addLiquidityUniswapV3_ausdUsdc_honestDriftPasses_mint() public {
+    function test_addLiquidityUniswapV3_ausdUsdc_smallDriftPasses_mint() public {
         _pushSpot(twapTick + 2);
 
-        _honestAdd(0, _spellRange(), DEPOSIT);
+        _addAtSpotRatio(0, _spellRange(), DEPOSIT);
     }
 
-    function test_addLiquidityUniswapV3_ausdUsdc_honestDriftPasses_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _spellRange(), DEPOSIT);
+    function test_addLiquidityUniswapV3_ausdUsdc_smallDriftPasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
 
         _pushSpot(twapTick - 2);
 
-        _honestAdd(tokenId, _spellRange(), DEPOSIT);
+        _addAtSpotRatio(tokenId, _spellRange(), DEPOSIT);
     }
 
     function test_addLiquidityUniswapV3_ausdUsdc_twapBelowRangeSpotAboveRange_mint() public {
@@ -2820,7 +2820,7 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
     }
 
     function test_addLiquidityUniswapV3_ausdUsdc_twapBelowRangeSpotAboveRange_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _spellRange(), DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
 
         _moveTwapTo(LOWER_TICK_BOUND - 30);
 
@@ -2830,17 +2830,17 @@ contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBo
     function test_addLiquidityUniswapV3_ausdUsdc_oneSidedTwapBelowRangePasses_mint() public {
         _moveTwapTo(LOWER_TICK_BOUND - 30);
 
-        ( , , , uint256 amount1Used) = _honestAdd(0, _spellRange(), DEPOSIT);
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
 
         assertEq(amount1Used, 0);
     }
 
     function test_addLiquidityUniswapV3_ausdUsdc_oneSidedTwapBelowRangePasses_increase() public {
-        (uint256 tokenId,,,) = _honestAdd(0, _spellRange(), DEPOSIT);
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
 
         _moveTwapTo(LOWER_TICK_BOUND - 30);
 
-        ( , , , uint256 amount1Used) = _honestAdd(tokenId, _spellRange(), DEPOSIT);
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(tokenId, _spellRange(), DEPOSIT);
 
         assertEq(amount1Used, 0);
     }
