@@ -6,7 +6,7 @@ import { MainnetController } from "../../../src/MainnetController.sol";
 import { MidnightLib }       from "../../../src/libraries/MidnightLib.sol";
 import { UniswapV3Lib }      from "../../../src/libraries/UniswapV3Lib.sol";
 
-import { MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
+import { MidnightTickLib, MAX_TICK as MIDNIGHT_MAX_TICK } from "../../../src/libraries/midnight/MidnightTickLib.sol";
 
 import { CentrifugeRecipientHelpers } from "../../helpers/CentrifugeRecipientHelpers.sol";
 
@@ -1236,6 +1236,24 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
         );
 
         vm.stopPrank();
+    }
+
+    function test_setMidnightMarketConfig_minSellTickZeroPriceBoundary() public {
+        assertEq(MidnightTickLib.tickToPrice(1), 0);
+        assertGt(MidnightTickLib.tickToPrice(2), 0);
+
+        vm.startPrank(admin);
+
+        vm.expectRevert("MidnightLib/min-sell-tick-oob");
+        _setConfig(marketId, _config(4000, 1, 0));
+
+        _setConfig(marketId, _config(4000, 2, 0));
+
+        vm.stopPrank();
+
+        ( , uint16 minSellTick, , , , ) = foreignController.midnightMarketConfigs(marketId);
+
+        assertEq(minSellTick, 2);
     }
 
     function test_setMidnightMarketConfig_maxContinuousFeeOutOfBounds() public {

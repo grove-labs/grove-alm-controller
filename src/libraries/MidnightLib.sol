@@ -80,7 +80,9 @@ library MidnightLib {
         require(config.maxBuyTick <= MAX_TICK, "MidnightLib/max-buy-tick-oob");
 
         require(
-            config.minSellTick != 0 && config.minSellTick <= MAX_TICK,
+            config.minSellTick != 0 &&
+            config.minSellTick <= MAX_TICK &&
+            MidnightTickLib.tickToPrice(config.minSellTick) != 0,
             "MidnightLib/min-sell-tick-oob"
         );
 
@@ -89,7 +91,6 @@ library MidnightLib {
             "MidnightLib/max-continuous-fee-oob"
         );
 
-        // Zero would only clear at par and brick the exit, so onboarding has to name a ceiling.
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
     }
 
@@ -212,6 +213,10 @@ library MidnightLib {
 
         bytes32       marketId = params.marketId;
         Market memory market   = IMidnight(params.midnight).toMarket(marketId);
+
+        require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
+
+        _requireMarketId(market, marketId);
 
         ( uint256 credit, ) = _position(market, marketId, address(params.proxy));
 
@@ -345,7 +350,6 @@ library MidnightLib {
         return roundUp ? (numerator + denominator - 1) / denominator : numerator / denominator;
     }
 
-    // The market arrives in calldata and feeds the yield bounds, so bind it to the id first.
     function _requireMarketId(Market memory market, bytes32 marketId) internal pure {
         require(MidnightIdLib.toId(market) == marketId, "MidnightLib/market-mismatch");
     }

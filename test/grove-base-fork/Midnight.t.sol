@@ -1312,6 +1312,32 @@ contract ForeignControllerMidnightRedeemFailureTests is MidnightRedeemTestBase {
         _redeem(SEEDED_UNITS, 1);
     }
 
+    function test_redeemMidnight_invalidMidnight() public {
+        _repay(SEEDED_UNITS);
+
+        Market memory otherMarket = market;
+        otherMarket.midnight = makeAddr("otherMidnight");
+
+        vm.mockCall(MIDNIGHT, abi.encodeCall(IMidnight.toMarket, (marketId)), abi.encode(otherMarket));
+
+        vm.expectRevert("MidnightLib/invalid-midnight");
+        _redeem(SEEDED_UNITS, 1);
+    }
+
+    function test_redeemMidnight_marketMismatch() public {
+        _repay(SEEDED_UNITS);
+
+        Market memory otherMarket = market;
+        otherMarket.maturity = market.maturity + 1 days;
+
+        assertNotEq(MidnightIdLib.toId(otherMarket), marketId);
+
+        vm.mockCall(MIDNIGHT, abi.encodeCall(IMidnight.toMarket, (marketId)), abi.encode(otherMarket));
+
+        vm.expectRevert("MidnightLib/market-mismatch");
+        _redeem(SEEDED_UNITS, 1);
+    }
+
 }
 
 contract ForeignControllerMidnightRedeemSuccessTests is MidnightRedeemTestBase {
