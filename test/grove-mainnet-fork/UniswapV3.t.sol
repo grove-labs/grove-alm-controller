@@ -12,6 +12,7 @@ import { IERC721 }            from "openzeppelin-contracts/contracts/token/ERC72
 import { INonfungiblePositionManager, IUniswapV3PoolLike } from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3Lib }                                    from "../../src/libraries/UniswapV3Lib.sol";
 import { UniswapV3OracleLib }                              from "../../src/libraries/uniswap-v3/UniV3OracleLib.sol";
+import { UniV3UtilsLib }                                   from "../../src/libraries/uniswap-v3/UniV3UtilsLib.sol";
 
 import { ISwapRouter } from "../../src/interfaces/UniswapV3Interfaces.sol";
 
@@ -2490,6 +2491,421 @@ contract MainnetControllerAddLiquidityMisreportedAmountsTest is UniswapV3TestBas
         assertEq(outcome.used1,    outcome.spent1);
         assertEq(outcome.charged0, outcome.spent0);
         assertEq(outcome.charged1, outcome.spent1);
+    }
+
+}
+
+contract UniswapV3ValueBoundTestBase is UniswapV3TestBase {
+
+    uint256 internal constant DEPOSIT = 100_000;
+
+    int24 internal twapTick;
+
+    function setUp() public virtual override {
+        super.setUp();
+
+        vm.prank(GROVE_PROXY);
+        mainnetController.setMaxSlippage(_getPool(), 0.999e18);
+
+        (twapTick, ) = UniswapV3OracleLib.consult(_getPool(), _twapSecondsAgo());
+    }
+
+    function _twapSecondsAgo() internal pure virtual returns (uint32) {
+        return 1 days;
+    }
+
+    function _units(IERC20 token, uint256 amount) internal view returns (uint256) {
+        return amount * 10 ** IERC20Metadata(address(token)).decimals();
+    }
+
+    function _range(int24 lowerDelta, int24 upperDelta) internal view returns (UniswapV3Lib.Tick memory) {
+        return UniswapV3Lib.Tick({ lower: twapTick + lowerDelta, upper: twapTick + upperDelta });
+    }
+
+    function _pushSpot(int24 targetTick) internal {
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+
+        (uint160 sqrtPriceX96,,,,,,) = pool.slot0();
+        if (sqrtPriceX96 == targetSqrtPriceX96) return;
+
+        IERC20  tokenIn  = targetSqrtPriceX96 < sqrtPriceX96 ? token0 : token1;
+        IERC20  tokenOut = tokenIn == token0 ? token1 : token0;
+        uint256 amountIn = _units(tokenIn, 1_000_000_000);
+
+        deal(address(tokenIn), stranger, amountIn);
+
+        vm.startPrank(stranger);
+        SafeERC20.forceApprove(IERC20OZ(address(tokenIn)), UNISWAP_V3_ROUTER, amountIn);
+        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn           : address(tokenIn),
+                tokenOut          : address(tokenOut),
+                fee               : poolFee,
+                recipient         : stranger,
+                amountIn          : amountIn,
+                amountOutMinimum  : 0,
+                sqrtPriceLimitX96 : targetSqrtPriceX96
+            })
+        );
+        vm.stopPrank();
+
+        (sqrtPriceX96,,,,,,) = pool.slot0();
+        assertEq(sqrtPriceX96, targetSqrtPriceX96);
+    }
+
+    function _spotTargets(UniswapV3Lib.Tick memory tick, uint256 amount)
+        internal
+        view
+        returns (UniswapV3Lib.TokenAmounts memory target)
+    {
+        uint256 amount0 = _units(token0, amount);
+        uint256 amount1 = _units(token1, amount);
+
+        (target.amount0, target.amount1) = UniV3Utils.getExpectedAmounts(
+            address(token0),
+            address(token1),
+            poolFee,
+            tick.lower,
+            tick.upper,
+            0,
+            amount0,
+            amount1,
+            false
+        );
+    }
+
+    function _addAtSpotRatio(uint256 tokenId, UniswapV3Lib.Tick memory tick, uint256 amount)
+        internal
+        returns (uint256 tokenId_, uint128 liquidity, uint256 amount0Used, uint256 amount1Used)
+    {
+        UniswapV3Lib.TokenAmounts memory target = _spotTargets(tick, amount);
+
+        _fundProxy(target.amount0, target.amount1);
+
+        (tokenId_, liquidity, amount0Used, amount1Used) = _addLiquidity(
+            tokenId,
+            tick,
+            target,
+            UniswapV3Lib.TokenAmounts({ amount0: target.amount0 * 999 / 1000, amount1: target.amount1 * 999 / 1000 })
+        );
+
+        assertGt(liquidity, 0);
+    }
+
+    function _assertOneSidedAddReverts(
+        uint256           tokenId,
+        UniswapV3Lib.Tick memory tick,
+        int24             spotTick,
+        bool              depositToken0
+    )
+        internal
+    {
+        UniswapV3Lib.TokenAmounts memory target = depositToken0
+            ? UniswapV3Lib.TokenAmounts({ amount0: _units(token0, DEPOSIT), amount1: 0 })
+            : UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: _units(token1, DEPOSIT) });
+
+        _fundProxy(target.amount0, target.amount1);
+        _pushSpot(spotTick);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("UniswapV3Lib/value-below-bound");
+        mainnetController.addLiquidityUniswapV3(
+            _getPool(),
+            tokenId,
+            tick,
+            target,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 }),
+            block.timestamp + 1 hours
+        );
+        vm.stopPrank();
+    }
+
+}
+
+contract MainnetControllerAddLiquidityValueBoundTests is UniswapV3ValueBoundTestBase {
+
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses_mint() public {
+        _pushSpot(twapTick + 2);
+
+        _addAtSpotRatio(0, _range(-10, 10), DEPOSIT);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(-10, 10), DEPOSIT);
+
+        _pushSpot(twapTick - 2);
+
+        _addAtSpotRatio(tokenId, _range(-10, 10), DEPOSIT);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_smallDriftPasses(int256 drift, uint256 amount, bool increase)
+        public
+    {
+        drift  = bound(drift,  -2,    2);
+        amount = bound(amount, 1_000, 400_000);
+
+        uint256 tokenId;
+        if (increase) (tokenId,,,) = _addAtSpotRatio(0, _range(-10, 10), amount);
+
+        _pushSpot(twapTick + int24(drift));
+
+        _addAtSpotRatio(tokenId, _range(-10, 10), amount);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapInRangeSpotAboveRange_mint() public {
+        UniswapV3Lib.Tick memory tick = _range(-100, 100);
+
+        _assertOneSidedAddReverts(0, tick, tick.upper + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapInRangeSpotAboveRange_increase() public {
+        UniswapV3Lib.Tick memory tick = _range(-100, 100);
+
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
+
+        _assertOneSidedAddReverts(tokenId, tick, tick.upper + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapBelowRangeSpotAboveRange_mint() public {
+        UniswapV3Lib.Tick memory tick = _range(20, 40);
+
+        _assertOneSidedAddReverts(0, tick, tick.upper + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapBelowRangeSpotAboveRange_increase() public {
+        UniswapV3Lib.Tick memory tick = _range(20, 40);
+
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
+
+        _assertOneSidedAddReverts(tokenId, tick, tick.upper + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapAboveRangeSpotBelowRange_mint() public {
+        UniswapV3Lib.Tick memory tick = _range(-40, -20);
+
+        _assertOneSidedAddReverts(0, tick, tick.lower - 1, true);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_twapAboveRangeSpotBelowRange_increase() public {
+        UniswapV3Lib.Tick memory tick = _range(-40, -20);
+
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, tick, DEPOSIT);
+
+        _assertOneSidedAddReverts(tokenId, tick, tick.lower - 1, true);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_oneSidedTwapAboveRangePasses_mint() public {
+        ( , , uint256 amount0Used, ) = _addAtSpotRatio(0, _range(-30, -10), DEPOSIT);
+
+        assertEq(amount0Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_oneSidedTwapAboveRangePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(-30, -10), DEPOSIT);
+
+        ( , , uint256 amount0Used, ) = _addAtSpotRatio(tokenId, _range(-30, -10), DEPOSIT);
+
+        assertEq(amount0Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_oneSidedTwapBelowRangePasses_mint() public {
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(0, _range(10, 30), DEPOSIT);
+
+        assertEq(amount1Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_valueBound_oneSidedTwapBelowRangePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _range(10, 30), DEPOSIT);
+
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(tokenId, _range(10, 30), DEPOSIT);
+
+        assertEq(amount1Used, 0);
+    }
+
+}
+
+contract MainnetControllerAddLiquidityValueBoundAusdUsdcTest is UniswapV3ValueBoundTestBase {
+
+    using stdStorage for StdStorage;
+
+    StdStorage internal ausdStorage;
+
+    address constant AUSD                      = 0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a;
+    address constant UNISWAP_V3_AUSD_USDC_POOL = 0xbAFeAd7c60Ea473758ED6c6021505E8BBd7e8E5d;
+
+    int24 internal constant LOWER_TICK_BOUND = -10;
+    int24 internal constant UPPER_TICK_BOUND =  10;
+
+    function setUp() public override {
+        super.setUp();
+
+        assertEq(address(token0), AUSD);
+        assertEq(address(token1), address(usdc));
+
+        vm.startPrank(GROVE_PROXY);
+        mainnetController.setUniswapV3PoolMaxTickDelta(_getPool(), 200);
+        mainnetController.setUniswapV3TwapSecondsAgo(_getPool(), 600);
+        mainnetController.setUniswapV3AddLiquidityLowerTickBound(_getPool(), LOWER_TICK_BOUND);
+        mainnetController.setUniswapV3AddLiquidityUpperTickBound(_getPool(), UPPER_TICK_BOUND);
+
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT, AUSD, _getPool()),
+            25_000_000e6,
+            uint256(25_000_000e6) / 1 days
+        );
+        rateLimits.setRateLimitData(
+            RateLimitHelpers.makeAssetDestinationKey(UniswapV3Lib.LIMIT_UNISWAP_V3_DEPOSIT, address(usdc), _getPool()),
+            25_000_000e6,
+            uint256(25_000_000e6) / 1 days
+        );
+        rateLimits.setUnlimitedRateLimitData(_getAddLiquidityAggregateKey());
+        vm.stopPrank();
+    }
+
+    // AUSD packs its balances, which plain deal cannot find.
+    function deal(address token, address to, uint256 give) internal override {
+        if (token != AUSD) return super.deal(token, to, give);
+
+        ausdStorage
+            .target(AUSD)
+            .sig(IERC20.balanceOf.selector)
+            .with_key(to)
+            .enable_packed_slots()
+            .checked_write(give);
+    }
+
+    function _getPool() internal pure override returns (address) {
+        return UNISWAP_V3_AUSD_USDC_POOL;
+    }
+
+    function _getBlock() internal pure override returns (uint256) {
+        return 26200000;  // Oct 15, 2026
+    }
+
+    function _twapSecondsAgo() internal pure override returns (uint32) {
+        return 600;
+    }
+
+    function _spellRange() internal pure returns (UniswapV3Lib.Tick memory) {
+        return UniswapV3Lib.Tick({ lower: LOWER_TICK_BOUND, upper: UPPER_TICK_BOUND });
+    }
+
+    function _moveTwapTo(int24 tick) internal {
+        _pushSpot(tick);
+
+        vm.warp(block.timestamp + _twapSecondsAgo());
+
+        (twapTick, ) = UniswapV3OracleLib.consult(_getPool(), _twapSecondsAgo());
+        assertApproxEqAbs(int256(twapTick), int256(tick), 1);
+    }
+
+    function _assertOneSidedAddPassesWithResidual(uint256 tokenId, int24 twapTarget) internal {
+        _moveTwapTo(twapTarget);
+
+        assertGt(twapTick, LOWER_TICK_BOUND);
+        assertLt(twapTick, UPPER_TICK_BOUND);
+
+        UniswapV3Lib.TokenAmounts memory target
+            = UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: _units(token1, DEPOSIT) });
+
+        _fundProxy(target.amount0, target.amount1);
+        _pushSpot(UPPER_TICK_BOUND + 1);
+
+        ( , uint128 liquidity, uint256 amount0Used, uint256 amount1Used) = _addLiquidity(
+            tokenId,
+            _spellRange(),
+            target,
+            UniswapV3Lib.TokenAmounts({ amount0: 0, amount1: 0 })
+        );
+
+        assertEq(amount0Used, 0);
+        assertGt(amount1Used, 0);
+
+        uint160 sqrtTwapPriceX96 = TickMath.getSqrtRatioAtTick(twapTick);
+
+        uint256 minted0 = UniV3UtilsLib.getAmount0Delta(
+            sqrtTwapPriceX96,
+            TickMath.getSqrtRatioAtTick(UPPER_TICK_BOUND),
+            liquidity,
+            false
+        );
+        uint256 minted1 = UniV3UtilsLib.getAmount1Delta(
+            TickMath.getSqrtRatioAtTick(LOWER_TICK_BOUND),
+            sqrtTwapPriceX96,
+            liquidity,
+            false
+        );
+
+        uint256 valueMinted = FullMath.mulDiv(minted0, _priceX192(sqrtTwapPriceX96), 1 << 192) + minted1;
+
+        assertLt(valueMinted, amount1Used);
+        assertLt((amount1Used - valueMinted) * 1000, amount1Used);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_smallDriftPasses_mint() public {
+        _pushSpot(twapTick + 2);
+
+        _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_smallDriftPasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _pushSpot(twapTick - 2);
+
+        _addAtSpotRatio(tokenId, _spellRange(), DEPOSIT);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapBelowRangeSpotAboveRange_mint() public {
+        _moveTwapTo(LOWER_TICK_BOUND - 30);
+
+        _assertOneSidedAddReverts(0, _spellRange(), UPPER_TICK_BOUND + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapBelowRangeSpotAboveRange_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _moveTwapTo(LOWER_TICK_BOUND - 30);
+
+        _assertOneSidedAddReverts(tokenId, _spellRange(), UPPER_TICK_BOUND + 1, false);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_oneSidedTwapBelowRangePasses_mint() public {
+        _moveTwapTo(LOWER_TICK_BOUND - 30);
+
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        assertEq(amount1Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_oneSidedTwapBelowRangePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _moveTwapTo(LOWER_TICK_BOUND - 30);
+
+        ( , , , uint256 amount1Used) = _addAtSpotRatio(tokenId, _spellRange(), DEPOSIT);
+
+        assertEq(amount1Used, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapMidRangeSpotPastFarEdgePasses_mint() public {
+        _assertOneSidedAddPassesWithResidual(0, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapMidRangeSpotPastFarEdgePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _assertOneSidedAddPassesWithResidual(tokenId, 0);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapNearOppositeEdgeSpotPastFarEdgePasses_mint() public {
+        _assertOneSidedAddPassesWithResidual(0, LOWER_TICK_BOUND + 1);
+    }
+
+    function test_addLiquidityUniswapV3_ausdUsdc_twapNearOppositeEdgeSpotPastFarEdgePasses_increase() public {
+        (uint256 tokenId,,,) = _addAtSpotRatio(0, _spellRange(), DEPOSIT);
+
+        _assertOneSidedAddPassesWithResidual(tokenId, LOWER_TICK_BOUND + 1);
     }
 
 }

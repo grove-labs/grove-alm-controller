@@ -189,11 +189,10 @@ library CurveLib {
             valueMinWithdrawn   += params.minWithdrawAmounts[i] * rates[i];
             startingBalances[i]  = IERC20(tokens[i]).balanceOf(address(params.proxy));
         }
-        valueMinWithdrawn /= 1e18;
 
         // Check that the aggregated minimums are greater than the max slippage amount
         require(
-            valueMinWithdrawn * 1e36 >= params.lpBurnAmount
+            valueMinWithdrawn * 1e18 >= params.lpBurnAmount
                 * curvePool.get_virtual_price()
                 * params.maxSlippage,
             "CurveLib/min-amount-not-met"

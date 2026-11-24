@@ -1400,6 +1400,44 @@ contract MainnetControllerE2ECurveSUsdsUsdtPoolTest is ForkTestBase {
         mainnetController.addLiquidityCurve(CURVE_POOL, amounts, boundaryAmount);
     }
 
+    function test_removeLiquidityCurve_underAllowableSlippageBoundary() public {
+        uint256 susdsAmount = susds.convertToShares(1_000_000e18);
+
+        deal(address(susds), address(almProxy), susdsAmount);
+        deal(address(usdt),  address(almProxy), 1_000_000e6);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = susdsAmount;
+        amounts[1] = 1_000_000e6;
+
+        vm.prank(relayer);
+        uint256 lpTokensReceived = mainnetController.addLiquidityCurve(CURVE_POOL, amounts, 1_950_000e18);
+
+        uint256[] memory minWithdrawAmounts = new uint256[](2);
+        minWithdrawAmounts[0] = 458_536_000_000_000_000_000_005;
+        minWithdrawAmounts[1] = 480_000e6;
+
+        ICurvePoolLike pool = ICurvePoolLike(CURVE_POOL);
+
+        uint256          virtualPrice = pool.get_virtual_price();
+        uint256[] memory rates        = pool.stored_rates();
+
+        uint256 valueMinWithdrawn = minWithdrawAmounts[0] * rates[0] + minWithdrawAmounts[1] * rates[1];
+
+        uint256 boundaryBurn        = valueMinWithdrawn * 1e18 / (virtualPrice * 0.95e18);
+        uint256 flooredBoundaryBurn = (valueMinWithdrawn / 1e18) * 1e36 / (virtualPrice * 0.95e18);
+
+        assertEq(valueMinWithdrawn % 1e18, 234_039_830_339_932_850);
+        assertEq(flooredBoundaryBurn,      boundaryBurn - 1);
+        assertLe(boundaryBurn,             lpTokensReceived);
+
+        vm.startPrank(relayer);
+        vm.expectRevert("CurveLib/min-amount-not-met");
+        mainnetController.removeLiquidityCurve(CURVE_POOL, boundaryBurn + 1, minWithdrawAmounts);
+
+        mainnetController.removeLiquidityCurve(CURVE_POOL, boundaryBurn, minWithdrawAmounts);
+    }
+
     function test_e2e_addSwapAndRemoveLiquidityCurve() public {
         uint256 susdsAmount = susds.convertToShares(1_000_000e18);
 

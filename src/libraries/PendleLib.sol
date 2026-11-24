@@ -76,6 +76,7 @@ library PendleLib {
         uint256 totalTokenOutAmount = IERC20(tokenOut).balanceOf(address(params.proxy)) - tokenOutAmountBefore;
 
         require(totalTokenOutAmount >= params.minAmountOut, "PendleLib/min-amount-not-met");
+        require(totalTokenOutAmount >= minTokenOut,         "PendleLib/min-token-out-not-met");
 
         params.rateLimits.triggerRateLimitDecrease(
             RateLimitHelpers.makeAssetDestinationKey(LIMIT_PENDLE_PT_REDEEM, pt, address(params.pendleMarket)),

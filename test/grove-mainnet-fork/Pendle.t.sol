@@ -6,6 +6,8 @@ import { IPendleMarket, ISY, IYT } from "../../src/interfaces/PendleInterfaces.s
 import "./ForkTestBase.t.sol";
 import { PendleLib } from "../../src/libraries/PendleLib.sol";
 
+import { MockPendleRouter } from "../unit/mocks/MockPendleRouter.sol";
+
 contract PendleTestBase is ForkTestBase {
 
     // sUSDe 25 Sep 2025 market
@@ -162,6 +164,27 @@ contract MainnetControllerRedeemFailurePendleTests is PendleTestBase {
         vm.prank(relayer);
         mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, exactAmountOut);
 
+    }
+
+    function test_redeemPendlePT_minTokenOutNotMet() public {
+        (address sy,, address yt) = pendleMarket.readTokens();
+
+        vm.warp(pendleMarket.expiry());
+
+        uint256 minTokenOut = 1_000_000e18 * 1e18 / IYT(yt).pyIndexCurrent() - 5;
+
+        deal(ISY(sy).yieldToken(), Ethereum.PENDLE_ROUTER, minTokenOut);
+
+        vm.etch(Ethereum.PENDLE_ROUTER, address(new MockPendleRouter(1)).code);
+
+        vm.prank(relayer);
+        vm.expectRevert("PendleLib/min-token-out-not-met");
+        mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, 1);
+
+        vm.etch(Ethereum.PENDLE_ROUTER, address(new MockPendleRouter(0)).code);
+
+        vm.prank(relayer);
+        mainnetController.redeemPendlePT(address(pendleMarket), 1_000_000e18, 1);
     }
 
 }
