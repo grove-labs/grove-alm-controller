@@ -23,7 +23,7 @@ import { ERC4626Lib }    from "./libraries/ERC4626Lib.sol";
 import { ERC7540Lib }    from "./libraries/ERC7540Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
-import { MidnightLib }   from "./libraries/MidnightLib.sol";
+import { IMidnightTakeBufferLike, MidnightLib } from "./libraries/MidnightLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
 import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
@@ -235,6 +235,16 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         _checkRole(DEFAULT_ADMIN_ROLE);
 
         require(buffer != address(0), "FC/midnight-take-buffer-zero-address");
+
+        require(
+            IMidnightTakeBufferLike(buffer).proxy() == address(proxy),
+            "FC/midnight-take-buffer-invalid-proxy"
+        );
+
+        require(
+            IMidnightTakeBufferLike(buffer).midnight() == midnight,
+            "FC/midnight-take-buffer-invalid-midnight"
+        );
 
         midnightTakeBuffer = buffer;
         emit MidnightTakeBufferSet(buffer);

@@ -202,7 +202,7 @@ contract MidnightTestBase is ForkTestBase {
 
         loanToken.mint(address(almProxy), 10_000_000 * loanUnit);
 
-        takeBuffer = new MidnightTakeBuffer(address(almProxy), MIDNIGHT);
+        takeBuffer = new MidnightTakeBuffer(MIDNIGHT, address(almProxy));
 
         vm.prank(GROVE_EXECUTOR);
         foreignController.setMidnightTakeBuffer(address(takeBuffer));
@@ -395,7 +395,7 @@ contract ForeignControllerMidnightOnboardingTests is MidnightTestBase {
         _clearTakeBuffer();
 
         vm.prank(GROVE_EXECUTOR);
-        vm.expectRevert("MidnightLib/take-buffer-not-set");
+        vm.expectRevert();
         foreignController.setMidnightMarketConfig(
             marketId, TICK_99, TICK_98, MIN_BUY_YIELD, MAX_SELL_YIELD, MAX_CONTINUOUS_FEE_CBP, 0
         );

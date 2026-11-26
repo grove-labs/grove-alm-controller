@@ -15,6 +15,8 @@ import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
 interface IMidnightTakeBufferLike {
     function approve(address token) external;
+    function midnight() external view returns (address);
+    function proxy() external view returns (address);
 }
 
 library MidnightLib {
@@ -101,8 +103,6 @@ library MidnightLib {
     }
 
     function approveTakeBuffer(address midnight, address takeBuffer, bytes32 marketId) external {
-        require(takeBuffer != address(0), "MidnightLib/take-buffer-not-set");
-
         IMidnightTakeBufferLike(takeBuffer).approve(IMidnight(midnight).toMarket(marketId).loanToken);
     }
 

@@ -33,24 +33,25 @@ contract MidnightTakeBuffer {
     error ZeroMidnight();
     error ZeroProxy();
 
-    error BuyerNotProxy();
-    error NotMidnight();
+    error AddressNotMidnight();
+    error AddressNotProxy();
+    error NotSupported();
 
     /**********************************************************************************************/
     /*** Constants and Immutables                                                               ***/
     /**********************************************************************************************/
 
-    bytes32 internal constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
+    bytes32 public constant CALLBACK_SUCCESS = keccak256("morpho.midnight.callbackSuccess");
 
-    address public immutable proxy;
     address public immutable midnight;
+    address public immutable proxy;
 
-    constructor(address proxy_, address midnight_) {
-        if (proxy_    == address(0)) revert ZeroProxy();
+    constructor(address midnight_, address proxy_) {
         if (midnight_ == address(0)) revert ZeroMidnight();
+        if (proxy_    == address(0)) revert ZeroProxy();
 
-        proxy    = proxy_;
         midnight = midnight_;
+        proxy    = proxy_;
     }
 
     /**********************************************************************************************/
@@ -75,10 +76,31 @@ contract MidnightTakeBuffer {
         view
         returns (bytes32)
     {
-        if (msg.sender != midnight) revert NotMidnight();
-        if (buyer      != proxy)    revert BuyerNotProxy();
+        if (msg.sender != midnight) revert AddressNotMidnight();
+        if (buyer      != proxy)    revert AddressNotProxy();
 
         return CALLBACK_SUCCESS;
+    }
+
+    function onSell(
+        bytes32,
+        Market  memory,
+        uint256,
+        uint256,
+        uint256,
+        address,
+        address,
+        bytes   memory
+    )
+        external
+        pure
+        returns (bytes32)
+    {
+        revert NotSupported();
+    }
+
+    function rescue(address) external pure {
+        revert NotSupported();
     }
 
 }

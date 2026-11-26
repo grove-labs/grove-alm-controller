@@ -1159,9 +1159,33 @@ contract ForeignControllerSetMidnightTakeBufferTests is ForeignControllerAdminTe
         foreignController.setMidnightTakeBuffer(address(0));
     }
 
+    function test_setMidnightTakeBuffer_invalidProxy() public {
+        address buffer = address(new MidnightTakeBuffer(makeAddr("midnight"), makeAddr("otherProxy")));
+
+        vm.prank(admin);
+        vm.expectRevert("FC/midnight-take-buffer-invalid-proxy");
+        foreignController.setMidnightTakeBuffer(buffer);
+    }
+
+    function test_setMidnightTakeBuffer_swappedArguments() public {
+        address buffer = address(new MidnightTakeBuffer(makeAddr("almProxy"), makeAddr("midnight")));
+
+        vm.prank(admin);
+        vm.expectRevert("FC/midnight-take-buffer-invalid-proxy");
+        foreignController.setMidnightTakeBuffer(buffer);
+    }
+
+    function test_setMidnightTakeBuffer_invalidMidnight() public {
+        address buffer = address(new MidnightTakeBuffer(makeAddr("otherMidnight"), makeAddr("almProxy")));
+
+        vm.prank(admin);
+        vm.expectRevert("FC/midnight-take-buffer-invalid-midnight");
+        foreignController.setMidnightTakeBuffer(buffer);
+    }
+
     function test_setMidnightTakeBuffer() public {
-        address buffer1 = makeAddr("buffer1");
-        address buffer2 = makeAddr("buffer2");
+        address buffer1 = address(new MidnightTakeBuffer(makeAddr("midnight"), makeAddr("almProxy")));
+        address buffer2 = address(new MidnightTakeBuffer(makeAddr("midnight"), makeAddr("almProxy")));
 
         assertEq(foreignController.midnightTakeBuffer(), address(0));
 
@@ -1214,7 +1238,7 @@ contract ForeignControllerSetMidnightMarketConfigTests is ForeignControllerAdmin
             abi.encode(market)
         );
 
-        MidnightTakeBuffer takeBuffer = new MidnightTakeBuffer(makeAddr("almProxy"), makeAddr("midnight"));
+        MidnightTakeBuffer takeBuffer = new MidnightTakeBuffer(makeAddr("midnight"), makeAddr("almProxy"));
 
         vm.prank(admin);
         foreignController.setMidnightTakeBuffer(address(takeBuffer));
