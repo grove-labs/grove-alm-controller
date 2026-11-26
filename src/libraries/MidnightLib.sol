@@ -13,6 +13,12 @@ import { MidnightTickLib, MAX_TICK } from "./midnight/MidnightTickLib.sol";
 
 import { RateLimitHelpers } from "../RateLimitHelpers.sol";
 
+interface IMidnightTakeBufferLike {
+    function approve(address token) external;
+    function midnight() external view returns (address);
+    function proxy() external view returns (address);
+}
+
 library MidnightLib {
 
     /**********************************************************************************************/
@@ -47,6 +53,7 @@ library MidnightLib {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
         address      midnight;
+        address      takeBuffer;
         bytes32      marketId;
         MarketConfig config;
         Offer        offer;
@@ -66,6 +73,7 @@ library MidnightLib {
         IALMProxy    proxy;
         IRateLimits  rateLimits;
         address      midnight;
+        address      takeBuffer;
         bytes32      marketId;
         MarketConfig config;
         uint256      units;
@@ -94,6 +102,10 @@ library MidnightLib {
         require(config.maxSellYield != 0, "MidnightLib/max-sell-yield-not-set");
     }
 
+    function approveTakeBuffer(address midnight, address takeBuffer, bytes32 marketId) external {
+        IMidnightTakeBufferLike(takeBuffer).approve(IMidnight(midnight).toMarket(marketId).loanToken);
+    }
+
     /**********************************************************************************************/
     /*** Taker functions                                                                        ***/
     /**********************************************************************************************/
@@ -101,6 +113,8 @@ library MidnightLib {
     function buy(TakeParams memory params) external returns (uint256 assetsSpent) {
         require(params.config.maxBuyTick != 0, "MidnightLib/buy-not-enabled");
         require(params.assetsBound != 0,       "MidnightLib/max-assets-in-not-set");
+
+        require(params.takeBuffer != address(0), "MidnightLib/take-buffer-not-set");
 
         Market memory market = params.offer.market;
 
@@ -131,20 +145,18 @@ library MidnightLib {
 
         ( uint256 creditBefore, ) = _position(market, params.marketId, address(params.proxy));
 
-        uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
+        ( uint256 bufferBefore, uint256 buyerAssets, ) = _take(params, ctx);
 
-        ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, params.assetsBound);
+        uint256 bufferAfter = IERC20(market.loanToken).balanceOf(params.takeBuffer);
 
-        uint256 buyerAssets = _take(params, ctx);
+        require(bufferAfter <= bufferBefore, "MidnightLib/buffer-balance-increased");
 
-        ERC20Lib.approve(params.proxy, market.loanToken, market.midnight, 0);
-
-        assetsSpent = balanceBefore - IERC20(market.loanToken).balanceOf(address(params.proxy));
-
-        // An inflow during the callback nets against the spend, so Midnight's figure is the floor.
-        if (assetsSpent < buyerAssets) assetsSpent = buyerAssets;
+        assetsSpent = bufferBefore - bufferAfter;
 
         require(assetsSpent <= params.assetsBound, "MidnightLib/max-assets-in-exceeded");
+        require(assetsSpent == buyerAssets,        "MidnightLib/buyer-assets-mismatch");
+
+        _pullTakeBuffer(params.proxy, market.loanToken, params.takeBuffer);
 
         ( uint256 creditAfter, ) = _position(market, params.marketId, address(params.proxy));
 
@@ -162,6 +174,8 @@ library MidnightLib {
         require(params.config.minSellTick != 0, "MidnightLib/sell-not-enabled");
         require(params.assetsBound != 0,        "MidnightLib/min-assets-out-not-set");
 
+        require(params.takeBuffer != address(0), "MidnightLib/take-buffer-not-set");
+
         Market memory market = params.offer.market;
 
         require(market.midnight == params.midnight, "MidnightLib/invalid-midnight");
@@ -178,8 +192,6 @@ library MidnightLib {
 
         require(params.units != 0, "MidnightLib/no-credit-to-sell");
 
-        uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
-
         TakeContext memory ctx = TakeContext({
             selling         : true,
             tickPriceBound  : MidnightTickLib.tickToPrice(params.config.minSellTick),
@@ -189,11 +201,14 @@ library MidnightLib {
             settlementFee   : _settlementFee(market.midnight, params.marketId, timeToMaturity)
         });
 
-        _take(params, ctx);
+        ( uint256 bufferBefore, , uint256 sellerAssets ) = _take(params, ctx);
 
-        assetsReceived = IERC20(market.loanToken).balanceOf(address(params.proxy)) - balanceBefore;
+        assetsReceived = IERC20(market.loanToken).balanceOf(params.takeBuffer) - bufferBefore;
 
+        require(assetsReceived == sellerAssets,       "MidnightLib/seller-assets-mismatch");
         require(assetsReceived >= params.assetsBound, "MidnightLib/min-assets-out-not-met");
+
+        _pullTakeBuffer(params.proxy, market.loanToken, params.takeBuffer);
 
         ( uint256 creditAfter, ) = _position(market, params.marketId, address(params.proxy));
 
@@ -210,6 +225,8 @@ library MidnightLib {
     function redeem(RedeemParams memory params) external returns (uint256 assetsWithdrawn) {
         require(params.config.minSellTick != 0, "MidnightLib/market-not-onboarded");
         require(params.minAssetsOut != 0,       "MidnightLib/min-assets-out-not-set");
+
+        require(params.takeBuffer != address(0), "MidnightLib/take-buffer-not-set");
 
         bytes32       marketId = params.marketId;
         Market memory market   = IMidnight(params.midnight).toMarket(marketId);
@@ -228,19 +245,21 @@ library MidnightLib {
 
         require(units != 0, "MidnightLib/zero-units");
 
-        uint256 balanceBefore = IERC20(market.loanToken).balanceOf(address(params.proxy));
+        uint256 bufferBefore = IERC20(market.loanToken).balanceOf(params.takeBuffer);
 
         params.proxy.doCall(
             market.midnight,
             abi.encodeCall(
                 IMidnight.withdraw,
-                (market, units, address(params.proxy), address(params.proxy))
+                (market, units, address(params.proxy), params.takeBuffer)
             )
         );
 
-        assetsWithdrawn = IERC20(market.loanToken).balanceOf(address(params.proxy)) - balanceBefore;
+        assetsWithdrawn = IERC20(market.loanToken).balanceOf(params.takeBuffer) - bufferBefore;
 
         require(assetsWithdrawn >= params.minAssetsOut, "MidnightLib/min-assets-out-not-met");
+
+        _pullTakeBuffer(params.proxy, market.loanToken, params.takeBuffer);
 
         _requireDebtFree(market.midnight, marketId, address(params.proxy));
 
@@ -255,7 +274,7 @@ library MidnightLib {
     /**********************************************************************************************/
 
     function _take(TakeParams memory params, TakeContext memory ctx)
-        internal returns (uint256 buyerAssets)
+        internal returns (uint256 bufferBefore, uint256 buyerAssets, uint256 sellerAssets)
     {
         Offer memory offer = params.offer;
 
@@ -285,12 +304,16 @@ library MidnightLib {
                 "MidnightLib/buy-yield-too-low"
             );
 
-            // Paying ourselves would net the transfer to zero, hiding the spend from the rate limit.
+            // Paying ourselves would charge the buy limit for assets that come straight back.
             require(
                 offer.receiverIfMakerIsSeller != address(params.proxy),
                 "MidnightLib/invalid-offer-receiver"
             );
+
+            ERC20Lib.transfer(params.proxy, offer.market.loanToken, params.takeBuffer, params.assetsBound);
         }
+
+        bufferBefore = IERC20(offer.market.loanToken).balanceOf(params.takeBuffer);
 
         bytes memory result = params.proxy.doCall(
             offer.market.midnight,
@@ -301,14 +324,20 @@ library MidnightLib {
                     params.ratifierData,
                     params.units,
                     address(params.proxy),
-                    ctx.selling ? address(params.proxy) : address(0),
-                    address(0),
+                    ctx.selling ? params.takeBuffer : address(0),
+                    ctx.selling ? address(0) : params.takeBuffer,
                     new bytes(0)
                 )
             )
         );
 
-        ( buyerAssets, ) = abi.decode(result, (uint256, uint256));
+        ( buyerAssets, sellerAssets ) = abi.decode(result, (uint256, uint256));
+    }
+
+    function _pullTakeBuffer(IALMProxy proxy, address loanToken, address takeBuffer) internal {
+        ERC20Lib.transferFrom(
+            proxy, loanToken, takeBuffer, address(proxy), IERC20(loanToken).balanceOf(takeBuffer)
+        );
     }
 
     function _continuousFeePerSecond(uint256 cbpsPerYear) internal pure returns (uint256) {

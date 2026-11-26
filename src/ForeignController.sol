@@ -23,7 +23,7 @@ import { ERC4626Lib }    from "./libraries/ERC4626Lib.sol";
 import { ERC7540Lib }    from "./libraries/ERC7540Lib.sol";
 import { LayerZeroLib }  from "./libraries/LayerZeroLib.sol";
 import { MerklLib }      from "./libraries/MerklLib.sol";
-import { MidnightLib }   from "./libraries/MidnightLib.sol";
+import { IMidnightTakeBufferLike, MidnightLib } from "./libraries/MidnightLib.sol";
 import { PendleLib }     from "./libraries/PendleLib.sol";
 import { PSM3Lib }       from "./libraries/PSM3Lib.sol";
 import { CCTPLib }       from "./libraries/CCTPLib.sol";
@@ -56,6 +56,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         uint16  maxContinuousFee,
         uint128 maxLossFactor
     );
+    event MidnightTakeBufferSet(address indexed buffer);
     event MintRecipientSet(uint32 indexed destinationDomain, bytes32 mintRecipient);
     event RelayerRemoved(address indexed relayer);
 
@@ -84,6 +85,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     IERC20      public usdc;
     address     public pendleRouter;
     address     public midnight;
+    address     public midnightTakeBuffer;
 
     ISwapRouter                 public uniswapV3Router;
     INonfungiblePositionManager public uniswapV3PositionManager;
@@ -229,6 +231,25 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         emit UniswapV3PoolTwapSecondsAgoUpdated(pool, twapSecondsAgo);
     }
 
+    function setMidnightTakeBuffer(address buffer) external {
+        _checkRole(DEFAULT_ADMIN_ROLE);
+
+        require(buffer != address(0), "FC/midnight-take-buffer-zero-address");
+
+        require(
+            IMidnightTakeBufferLike(buffer).proxy() == address(proxy),
+            "FC/midnight-take-buffer-invalid-proxy"
+        );
+
+        require(
+            IMidnightTakeBufferLike(buffer).midnight() == midnight,
+            "FC/midnight-take-buffer-invalid-midnight"
+        );
+
+        midnightTakeBuffer = buffer;
+        emit MidnightTakeBufferSet(buffer);
+    }
+
     function setMidnightMarketConfig(
         bytes32 marketId,
         uint16  maxBuyTick,
@@ -252,6 +273,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
         });
 
         MidnightLib.validateMarketConfig(config);
+        MidnightLib.approveTakeBuffer(midnight, midnightTakeBuffer, marketId);
 
         midnightMarketConfigs[marketId] = config;
 
@@ -726,6 +748,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             units        : units,
@@ -875,6 +898,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
+            takeBuffer   : midnightTakeBuffer,
             marketId     : marketId,
             config       : midnightMarketConfigs[marketId],
             offer        : offer,
