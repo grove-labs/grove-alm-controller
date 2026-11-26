@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pragma solidity ^0.8.25;
 
-import { IERC20 }    from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20 }          from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 }       from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ReentrancyGuard } from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 struct CollateralParams {
     address token;
@@ -22,9 +23,15 @@ struct Market {
     address            liquidatorGate;
 }
 
-contract MidnightTakeBuffer {
+contract MidnightTakeBuffer is ReentrancyGuard {
 
     using SafeERC20 for IERC20;
+
+    /**********************************************************************************************/
+    /*** Events                                                                                 ***/
+    /**********************************************************************************************/
+
+    event Rescued(address indexed token, uint256 amount);
 
     /**********************************************************************************************/
     /*** Errors                                                                                 ***/
@@ -35,6 +42,8 @@ contract MidnightTakeBuffer {
 
     error AddressNotMidnight();
     error AddressNotProxy();
+    error AddressNotStrategy();
+    error NothingToRescue();
     error NotSupported();
 
     /**********************************************************************************************/
@@ -73,34 +82,58 @@ contract MidnightTakeBuffer {
         bytes   memory
     )
         external
-        view
+        nonReentrant
         returns (bytes32)
     {
-        if (msg.sender != midnight) revert AddressNotMidnight();
-        if (buyer      != proxy)    revert AddressNotProxy();
+        _onlyMidnight(msg.sender);
+        _onlyProxy(buyer);
 
         return CALLBACK_SUCCESS;
     }
 
     function onSell(
         bytes32,
-        Market  memory,
+        Market  memory market,
         uint256,
         uint256,
         uint256,
-        address,
-        address,
+        address        seller,
+        address        receiver,
         bytes   memory
     )
         external
-        pure
+        nonReentrant
         returns (bytes32)
     {
+        _onlyMidnight(msg.sender);
+        _onlyProxy(seller);
+        _onlyStrategy(receiver);
+
+        IERC20(market.loanToken).forceApprove(
+            proxy, IERC20(market.loanToken).balanceOf(address(this))
+        );
+
         revert NotSupported();
     }
 
     function rescue(address) external pure {
         revert NotSupported();
+    }
+
+    /**********************************************************************************************/
+    /*** Internal Functions                                                                     ***/
+    /**********************************************************************************************/
+
+    function _onlyMidnight(address midnight_) internal view {
+        if (midnight_ != midnight) revert AddressNotMidnight();
+    }
+
+    function _onlyProxy(address proxy_) internal view {
+        if (proxy_ != proxy) revert AddressNotProxy();
+    }
+
+    function _onlyStrategy(address strategy_) internal view {
+        if (strategy_ != address(this)) revert AddressNotStrategy();
     }
 
 }
