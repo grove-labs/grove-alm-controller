@@ -794,7 +794,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
     {
         require(isMidnightStrategyEnabled[msg.sender], "FC/strategy-not-enabled");
 
-        MidnightLib.fundFill(MidnightLib.FundFillParams({
+        uint256 assetsFunded = MidnightLib.fundFill(MidnightLib.FundFillParams({
             proxy        : proxy,
             rateLimits   : rateLimits,
             midnight     : midnight,
@@ -807,7 +807,7 @@ contract ForeignController is AccessControl, ReentrancyGuard {
             pendingFee   : pendingFee
         }));
 
-        emit MidnightFillFunded(marketId, msg.sender, buy, assets, units);
+        emit MidnightFillFunded(marketId, msg.sender, buy, assetsFunded, units);
     }
 
     function midnightMarketConfigs(bytes32 marketId)
