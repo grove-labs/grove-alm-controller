@@ -433,7 +433,9 @@ library MidnightLib {
 
         _decreaseLimit(params.rateLimits, LIMIT_MIDNIGHT_SELL, marketId, measured);
 
-        ERC20Lib.transferFrom(params.proxy, config.loanToken, params.strategy, measured);
+        ERC20Lib.transferFrom(
+            params.proxy, config.loanToken, params.strategy, address(params.proxy), measured
+        );
     }
 
     /**********************************************************************************************/

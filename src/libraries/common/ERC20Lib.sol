@@ -67,11 +67,12 @@ library ERC20Lib {
         IALMProxy proxy,
         address   token,
         address   from,
+        address   to,
         uint256   amount
     ) external {
         bytes memory returnData = proxy.doCall(
             token,
-            abi.encodeCall(IERC20(token).transferFrom, (from, address(proxy), amount))
+            abi.encodeCall(IERC20(token).transferFrom, (from, to, amount))
         );
 
         require(
